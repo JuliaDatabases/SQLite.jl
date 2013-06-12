@@ -7,7 +7,7 @@ let
     @linux_only lib_choices = ["libsqlite3"]
     @windows_only WORD_SIZE == 64 && (lib_choices = [Pkg.dir() * "\\Sqlite\\lib\\sqlite3-64"])
     @windows_only WORD_SIZE != 64 && (lib_choices = [Pkg.dir() * "\\Sqlite\\lib\\sqlite3"])
-    @osx_only lib_choices = [Pkg.dir() * "/Sqlite/lib/libsqlite3"]
+    @osx_only lib_choices = ["/usr/lib/libsqlite3.dylib", Pkg.dir() * "/Sqlite/lib/libsqlite3"]
     for lib in lib_choices 
         try
             dlopen(lib)
