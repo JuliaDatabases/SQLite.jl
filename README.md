@@ -29,7 +29,7 @@ databases like so:
 `sqlitedb` variable holds the most recently created `SqliteDB` type and other
 Sqlite functions (i.e. `query`) will use it by default in the absence of a specified connection.
 
-* `Sqlite.query(conn::SqliteDB=sqlitedb, querystring::String)`
+* `Sqlite.query(querystring::String,conn::SqliteDB=sqlitedb)`
   
   If a connection type isn't specified as the first positional argument, the query will be executed against
 the default connection (stored in the exported variable `sqlitedb` if you'd like to
@@ -40,7 +40,7 @@ inspect).
 
   For the general user, a simple `Sqlite.query(querystring)` is enough to return a single resultset in a DataFrame. Results are stored in the passed SqliteDB type's resultset field. (i.e. `sqlitedb.resultset`). Results are stored by default to avoid immediate garbarge collection and provide access for the user even if the resultset returned by query isn't stored in a variable.
 
-* `createtable(conn::SqliteDB=sqlitedb,df::DataFrame;name::String="")`
+* `createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="")`
  
   `createtable` takes its `DataFrame` argument and converts it to an Sqlite table in the specified `SqliteDB`. By default, the resulting table will have the same name as the DataFrame variable, unless specifically passed with the `name` keyword argument.
 
@@ -61,6 +61,8 @@ inspect).
 
   Stores information about an Sqlite database connection. Names include `file` for the Sqlite database filename, `handle` as the internal connection handle pointer, and `resultset` which
 stores the last resultset returned from a `Sqlite.query` call. 
+
+* `typealias TableInput Union(DataFrame,String)`
 
 #### Variables
 * `sqlitedb`
