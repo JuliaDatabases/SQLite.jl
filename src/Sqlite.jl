@@ -2,10 +2,10 @@ module Sqlite
  
 using DataFrames
 
-export sqlitedb #, sqlite3_column_int64, sqlite3_column_text, sqlite3_column_double, FUNCS, SQL2Julia, sqlite3_column_name, sqlite3_column_type, sqlite3_prepare_v2, sqlite3_step, sqlite3_column_count, SQLITE_NULL, sqlite3_column_int, SQLITE_ROW, SQLITE_DONE, sqlite3_reset, sqlite3_finalize
+export sqlitedb 
 
-include("sqlite_consts.jl")
-include("sqlite_api.jl")
+include("Sqlite_consts.jl")
+include("Sqlite_api.jl")
 
 type SqliteDB
 	file::String
@@ -28,168 +28,166 @@ function show(io::IO,db::SqliteDB)
     end 
 end
 
+typealias TableInput Union(DataFrame,String)
+
 const null_resultset = DataFrame(0)
 const null_SqliteDB = SqliteDB("",C_NULL,null_resultset)
 sqlitedb = null_SqliteDB #Create default connection = null
-ret = "" #For returning readable error codes
 
 #Core Functions
 function connect(file::String)
 	global sqlitedb
 	handle = Array(Ptr{Void},1)
 	if @FAILED sqlite3_open(file,handle)
-		error("[sqlite]: $ret; Error opening $file")
+		error("[sqlite]: Error opening $file; $(bytestring(sqlite3_errmsg(conn.handle)))")
 	else
 		return (sqlitedb = SqliteDB(file,handle[1],null_resultset))
 	end
 end
-function query(conn::SqliteDB=sqlitedb,q::String)
-	if conn == null_SqliteDB
-		error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
-	end
+function internal_query(conn::SqliteDB,q::String,finalize::Bool=true,stepped::Bool=true)
 	stmt = Array(Ptr{Void},1)
-	# unused = Array(Ptr{Void},1)
 	if @FAILED sqlite3_prepare_v2(conn.handle,utf8(q),stmt,[C_NULL])
-		println("$ret: $(bytestring(sqlite3_errmsg(conn.handle)))")
-		error("[sqlite]: Error preparing query")
+        ret = bytestring(sqlite3_errmsg(conn.handle))
+        internal_query(conn,"COMMIT")
+        internal_query(conn,"PRAGMA synchronous = ON")
+		error("[sqlite]: $ret")
 	end	
 	stmt = stmt[1]
-	sqlite3_step(stmt) == SQLITE_DONE && return
-	cols = sqlite3_column_count(stmt)
-	funcs = Array(Function,cols)
-	colnames = Array(ASCIIString,cols)
-	resultset = Array(Any,cols)
-	check = zeros(Int,cols)
-	while sum(check) <= cols
-		for i = 1:cols
-			if check[i] == 0
-				t = sqlite3_column_type(stmt,i-1)
-				if t != SQLITE_NULL	
-					coltype = get(SQL2Julia,t,String)			# Retrieves the Julia mapped type
-					resultset[i] = DataArray(coltype,0)
-					func = get(FUNCS,t,sqlite3_column_text) 	# Retrieves the type-correct retrieval function
-					func == sqlite3_column_int && WORD_SIZE == 64 && (func = sqlite3_column_int64)
-					funcs[i] = func
-					colnames[i] = bytestring(sqlite3_column_name(stmt,i-1))
-					check[i] = 1
-				end
-			end
-		end
-		sqlite3_step(stmt) != SQLITE_ROW && break
+    r = 0
+    if stepped
+	   r = sqlite3_step(stmt)
+    end
+	if finalize
+		sqlite3_finalize(stmt)
+		return C_NULL, 0
+	else
+		return stmt, r
 	end
-	sqlite3_reset(stmt)
-	while sqlite3_step(stmt) != SQLITE_DONE
-		for i = 1:cols
-			if sqlite3_column_type(stmt,i-1) == SQLITE_NULL
-				r = NA
+end
+function query(q::String,conn::SqliteDB=sqlitedb)
+	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
+	stmt, r = Sqlite.internal_query(conn,q,false)
+	r == SQLITE_DONE && return DataFrame("No Rows Returned")
+	#get resultset metadata: column count, column types, and column names
+	ncols = Sqlite.sqlite3_column_count(stmt)
+	colnames = Array(ASCIIString,ncols)
+	resultset = Array(Any,ncols)
+	check = 0
+	for i = 1:ncols
+		colnames[i] = bytestring(Sqlite.sqlite3_column_name(stmt,i-1))
+		t = Sqlite.sqlite3_column_type(stmt,i-1)
+		if t == Sqlite.SQLITE3_TEXT
+			resultset[i] = DataArray(String,0)
+			check += 1
+		elseif t == Sqlite.SQLITE_FLOAT
+			resultset[i] = DataArray(Float64,0)
+			check += 1
+		elseif t == Sqlite.SQLITE_INTEGER
+			resultset[i] = DataArray(WORD_SIZE == 64 ? Int64 : Int32,0)
+			check += 1
+		else
+			resultset[i] = DataArray(Any,0)
+		end
+	end
+	#retrieve resultset
+	while true
+		for i = 1:ncols
+			t = sqlite3_column_type(stmt,i-1) 
+			if t == SQLITE3_TEXT
+				r = bytestring( sqlite3_column_text(stmt,i-1) )
+			elseif t == SQLITE_FLOAT
+				r = sqlite3_column_double(stmt,i-1)
+			elseif t == SQLITE_INTEGER
+				r = WORD_SIZE == 64 ? sqlite3_column_int64(stmt,i-1) : sqlite3_column_int(stmt,i-1)
 			else
-				r = invoke(funcs[i],(Ptr{Void},Int),stmt,i-1)
-				if typeof(r) == Ptr{Uint8} 
-					r = bytestring(r)
-				end
+				r = NA
 			end
 			push!(resultset[i],r)
+		end
+		sqlite3_step(stmt) == SQLITE_DONE && break
+	end
+    #this is for columns we couldn't get the type for earlier (NULL in row 1); should be the exception
+	if check != ncols
+        nrows = length(resultset[1])
+		for i = 1:ncols
+			if isna(resultset[i][1])
+                d = resultset[i]
+				for j = 2:nrows
+                    if !isna(d[j])
+                        t = typeof(d[j])
+                        da = DataArray(t,nrows)
+                        for k = 1:nrows
+                            da[k] = d[k]
+                        end
+                        resultset[i] = da
+                        break
+                    end
+                end
+			end
 		end
 	end
 	sqlite3_finalize(stmt)
 	return (conn.resultset = DataFrame(resultset,Index(colnames)))
 end
-function createtable(conn::SqliteDB=sqlitedb,df::DataFrame;name::String="")
-	if conn == null_SqliteDB
-		error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
-	end
-	sqlite3_prepare_v2(conn.handle,utf8("PRAGMA synchronous = OFF"),Array(Ptr{Void},1),[C_NULL])
-	stmt = Array(Ptr{Void},1)
-	sqlite3_prepare_v2(conn.handle,utf8("BEGIN TRANSACTION"),stmt,[C_NULL])
-	sqlite3_step(stmt[1])
-	sqlite3_finalize(stmt[1])
+function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="")
+	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
+    #these 2 calls are for performance
+    internal_query(conn,"PRAGMA synchronous = OFF")
+    internal_query(conn,"BEGIN TRANSACTION")
+    if typeof(input) == DataFrame
+        r = df2table(input,conn,name)
+    else
+        r = 0 # dlm2table(input,conn,name)
+    end
+    internal_query(conn,"COMMIT")
+    internal_query(conn,"PRAGMA synchronous = ON")
+    return r
+end
+function df2table(df::DataFrame,conn::SqliteDB,name::String)
 	#get column names and types
 	ncols = length(df)
-	columns = df.colindex.names
-	bindfuncs = ref(Function)
-	bindtype = ref(DataType)
-	for i = 1:ncols
-		jultype = eltype(df[i])
-		if jultype <: FloatingPoint
-			sqlitetype = "REAL"
-			push!(bindfuncs,sqlite3_bind_double)
-			push!(bindtype,Float64)
-		elseif jultype <: Integer
-			sqlitetype = "INTEGER"
-			if WORD_SIZE == 64
-				push!(bindfuncs,sqlite3_bind_int64)
-				push!(bindtype,Int64)
-			else
-				push!(bindfuncs,sqlite3_bind_int)
-				push!(bindtype,Int32)
-			end
-		else
-			sqlitetype = "TEXT"
-			push!(bindfuncs,sqlite3_bind_text)
-			push!(bindtype,String)
-		end
-	end
-	columns = join(columns,',')
-	#get df name for table name if not provided
-	dfname = name
-	if dfname == ""
-		for sym in names(Main)
-			if is(eval(sym),df)
-				dfname = string(sym)
-			end
-		end
-	end
-	q = "create table $dfname ($columns)"
-	stmt = Array(Ptr{Void},1)
-	# unused = Array(Ptr{Void},1)
-	if @FAILED sqlite3_prepare_v2(conn.handle,utf8(q),stmt,[C_NULL])
-		println("$ret: $(bytestring(sqlite3_errmsg(conn.handle)))")
-		error("[sqlite]: Error preparing 'create table' statement")
-	end	
-	stmt = stmt[1]
-	sqlite3_step(stmt)
+	colnames = join(df.colindex.names,',')
+    #get df name for table name if not provided
+    dfname = name
+    if dfname == ""
+        for sym in names(Main)
+            if is(eval(sym),df)
+                dfname = string(sym)
+            end
+        end
+    end
+    #should we loop through column types to specify in create table statement?
+    internal_query(conn,"create table $dfname ($colnames)")
 	#prepare insert table with parameters for column values
 	params = chop(repeat("?,",ncols))
-	q = "insert into $dfname values ($params)"
-	stmt = Array(Ptr{Void},1)
-	# unused = Array(Ptr{Void},1)
-	if @FAILED sqlite3_prepare_v2(conn.handle,utf8(q),stmt,[C_NULL])
-		println("$ret: $(bytestring(sqlite3_errmsg(conn.handle)))")
-		error("[sqlite]: Error preparing 'create table' statement")
-	end	
-	stmt = stmt[1]
+	stmt, r = internal_query(conn,"insert into $dfname values ($params)",false,false)
+    sqlite3_reset(stmt)
 	#bind, step, reset loop for inserting values
 	for row = 1:nrow(df)
 		for col = 1:ncols
-			if isna(df[row,col])
-				sqlite3_bind_null(stmt,col-1)
-			elseif bindfuncs[col] == sqlite3_bind_text
-				value = df[row,col]
-				invoke(bindfuncs[col],(Ptr{Void},Int,String,Int,Ptr{Void}),stmt,col,value,length(value),C_NULL)
-			else
-				invoke(bindfuncs[col],(Ptr{Void},Int,bindtype[col]),stmt,col,df[row,col])
-			end
+            d = df[row,col]
+            t = typeof(d)
+            if t <: FloatingPoint
+                Sqlite.sqlite3_bind_double(stmt,col,d)
+            elseif t <: Integer
+                WORD_SIZE == 64 ? sqlite3_bind_int64(stmt,col,d) : sqlite3_bind_int(stmt,col,d)
+            elseif <: NAtype
+                sqlite3_bind_null(stmt,col)
+            else
+                sqlite3_bind_text(stmt,col,string(d),length(string(d)),C_NULL)
+            end
 		end
 		sqlite3_step(stmt)
 		sqlite3_reset(stmt)
 	end
 	sqlite3_finalize(stmt)
-	stmt = Array(Ptr{Void},1)
-	sqlite3_prepare_v2(conn.handle,utf8("COMMIT"),stmt,[C_NULL])
-	sqlite3_step(stmt[1])
-	sqlite3_finalize(stmt[1])
-	sqlite3_prepare_v2(conn.handle,utf8("PRAGMA synchronous = ON"),Array(Ptr{Void},1),[C_NULL])
-	return println("Table '$dfname' created.")
+	return
 end
-function droptable(conn::SqliteDB=sqlitedb,table::String)
-	if conn == null_SqliteDB
-		error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
-	end
-	stmt = Array(Ptr{Void},1)
-	sqlite3_prepare_v2(conn.handle,utf8("DROP TABLE $table"),stmt,[C_NULL])
-	sqlite3_step(stmt[1])
-	sqlite3_finalize(stmt[1])
-	return 0
+function droptable(table::String,conn::SqliteDB=sqlitedb)
+	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
+	internal_query(conn,"DROP TABLE $table")
+	internal_query(conn,"VACUUM")
+	return
 end
 #read raw file direct to sqlite table
 # function csv2table()

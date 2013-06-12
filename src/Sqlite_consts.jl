@@ -23,15 +23,11 @@ end
 
 #Macros
 macro SUCCEEDED(func)
-	global ret 
-	:(ret = bytestring(sqlite3_errstr(func)))
-	:( return_code = $func; (return_code == SQLITE_OK) ? true : false )
+	:($func == SQLITE_OK ? true : false )
 end
 
 macro FAILED(func)
-	global ret 
-	:(ret = bytestring(sqlite3_errstr(func)))
-	:( return_code = $func; (return_code != SQLITE_OK) ? true : false )
+	:($func != SQLITE_OK ? true : false )
 end
 
 #Return codes

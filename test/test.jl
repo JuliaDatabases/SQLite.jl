@@ -16,9 +16,9 @@ Sqlite.query("SELECT *
 using DataFrames
 df2 = DataFrame(ones(1000000,5))
 @time Sqlite.createtable(df2;name="test2")
-Sqlite.query("drop table test2")
+@time Sqlite.query("SELECT * FROM test2;")
+Sqlite.droptable("test2")
 
 using DataFrames
-using Sqlite
 df3 = DataFrame(ones(1000,5))
 sqldf("select * from df3")
