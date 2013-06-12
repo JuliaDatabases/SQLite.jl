@@ -1,5 +1,7 @@
 # include("C:/Users/karbarcca/Google Drive/Dropbox/Dropbox/GitHub/Sqlite.jl/src/Sqlite.jl")
-co = Sqlite.connect(Pkg.dir() * "\\Sqlite\\test\\Chinook_Sqlite.sqlite")
+# include("/home/quinnj/Dropbox/GitHub/Sqlite.jl/src/Sqlite.jl")
+using Sqlite
+co = Sqlite.connect(Pkg.dir() * "/Sqlite/test/Chinook_Sqlite.sqlite")
 
 df = Sqlite.query("SELECT * FROM Employee;")
 Sqlite.createtable(df; name="test")
