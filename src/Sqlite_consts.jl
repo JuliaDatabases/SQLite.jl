@@ -10,13 +10,13 @@ let
 	@osx_only lib_choices = ["libsqlite3"]
     for lib in lib_choices 
         try
-            dlopen(lib)
+            dlopen(Pkg.dir() * "\\Sqlite\\lib\\" * lib)
             succeeded=true
             break
         end
     end
     if !succeeded error("Sqlite library not found") end
-    @eval const sqlite3_lib = Pkg.dir() * "Sqlite/lib/" * $lib
+    @eval const sqlite3_lib = Pkg.dir() * "\\Sqlite\\lib\\" * $lib
 end
 
 # const sqlite3_lib = "C:/Users/karbarcca/Google Drive/Dropbox/Dropbox/GitHub/sqlite.jl/lib/sqlite3-64"
