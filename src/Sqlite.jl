@@ -133,13 +133,12 @@ function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="")
 	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
     #these 2 calls are for performance
     internal_query(conn,"PRAGMA synchronous = OFF")
-    internal_query(conn,"BEGIN TRANSACTION")
+    
     if typeof(input) == DataFrame
         r = df2table(input,conn,name)
     else
         r = 0 # dlm2table(input,conn,name)
     end
-    internal_query(conn,"COMMIT")
     internal_query(conn,"PRAGMA synchronous = ON")
     return r
 end
@@ -151,13 +150,14 @@ function df2table(df::DataFrame,conn::SqliteDB,name::String)
     dfname = name
     if dfname == ""
         for sym in names(Main)
-            if is(eval(sym),df)
+            if string(:(df)) == string(sym)
                 dfname = string(sym)
             end
         end
     end
     #should we loop through column types to specify in create table statement?
     internal_query(conn,"create table $dfname ($colnames)")
+    internal_query(conn,"BEGIN TRANSACTION")
 	#prepare insert table with parameters for column values
 	params = chop(repeat("?,",ncols))
 	stmt, r = internal_query(conn,"insert into $dfname values ($params)",false,false)
@@ -181,6 +181,7 @@ function df2table(df::DataFrame,conn::SqliteDB,name::String)
 		sqlite3_reset(stmt)
 	end
 	sqlite3_finalize(stmt)
+    internal_query(conn,"COMMIT")
 	return
 end
 function droptable(table::String,conn::SqliteDB=sqlitedb)
