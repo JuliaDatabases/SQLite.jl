@@ -202,7 +202,7 @@ end #sqlite module
 
 function sqldf(q::String)
 	handle = Array(Ptr{Void},1)
-	file = "__temp__"
+	file = tempname()
 	Sqlite.sqlite3_open(file,handle)
 	conn = Sqlite.SqliteDB(file,handle[1],Sqlite.null_resultset)
 	#todo: do we need to change column names at all?
