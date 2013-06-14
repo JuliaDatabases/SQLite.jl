@@ -2,7 +2,7 @@ module Sqlite
  
 using DataFrames
 
-export sqlitedb 
+export sqlitedb, readdlmsql
 
 include("Sqlite_consts.jl")
 include("Sqlite_api.jl")
@@ -33,6 +33,9 @@ typealias TableInput Union(DataFrame,String)
 const null_resultset = DataFrame(0)
 const null_SqliteDB = SqliteDB("",C_NULL,null_resultset)
 sqlitedb = null_SqliteDB #Create default connection = null
+const INTrx = r"^\d+$"
+const STRINGrx = r"[^eE0-9\.\-\+]"i
+const FLOATrx = r"^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$"
 
 #Core Functions
 function connect(file::String)
@@ -92,7 +95,7 @@ function query(q::String,conn::SqliteDB=sqlitedb)
 	#retrieve resultset
 	while true
 		for i = 1:ncols
-			t = sqlite3_column_type(stmt,i-1) 
+			t = Sqlite.sqlite3_column_type(stmt,i-1) 
 			if t == SQLITE3_TEXT
 				r = bytestring( sqlite3_column_text(stmt,i-1) )
 			elseif t == SQLITE_FLOAT
@@ -129,7 +132,7 @@ function query(q::String,conn::SqliteDB=sqlitedb)
 	sqlite3_finalize(stmt)
 	return (conn.resultset = DataFrame(resultset,Index(colnames)))
 end
-function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="")
+function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
 	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
     #these 2 calls are for performance
     internal_query(conn,"PRAGMA synchronous = OFF")
@@ -137,7 +140,7 @@ function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="")
     if typeof(input) == DataFrame
         r = df2table(input,conn,name)
     else
-        r = 0 # dlm2table(input,conn,name)
+        r = dlm2table(input,conn,name,delim,header,types,infer)
     end
     internal_query(conn,"PRAGMA synchronous = ON")
     return r
@@ -161,7 +164,6 @@ function df2table(df::DataFrame,conn::SqliteDB,name::String)
 	#prepare insert table with parameters for column values
 	params = chop(repeat("?,",ncols))
 	stmt, r = internal_query(conn,"insert into $dfname values ($params)",false,false)
-    sqlite3_reset(stmt)
 	#bind, step, reset loop for inserting values
 	for row = 1:nrow(df)
 		for col = 1:ncols
@@ -191,13 +193,151 @@ function droptable(table::String,conn::SqliteDB=sqlitedb)
 	return
 end
 #read raw file direct to sqlite table
-# function csv2table()
-
-# end
-#read raw file to sqlite table (call csv2table), then run sql statement on table to return df (call to query)
-# function readcsvsql()
-
-# end
+function dlm2table(file::String,conn::SqliteDB,name::String,delim::Char,header::Bool,types::Array{DataType,1},infer::Bool)
+    #determine tablename and delimiter
+    tablename = name
+    if tablename == ""
+        tablename = match(r"\w+(?=\.)",file).match
+    end
+    delimiter = delim
+    if delimiter == '\0'
+        delimiter = ismatch(r"csv$", file) ? ',' : ismatch(r"tsv$", file) ? '\t' : ismatch(r"wsv$", file) ? ' ' : error("Unable to determine separator used in $file")
+    end
+    #get column names/types: colnames, ncols, coltypes
+    f = open(file)
+    firstrow = split(chomp(readline(f)),delimiter)
+    ncols = length(firstrow)
+    if header
+        colnames = firstrow
+    else
+        colnames = String["x$i" for i = 1:ncols]
+        seekstart(f)
+    end
+    if infer
+	    coltypes = Array(DataType,ncols)
+	    check = falses(ncols)
+	    for r in eachline(f)
+			row = split_quoted(chomp(r),delimiter)
+	        for i = 1:ncols
+	        	if !check[i]
+		        	if row[i] == "" #null/missing value
+		        		continue
+		        	elseif ismatch(INTrx,row[i]) #match a plain integer first
+		        		colnames[i] *= " INT"; check[i] = true
+		        	elseif ismatch(STRINGrx,row[i]) #then check if it's stringy
+						colnames[i] *= " TEXT"; check[i] = true
+		        	elseif ismatch(FLOATrx,row[i]) #if it's not integer or string, check if it's a float
+						colnames[i] *= " REAL"; check[i] = true
+		        	else #if it's still not a float, just make it a string
+						colnames[i] *= " TEXT"; check[i] = true
+		        	end
+		        end
+	    	end
+	    	sum(check) == ncols && break
+	    end
+	    if sum(check) < ncols
+	    	for i = 1:ncols
+	    		if !coltypes[i]
+	    			coltypes[i] = String
+	    		end
+	    	end
+    	end
+    	seekstart(f)
+    	header && readline(f)
+	elseif length(types) > 0
+		if eltype(types) <: String
+			for i = 1:ncols
+				colnames[i] *= " " * types[i]
+			end
+		else
+			for i = 1:ncols
+				colnames[i] *= types[i] <: Integer ? " INT" : types[i] <: FloatingPoint ? " REAL" : " TEXT"
+			end
+		end
+	end
+	colnames = join(colnames,',')
+    internal_query(conn,"create table $tablename ($colnames)")
+    internal_query(conn,"BEGIN TRANSACTION")
+    #prepare insert table with parameters for column values
+    params = chop(repeat("?,",ncols))
+    stmt, r = internal_query(conn,"insert into $tablename values ($params)",false,false)
+    #bind, step, reset loop for inserting values
+    for r in eachline(f)
+		row = Sqlite.split_quoted(chomp(r),delimiter)
+	    for col = 1:ncols
+	    	d = row[col]
+			Sqlite.sqlite3_bind_text(stmt,col,d,length(d),C_NULL)
+	    end
+    	Sqlite.sqlite3_step(stmt)
+    	Sqlite.sqlite3_reset(stmt)
+	end
+    sqlite3_finalize(stmt)
+    internal_query(conn,"COMMIT")
+    close(f)
+    return
+end
+#read raw file to sqlite table (call dlm2table), then run sql statement on table to return df (call to query)
+function readdlmsql(input::String,conn::SqliteDB=sqlitedb;sql::String="select * from file",name::String="file",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
+	if conn == null_SqliteDB
+		handle = Array(Ptr{Void},1)
+		file = tempname()
+		Sqlite.sqlite3_open(file,handle)
+		conn = Sqlite.SqliteDB(file,handle[1],Sqlite.null_resultset)
+	end
+	createtable(input,conn;name=name,delim=delim,header=header,types=types,infer=infer)
+	return query(sql,conn)
+end
+function search_quoted(s::String, c::Char, i::Integer)
+    if isempty(c)
+        return 1 <= i <= endof(s)+1 ? i :
+               i == endof(s)+2      ? 0 :
+               error(BoundsError)
+    end
+    if i < 1 error(BoundsError) end
+    i = nextind(s,i-1)
+    while !done(s,i)
+        d, j = next(s,i)
+        if d == '"'
+        	i = j
+        	d, j = next(s,i)
+        	while d != '"'
+				i = j
+        		d, j = next(s,i)
+        	end
+        end
+        if contains(c,d)
+            return i
+        end
+        i = j
+    end
+    return 0
+end
+search_quoted(s::String, c::Char) = search_quoted(s,c,start(s))
+function split_quoted(str::String, splitter, limit::Integer, keep_empty::Bool)
+    strs = String[]
+    i = start(str)
+    n = endof(str)
+    r = search_quoted(str,splitter,i)
+    j, k = first(r), last(r)+1
+    while 0 < j <= n && length(strs) != limit-1
+        if i < k
+            if keep_empty || i < j
+                push!(strs, str[i:j-1])
+            end
+            i = k
+        end
+        if k <= j; k = nextind(str,j) end
+        r = search_quoted(str,splitter,k)
+        j, k = first(r), last(r)+1
+    end
+    if keep_empty || !done(str,i)
+        push!(strs, str[i:])
+    end
+    return strs
+end
+split_quoted(s::String, spl, n::Integer) = split_quoted(s, spl, n, true)
+split_quoted(s::String, spl, keep::Bool) = split_quoted(s, spl, 0, keep)
+split_quoted(s::String, spl)             = split_quoted(s, spl, 0, true)
 end #sqlite module
 
 function sqldf(q::String)

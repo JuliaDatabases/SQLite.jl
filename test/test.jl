@@ -10,7 +10,7 @@ Sqlite.query("drop table test")
 
 Sqlite.query("SELECT * FROM sqlite_master WHERE type='table' ORDER BY name;")
 Sqlite.query("SELECT * FROM Album;")
-Sqlite.query("SELECT *
+Sqlite.query("SELECT * 
 	FROM Artist a 
 	LEFT OUTER JOIN Album b ON b.ArtistId = a.ArtistId 
 	ORDER BY name;")
@@ -24,3 +24,10 @@ Sqlite.droptable("test2")
 using DataFrames
 df3 = DataFrame(ones(1000,5))
 sqldf("select * from df3")
+
+# Sqlite.droptable("sales")
+@time Sqlite.readdlmsql(Pkg.dir() * "/Sqlite/test/sales.csv";sql="select * from sales",name="sales")
+
+@time Sqlite.query("select typeof(f_year), typeof(base_lines), typeof(dollars) from sales")
+#TODO
+ #adjust df2table to determine types and then while looping, just check if NA or not
