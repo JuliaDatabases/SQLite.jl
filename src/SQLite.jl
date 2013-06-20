@@ -73,7 +73,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 	r == SQLITE_DONE && return DataFrame("No Rows Returned")
 	#get resultset metadata: column count, column types, and column names
 	ncols = SQLite.sqlite3_column_count(stmt)
-	colnames = Array(ASCIIString,ncols)
+	colnames = Array(UTF8String,ncols)
 	resultset = Array(Any,ncols)
 	check = 0
 	for i = 1:ncols
@@ -173,7 +173,7 @@ function df2table(df::DataFrame,conn::SQLiteDB,name::String)
                 SQLite.sqlite3_bind_double(stmt,col,d)
             elseif t <: Integer
                 WORD_SIZE == 64 ? sqlite3_bind_int64(stmt,col,d) : sqlite3_bind_int(stmt,col,d)
-            elseif <: NAtype
+            elseif t <: NAtype
                 sqlite3_bind_null(stmt,col)
             else
                 sqlite3_bind_text(stmt,col,string(d),length(string(d)),C_NULL)
