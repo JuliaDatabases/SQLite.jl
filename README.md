@@ -40,9 +40,13 @@ inspect).
 
   For the general user, a simple `query(querystring)` is enough to return a single resultset in a DataFrame. Results are stored in the passed SQLiteDB type's resultset field. (i.e. `sqlitedb.resultset`). Results are stored by default to avoid immediate garbarge collection and provide access for the user even if the resultset returned by query isn't stored in a variable.
 
-* `* createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)`
+* `createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)`
  
   `createtable` takes either a `DataFrame` argument or file name string. The DataFrame or file is converted to an SQLite table in the specified `SQLiteDB`. By default, the resulting table will have the same name as the DataFrame variable or file name, unless specifically passed with the `name` keyword argument. The `delim`, `header`, `types`, and `infer` keyword arguments are for use with files. `delime` specifies the file delimiter, (comma ',', tab '\t', etc.). `header` specifies whether the file has a header or not and generates column names if needed. `types` allows the user to specify the column types to be read in, while `infer` allows an algorithm to figure out each columns type before commiting to the SQLite table. Note that if the `types` argument is empty and `infer=false`, then all values will be passed as Strings/text, which ends up being very fast, but obviously without any resulting type information.
+
+* `readdlmsql(input::String,conn::SQLiteDB=sqlitedb;sql::String="select * from file",name::String="file",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)`
+
+  `readdlmsql` is pretty simple, and is really just a wrapper around a `createtable` call + `query` call. Arguments are specified similar to `createtable`, with an additional `sql::String` keyword argument where a user can specify a query string to run on the created table to return in a DataFrame. Cousin function to `sqldf` R package's `read.csv.sql` function.
 
 * `droptable(conn::SQLiteDB=sqlitedb,table::String)`
 
@@ -53,8 +57,6 @@ inspect).
   `sqldf` mirrors the function of the same name in R, allowing common SQL operations on Julia DataFrames. The passed query string is parsed and the DataFrames named in the FROM and JOIN statements are first converted to SQLite tables and then the SELECT statement is run on them. The tables are dropped after the query is run and the result is returned as a DataFrame. 
 
 
-
-  `createtable` specifying a delimted (csv,tsv,etc.) file for the table to be created from. `readdlmsql` will then be possible, allowing a raw file to be read and a DataFrame to be returned according to a given SQL statement.
 
 #### Types
 * `SQLiteDB`
