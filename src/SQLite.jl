@@ -2,7 +2,7 @@ module SQLite
  
 using DataFrames
 
-export sqlitedb, readdlmsql, query, connect
+export sqlitedb, readdlmsql, query, connect, createtable, droptable
 
 include("SQLite_consts.jl")
 include("SQLite_api.jl")
