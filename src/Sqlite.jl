@@ -1,19 +1,19 @@
-module Sqlite
+module SQLite
  
 using DataFrames
 
-export sqlitedb, readdlmsql
+export sqlitedb, readdlmsql, query, connect
 
-include("Sqlite_consts.jl")
-include("Sqlite_api.jl")
+include("SQLite_consts.jl")
+include("SQLite_api.jl")
 
-type SqliteDB
+type SQLiteDB
 	file::String
 	handle::Ptr{Void}
 	resultset::Any
 end
-function show(io::IO,db::SqliteDB)
-    if db == null_SqliteDB
+function show(io::IO,db::SQLiteDB)
+    if db == null_SQLiteDB
         print(io,"Null sqlite connection")
     else
         println(io,"sqlite connection")
@@ -31,8 +31,8 @@ end
 typealias TableInput Union(DataFrame,String)
 
 const null_resultset = DataFrame(0)
-const null_SqliteDB = SqliteDB("",C_NULL,null_resultset)
-sqlitedb = null_SqliteDB #Create default connection = null
+const null_SQLiteDB = SQLiteDB("",C_NULL,null_resultset)
+sqlitedb = null_SQLiteDB #Create default connection = null
 const INTrx = r"^\d+$"
 const STRINGrx = r"[^eE0-9\.\-\+]"i
 const FLOATrx = r"^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$"
@@ -44,10 +44,10 @@ function connect(file::String)
 	if @FAILED sqlite3_open(file,handle)
 		error("[sqlite]: Error opening $file; $(bytestring(sqlite3_errmsg(conn.handle)))")
 	else
-		return (sqlitedb = SqliteDB(file,handle[1],null_resultset))
+		return (sqlitedb = SQLiteDB(file,handle[1],null_resultset))
 	end
 end
-function internal_query(conn::SqliteDB,q::String,finalize::Bool=true,stepped::Bool=true)
+function internal_query(conn::SQLiteDB,q::String,finalize::Bool=true,stepped::Bool=true)
 	stmt = Array(Ptr{Void},1)
 	if @FAILED sqlite3_prepare_v2(conn.handle,utf8(q),stmt,[C_NULL])
         ret = bytestring(sqlite3_errmsg(conn.handle))
@@ -67,25 +67,25 @@ function internal_query(conn::SqliteDB,q::String,finalize::Bool=true,stepped::Bo
 		return stmt, r
 	end
 end
-function query(q::String,conn::SqliteDB=sqlitedb)
-	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
-	stmt, r = Sqlite.internal_query(conn,q,false)
+function query(q::String,conn::SQLiteDB=sqlitedb)
+	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
+	stmt, r = SQLite.internal_query(conn,q,false)
 	r == SQLITE_DONE && return DataFrame("No Rows Returned")
 	#get resultset metadata: column count, column types, and column names
-	ncols = Sqlite.sqlite3_column_count(stmt)
+	ncols = SQLite.sqlite3_column_count(stmt)
 	colnames = Array(ASCIIString,ncols)
 	resultset = Array(Any,ncols)
 	check = 0
 	for i = 1:ncols
-		colnames[i] = bytestring(Sqlite.sqlite3_column_name(stmt,i-1))
-		t = Sqlite.sqlite3_column_type(stmt,i-1)
-		if t == Sqlite.SQLITE3_TEXT
+		colnames[i] = bytestring(SQLite.sqlite3_column_name(stmt,i-1))
+		t = SQLite.sqlite3_column_type(stmt,i-1)
+		if t == SQLite.SQLITE3_TEXT
 			resultset[i] = DataArray(String,0)
 			check += 1
-		elseif t == Sqlite.SQLITE_FLOAT
+		elseif t == SQLite.SQLITE_FLOAT
 			resultset[i] = DataArray(Float64,0)
 			check += 1
-		elseif t == Sqlite.SQLITE_INTEGER
+		elseif t == SQLite.SQLITE_INTEGER
 			resultset[i] = DataArray(WORD_SIZE == 64 ? Int64 : Int32,0)
 			check += 1
 		else
@@ -95,7 +95,7 @@ function query(q::String,conn::SqliteDB=sqlitedb)
 	#retrieve resultset
 	while true
 		for i = 1:ncols
-			t = Sqlite.sqlite3_column_type(stmt,i-1) 
+			t = SQLite.sqlite3_column_type(stmt,i-1) 
 			if t == SQLITE3_TEXT
 				r = bytestring( sqlite3_column_text(stmt,i-1) )
 			elseif t == SQLITE_FLOAT
@@ -132,8 +132,8 @@ function query(q::String,conn::SqliteDB=sqlitedb)
 	sqlite3_finalize(stmt)
 	return (conn.resultset = DataFrame(resultset,Index(colnames)))
 end
-function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
-	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
+function createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
+	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
     #these 2 calls are for performance
     internal_query(conn,"PRAGMA synchronous = OFF")
     
@@ -145,7 +145,7 @@ function createtable(input::TableInput,conn::SqliteDB=sqlitedb;name::String="",d
     internal_query(conn,"PRAGMA synchronous = ON")
     return r
 end
-function df2table(df::DataFrame,conn::SqliteDB,name::String)
+function df2table(df::DataFrame,conn::SQLiteDB,name::String)
 	#get column names and types
 	ncols = length(df)
 	colnames = join(df.colindex.names,',')
@@ -170,7 +170,7 @@ function df2table(df::DataFrame,conn::SqliteDB,name::String)
             d = df[row,col]
             t = typeof(d)
             if t <: FloatingPoint
-                Sqlite.sqlite3_bind_double(stmt,col,d)
+                SQLite.sqlite3_bind_double(stmt,col,d)
             elseif t <: Integer
                 WORD_SIZE == 64 ? sqlite3_bind_int64(stmt,col,d) : sqlite3_bind_int(stmt,col,d)
             elseif <: NAtype
@@ -186,14 +186,14 @@ function df2table(df::DataFrame,conn::SqliteDB,name::String)
     internal_query(conn,"COMMIT")
 	return
 end
-function droptable(table::String,conn::SqliteDB=sqlitedb)
-	conn == null_SqliteDB && error("[sqlite]: A valid SqliteDB was not specified (and no valid default SqliteDB exists)")
+function droptable(table::String,conn::SQLiteDB=sqlitedb)
+	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
 	internal_query(conn,"DROP TABLE $table")
 	internal_query(conn,"VACUUM")
 	return
 end
 #read raw file direct to sqlite table
-function dlm2table(file::String,conn::SqliteDB,name::String,delim::Char,header::Bool,types::Array{DataType,1},infer::Bool)
+function dlm2table(file::String,conn::SQLiteDB,name::String,delim::Char,header::Bool,types::Array{DataType,1},infer::Bool)
     #determine tablename and delimiter
     tablename = name
     if tablename == ""
@@ -263,13 +263,13 @@ function dlm2table(file::String,conn::SqliteDB,name::String,delim::Char,header::
     stmt, r = internal_query(conn,"insert into $tablename values ($params)",false,false)
     #bind, step, reset loop for inserting values
     for r in eachline(f)
-		row = Sqlite.split_quoted(chomp(r),delimiter)
+		row = SQLite.split_quoted(chomp(r),delimiter)
 	    for col = 1:ncols
 	    	d = row[col]
-			Sqlite.sqlite3_bind_text(stmt,col,d,length(d),C_NULL)
+			SQLite.sqlite3_bind_text(stmt,col,d,length(d),C_NULL)
 	    end
-    	Sqlite.sqlite3_step(stmt)
-    	Sqlite.sqlite3_reset(stmt)
+    	SQLite.sqlite3_step(stmt)
+    	SQLite.sqlite3_reset(stmt)
 	end
     sqlite3_finalize(stmt)
     internal_query(conn,"COMMIT")
@@ -277,12 +277,12 @@ function dlm2table(file::String,conn::SqliteDB,name::String,delim::Char,header::
     return
 end
 #read raw file to sqlite table (call dlm2table), then run sql statement on table to return df (call to query)
-function readdlmsql(input::String,conn::SqliteDB=sqlitedb;sql::String="select * from file",name::String="file",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
-	if conn == null_SqliteDB
+function readdlmsql(input::String,conn::SQLiteDB=sqlitedb;sql::String="select * from file",name::String="file",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
+	if conn == null_SQLiteDB
 		handle = Array(Ptr{Void},1)
 		file = tempname()
-		Sqlite.sqlite3_open(file,handle)
-		conn = Sqlite.SqliteDB(file,handle[1],Sqlite.null_resultset)
+		SQLite.sqlite3_open(file,handle)
+		conn = SQLite.SQLiteDB(file,handle[1],SQLite.null_resultset)
 	end
 	createtable(input,conn;name=name,delim=delim,header=header,types=types,infer=infer)
 	return query(sql,conn)
@@ -343,8 +343,8 @@ end #sqlite module
 function sqldf(q::String)
 	handle = Array(Ptr{Void},1)
 	file = tempname()
-	Sqlite.sqlite3_open(file,handle)
-	conn = Sqlite.SqliteDB(file,handle[1],Sqlite.null_resultset)
+	SQLite.sqlite3_open(file,handle)
+	conn = SQLite.SQLiteDB(file,handle[1],SQLite.null_resultset)
 	#todo: do we need to change column names at all?
 	tables = ref(String)
 	#find tablenames
@@ -365,12 +365,12 @@ function sqldf(q::String)
 	check != length(tables) && error("[sqlite]: DataFrames specified in query were not found")
 	for df in tables
 		d = eval(symbol(df))
-		Sqlite.createtable(d,conn;name=df)
+		SQLite.createtable(d,conn;name=df)
 	end
-	result = Sqlite.query(q,conn)
+	result = SQLite.query(q,conn)
 	for df in tables
-		Sqlite.droptable(df,conn)
+		SQLite.droptable(df,conn)
 	end
-	Sqlite.sqlite3_close_v2(conn.handle)
+	SQLite.sqlite3_close_v2(conn.handle)
 	return result
 end
