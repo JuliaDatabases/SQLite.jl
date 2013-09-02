@@ -2,7 +2,9 @@ module SQLite
  
 using DataFrames
 
-export sqlitedb, readdlmsql, query, connect, createtable, droptable
+export sqlitedb, readdlmsql, query, createtable, droptable
+
+import Base: show
 
 include("SQLite_consts.jl")
 include("SQLite_api.jl")
@@ -69,8 +71,7 @@ function internal_query(conn::SQLiteDB,q::String,finalize::Bool=true,stepped::Bo
 end
 function query(q::String,conn::SQLiteDB=sqlitedb)
 	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
-	stmt, r = SQLite.internal_query(conn,q,false)
-	r == SQLITE_DONE && return DataFrame("No Rows Returned")
+	stmt, status = SQLite.internal_query(conn,q,false)
 	#get resultset metadata: column count, column types, and column names
 	ncols = SQLite.sqlite3_column_count(stmt)
 	colnames = Array(UTF8String,ncols)
@@ -93,7 +94,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 		end
 	end
 	#retrieve resultset
-	while true
+	while status != SQLITE_DONE
 		for i = 1:ncols
 			t = SQLite.sqlite3_column_type(stmt,i-1) 
 			if t == SQLITE3_TEXT
@@ -107,13 +108,13 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 			end
 			push!(resultset[i],r)
 		end
-		sqlite3_step(stmt) == SQLITE_DONE && break
+		status = sqlite3_step(stmt)
 	end
     #this is for columns we couldn't get the type for earlier (NULL in row 1); should be the exception
 	if check != ncols
         nrows = length(resultset[1])
 		for i = 1:ncols
-			if isna(resultset[i][1])
+			if nrows > 0 && isna(resultset[i][1])
                 d = resultset[i]
 				for j = 2:nrows
                     if !isna(d[j])
