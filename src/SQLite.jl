@@ -147,9 +147,6 @@ function createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",d
     return r
 end
 function df2table(df::DataFrame,conn::SQLiteDB,name::String)
-	#get column names and types
-	ncols = length(df)
-	colnames = join(df.colindex.names,',')
     #get df name for table name if not provided
     dfname = name
     if dfname == ""
@@ -159,8 +156,22 @@ function df2table(df::DataFrame,conn::SQLiteDB,name::String)
             end
         end
     end
-    #should we loop through column types to specify in create table statement?
-    internal_query(conn,"create table $dfname ($colnames)")
+    # build column specifications
+    ncols = length(df)
+    colnames = copy(df.colindex.names)
+    for col = 1 : ncols
+        t = eltype(df[col])
+        if t <: FloatingPoint
+            colnames[col] *= " REAL"
+        elseif t <: Integer
+            colnames[col] *= " INT"
+        elseif t <: String
+            colnames[col] *= " TEXT"
+        end
+    end
+    colspec = join(colnames, ",")
+    # create table
+    internal_query(conn,"create table $dfname ($colspec)")
     internal_query(conn,"BEGIN TRANSACTION")
 	#prepare insert table with parameters for column values
 	params = chop(repeat("?,",ncols))
