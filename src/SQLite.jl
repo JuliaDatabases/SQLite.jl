@@ -4,7 +4,7 @@ using DataFrames
 
 export sqlitedb, readdlmsql, query, createtable, droptable
 
-import Base: show
+import Base: show, close
 
 include("SQLite_consts.jl")
 include("SQLite_api.jl")
@@ -15,7 +15,7 @@ type SQLiteDB
 	resultset::Any
 end
 function show(io::IO,db::SQLiteDB)
-    if db == null_SQLiteDB
+    if db.handle == C_NULL
         print(io,"Null sqlite connection")
     else
         println(io,"sqlite connection")
@@ -47,6 +47,16 @@ function connect(file::String)
 		error("[sqlite]: Error opening $file; $(bytestring(sqlite3_errmsg(conn.handle)))")
 	else
 		return (sqlitedb = SQLiteDB(file,handle[1],null_resultset))
+	end
+end
+function close(conn::SQLiteDB)
+	# if is fine to close when conn.handle is NULL (as stated in sqlite3's document)
+	if @FAILED sqlite3_close(conn.handle)
+		error("[sqlite]: Error closing $(conn.file); $(bytestring(sqlite3_errmsg(conn.handle)))")
+	else
+		conn.file = ""
+		conn.handle = C_NULL
+		conn.resultset = null_resultset
 	end
 end
 function internal_query(conn::SQLiteDB,q::String,finalize::Bool=true,stepped::Bool=true)
