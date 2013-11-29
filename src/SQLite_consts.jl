@@ -5,9 +5,9 @@ let
     local lib
     succeeded=false
     @linux_only lib_choices = ["libsqlite3"]
-    @windows_only WORD_SIZE == 64 && (lib_choices = [Pkg.dir() * "\\Sqlite\\lib\\sqlite3-64"])
-    @windows_only WORD_SIZE != 64 && (lib_choices = [Pkg.dir() * "\\Sqlite\\lib\\sqlite3"])
-    @osx_only lib_choices = ["/usr/lib/libsqlite3.dylib", Pkg.dir() * "/Sqlite/lib/libsqlite3"]
+    @windows_only WORD_SIZE == 64 && (lib_choices = [Pkg.dir() * "\\SQLite\\lib\\sqlite3-64"])
+    @windows_only WORD_SIZE != 64 && (lib_choices = [Pkg.dir() * "\\SQLite\\lib\\sqlite3"])
+    @osx_only lib_choices = ["/usr/lib/libsqlite3.dylib", Pkg.dir() * "/SQLite/lib/libsqlite3"]
     for lib in lib_choices 
         try
             dlopen(lib)
@@ -15,7 +15,7 @@ let
             break
         end
     end
-    if !succeeded error("Sqlite library not found") end
+    if !succeeded error("SQLite library not found") end
     @eval const sqlite3_lib = $lib
 end
 
