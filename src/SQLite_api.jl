@@ -27,7 +27,7 @@ function sqlite3_prepare(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1
 			Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 	@unix_only return ccall( (:sqlite3_prepare, sqlite3_lib),
-		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Vo
+		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 end
 function sqlite3_prepare_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
@@ -35,7 +35,7 @@ function sqlite3_prepare_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void
 			Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 	@unix_only return ccall( (:sqlite3_prepare_v2, sqlite3_lib),
-		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}
+		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 end
 function sqlite3_prepare16(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
@@ -43,7 +43,7 @@ function sqlite3_prepare16(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void}
 			Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 	@unix_only return ccall( (:sqlite3_prepare16, sqlite3_lib),
-		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void
+		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
 			handle,query,length(query),stmt,unused)
 end
 function sqlite3_prepare16_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
@@ -145,10 +145,10 @@ function sqlite3_column_type(stmt::Ptr{Void},col::Int)
 		stmt,col)
 end
 # function sqlite3_column_value(stmt::Ptr{Void},col::Cint)
-@windows_only # 	return ccall( (:sqlite3_column_value, sqlite3_lib), stdcall,
+# 	return ccall( (:sqlite3_column_value, sqlite3_lib), stdcall,
 # 			Ptr{Void}, (Ptr{Void},Cint),
 # 			stmt,col)
-@unix_only # 	return ccall( (:sqlite3_column_value, sqlite3_lib),
+# 	return ccall( (:sqlite3_column_value, sqlite3_lib),
 # 			Ptr{Void}, (Ptr{Void},Cint),
 # 			stmt,col)
 # end
