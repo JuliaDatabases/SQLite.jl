@@ -1,6 +1,7 @@
 module SQLite
  
 using DataFrames
+using DataArrays
 
 export sqlitedb, readdlmsql, query, createtable, droptable
 
@@ -327,7 +328,7 @@ function search_quoted(s::String, c::Char, i::Integer)
         		d, j = next(s,i)
         	end
         end
-        if contains(c,d)
+        if d in c
             return i
         end
         i = j
