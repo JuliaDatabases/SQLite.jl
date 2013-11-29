@@ -2,7 +2,9 @@ module SQLite
  
 using DataFrames
 
-export sqlitedb, readdlmsql, query, connect, createtable, droptable
+export sqlitedb, readdlmsql, query, createtable, droptable
+
+import Base: show, close
 
 include("SQLite_consts.jl")
 include("SQLite_api.jl")
@@ -13,7 +15,7 @@ type SQLiteDB
 	resultset::Any
 end
 function show(io::IO,db::SQLiteDB)
-    if db == null_SQLiteDB
+    if db.handle == C_NULL
         print(io,"Null sqlite connection")
     else
         println(io,"sqlite connection")
@@ -47,6 +49,16 @@ function connect(file::String)
 		return (sqlitedb = SQLiteDB(file,handle[1],null_resultset))
 	end
 end
+function close(conn::SQLiteDB)
+	# if is fine to close when conn.handle is NULL (as stated in sqlite3's document)
+	if @FAILED sqlite3_close(conn.handle)
+		error("[sqlite]: Error closing $(conn.file); $(bytestring(sqlite3_errmsg(conn.handle)))")
+	else
+		conn.file = ""
+		conn.handle = C_NULL
+		conn.resultset = null_resultset
+	end
+end
 function internal_query(conn::SQLiteDB,q::String,finalize::Bool=true,stepped::Bool=true)
 	stmt = Array(Ptr{Void},1)
 	if @FAILED sqlite3_prepare_v2(conn.handle,utf8(q),stmt,[C_NULL])
@@ -69,8 +81,7 @@ function internal_query(conn::SQLiteDB,q::String,finalize::Bool=true,stepped::Bo
 end
 function query(q::String,conn::SQLiteDB=sqlitedb)
 	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
-	stmt, r = SQLite.internal_query(conn,q,false)
-	r == SQLITE_DONE && return DataFrame("No Rows Returned")
+	stmt, status = SQLite.internal_query(conn,q,false)
 	#get resultset metadata: column count, column types, and column names
 	ncols = SQLite.sqlite3_column_count(stmt)
 	colnames = Array(UTF8String,ncols)
@@ -93,7 +104,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 		end
 	end
 	#retrieve resultset
-	while true
+	while status != SQLITE_DONE
 		for i = 1:ncols
 			t = SQLite.sqlite3_column_type(stmt,i-1) 
 			if t == SQLITE3_TEXT
@@ -107,13 +118,13 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 			end
 			push!(resultset[i],r)
 		end
-		sqlite3_step(stmt) == SQLITE_DONE && break
+		status = sqlite3_step(stmt)
 	end
     #this is for columns we couldn't get the type for earlier (NULL in row 1); should be the exception
 	if check != ncols
         nrows = length(resultset[1])
 		for i = 1:ncols
-			if isna(resultset[i][1])
+			if nrows > 0 && isna(resultset[i][1])
                 d = resultset[i]
 				for j = 2:nrows
                     if !isna(d[j])
@@ -146,9 +157,6 @@ function createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",d
     return r
 end
 function df2table(df::DataFrame,conn::SQLiteDB,name::String)
-	#get column names and types
-	ncols = length(df)
-	colnames = join(df.colindex.names,',')
     #get df name for table name if not provided
     dfname = name
     if dfname == ""
@@ -158,8 +166,22 @@ function df2table(df::DataFrame,conn::SQLiteDB,name::String)
             end
         end
     end
-    #should we loop through column types to specify in create table statement?
-    internal_query(conn,"create table $dfname ($colnames)")
+    # build column specifications
+    ncols = length(df)
+    colnames = copy(df.colindex.names)
+    for col = 1 : ncols
+        t = eltype(df[col])
+        if t <: FloatingPoint
+            colnames[col] *= " REAL"
+        elseif t <: Integer
+            colnames[col] *= " INT"
+        elseif t <: String
+            colnames[col] *= " TEXT"
+        end
+    end
+    colspec = join(colnames, ",")
+    # create table
+    internal_query(conn,"create table $dfname ($colspec)")
     internal_query(conn,"BEGIN TRANSACTION")
 	#prepare insert table with parameters for column values
 	params = chop(repeat("?,",ncols))
