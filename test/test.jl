@@ -1,5 +1,5 @@
 using SQLite
-co = SQLite.connect(Pkg.dir() * "/SQLite/test/Chinook_SQLite.sqlite")
+co = SQLite.connect(Pkg.dir() * "/SQLite/test/Chinook_Sqlite.sqlite")
 
 df = query("SELECT * FROM Employee;")
 createtable(df; name="test")
