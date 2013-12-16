@@ -9,6 +9,10 @@ julia> Pkg.init()        # Creates julia package repository (only runs once for 
 julia> Pkg.add("SQLite")   # Creates the SQLite repo folder and downloads the SQLite package + dependancy (if needed)
 julia> using SQLite        # Loads the SQLite module for use (needs to be run with each new Julia instance)
 ```
+
+Testing status: [![Build Status](https://travis-ci.org/karbarcca/SQLite.jl.png)](https://travis-ci.org/karbarcca/SQLite.jl)
+
+
 ## Package Documentation
 
 #### Functions
