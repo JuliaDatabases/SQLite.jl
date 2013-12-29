@@ -1,4 +1,4 @@
-Sqlite.jl is licensed under the MIT License:
+SQLite.jl is licensed under the MIT License:
 
 Copyright (c) 2013: Jacob Quinn
 

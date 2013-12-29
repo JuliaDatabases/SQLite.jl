@@ -12,10 +12,11 @@ before_install:
     - git config --global user.email "travis@example.net"
 script:
     - julia -e 'versioninfo(); Pkg.init();'
-    - julia -e 'Pkg.add("DataFrames")'
+    - julia -e 'Pkg.add("DBI")'
     - julia -e 'Pkg.add("DataArrays")'
+    - julia -e 'Pkg.add("DataFrames")'
     - mkdir -p ~/.julia/SQLite
     - cp -R ./* ~/.julia/SQLite/
     - cd ~/.julia/SQLite/
     - julia -e 'Pkg.build("SQLite")'
-    - julia test/test.jl
+    - julia test/runtests.jl
