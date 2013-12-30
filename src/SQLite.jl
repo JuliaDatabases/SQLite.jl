@@ -45,7 +45,7 @@ function connect(file::String)
 	global sqlitedb
 	handle = Array(Ptr{Void},1)
 	if @FAILED sqlite3_open(file,handle)
-		error("[sqlite]: Error opening $file; $(bytestring(sqlite3_errmsg(conn.handle)))")
+		error("[sqlite]: Error opening $file; $(bytestring(sqlite3_errmsg(sqlitedb.handle)))")
 	else
 		return (sqlitedb = SQLiteDB(file,handle[1],null_resultset))
 	end
