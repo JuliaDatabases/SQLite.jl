@@ -19,8 +19,15 @@ module TestDBI
 
     run(db, "INSERT INTO users VALUES (3, 'Stefan Karpinski')")
 
+    stmt = prepare(db, "INSERT INTO users VALUES (?, ?)")
+    execute(stmt, {4, "Jameson Nash"})
+    execute(stmt, {5, "Keno Fisher"})
+    finish(stmt)
+
     stmt = prepare(db, "SELECT * FROM users")
     execute(stmt)
+    row = fetchrow(stmt)
+    row = fetchrow(stmt)
     row = fetchrow(stmt)
     row = fetchrow(stmt)
     row = fetchrow(stmt)

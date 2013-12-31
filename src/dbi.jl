@@ -51,6 +51,39 @@ function DBI.execute(stmt::SQLiteStatementHandle)
     return
 end
 
+# Bind parameters, then step and reset
+function DBI.execute(stmt::SQLiteStatementHandle, parameters::Vector)
+    index = 0
+    for parameter in parameters
+        index += 1
+        if isa(parameter, FloatingPoint)
+            sqlite3_bind_double(stmt.ptr, index, parameter)
+        elseif isa(parameter, Integer)
+            if WORD_SIZE == 64
+                sqlite3_bind_int64(stmt.ptr, index, parameter)
+            else
+                sqlite3_bind_int(stmt.ptr, index, parameter)
+            end
+        elseif isa(parameter, NAtype)
+            sqlite3_bind_null(stmt.ptr, index)
+        # TODO: Blob
+        else
+            s = utf8(parameter)
+            sqlite3_bind_text(stmt.ptr, index, s, length(s), C_NULL)
+        end
+    end
+    status = sqlite3_step(stmt.ptr)
+    # TODO: Check status of reset call?
+    sqlite3_reset(stmt.ptr)
+    stmt.db.status = status
+    if @failed status
+        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
+        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
+        error(msg)
+    end
+    return
+end
+
 function DBI.finish(stmt::SQLiteStatementHandle)
     status = sqlite3_finalize(stmt.ptr)
     stmt.db.status = status
