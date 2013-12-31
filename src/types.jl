@@ -5,7 +5,13 @@ type SQLiteDatabaseHandle <: DBI.DatabaseHandle
     status::Cint
 end
 
-immutable SQLiteStatementHandle <: DBI.StatementHandle
+type SQLiteStatementHandle <: DBI.StatementHandle
     db::SQLiteDatabaseHandle
     ptr::Ptr{Void}
+    executed::Int
+
+    function SQLiteStatementHandle(db::SQLiteDatabaseHandle,
+                                   ptr::Ptr{Void})
+        new(db, ptr, 0)
+    end
 end

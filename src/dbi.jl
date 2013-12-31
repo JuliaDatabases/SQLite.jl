@@ -1,3 +1,32 @@
+function DBI.columninfo(db::SQLiteDatabaseHandle,
+                        table::String,
+                        column::String)
+    datatype = Array(Ptr{Uint8}, 1)
+    collseq = Array(Ptr{Uint8}, 1)
+    notnull = Cint[0]
+    primarykey = Cint[0]
+    autoinc = Cint[0]
+
+    status = sqlite3_table_column_metadata(db.ptr,
+                                           table,
+                                           column,
+                                           datatype,
+                                           collseq,
+                                           notnull,
+                                           primarykey,
+                                           autoinc)
+
+    db.status = status
+    datatype, length = sql2jltype(bytestring(datatype[1]))
+    return DBI.DatabaseColumn(column,
+                              datatype,
+                              length,
+                              bytestring(collseq[1]),
+                              bool(1 - notnull[1]),
+                              bool(primarykey[1]),
+                              bool(autoinc[1]))
+end
+
 function Base.connect(::Type{SQLite3},
                       path::String,
                       accessmode = convert(Cint, SQLITE_OPEN_READWRITE),
@@ -27,20 +56,20 @@ function DBI.disconnect(db::SQLiteDatabaseHandle)
     return
 end
 
-function DBI.prepare(db::SQLiteDatabaseHandle, sql::String)
-    stmtptrptr = Array(Ptr{Void}, 1)
-    status = sqlite3_prepare_v2(db.ptr, utf8(sql), stmtptrptr, [C_NULL])
-    db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(db.ptr))
-        msg1 = @sprintf "Failed to prepare SQL: `%s`\n" sql
-        msg2 = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(string(msg1, msg2))
-    end
-    return SQLiteStatementHandle(db, stmtptrptr[1])
+function DBI.errcode(db::SQLiteDatabaseHandle)
+    return sqlite3_extended_errcode(db.ptr)
+end
+
+function DBI.errstring(db::SQLiteDatabaseHandle)
+    errmsg1 = bytestring(sqlite3_errstr(db.status))
+    errmsg2 = bytestring(sqlite3_errmsg(db.ptr))
+    msg1 = @sprintf "Error code %d: %s\n" db.status errmsg1
+    msg2 = @sprintf "Error message: %s\n" errmsg2
+    return string(msg1, msg2)
 end
 
 function DBI.execute(stmt::SQLiteStatementHandle)
+    stmt.executed += 1
     status = sqlite3_step(stmt.ptr)
     stmt.db.status = status
     if @failed status
@@ -53,6 +82,7 @@ end
 
 # Bind parameters, then step and reset
 function DBI.execute(stmt::SQLiteStatementHandle, parameters::Vector)
+    stmt.executed += 1
     index = 0
     for parameter in parameters
         index += 1
@@ -75,17 +105,6 @@ function DBI.execute(stmt::SQLiteStatementHandle, parameters::Vector)
     status = sqlite3_step(stmt.ptr)
     # TODO: Check status of reset call?
     sqlite3_reset(stmt.ptr)
-    stmt.db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
-    end
-    return
-end
-
-function DBI.finish(stmt::SQLiteStatementHandle)
-    status = sqlite3_finalize(stmt.ptr)
     stmt.db.status = status
     if @failed status
         sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
@@ -214,33 +233,32 @@ function DBI.fetchdf(stmt::SQLiteStatementHandle)
     return DataFrame(cols, Index(colnames))
 end
 
-function DBI.columninfo(db::SQLiteDatabaseHandle,
-                        table::String,
-                        column::String)
-    datatype = Array(Ptr{Uint8}, 1)
-    collseq = Array(Ptr{Uint8}, 1)
-    notnull = Cint[0]
-    primarykey = Cint[0]
-    autoinc = Cint[0]
+function DBI.finish(stmt::SQLiteStatementHandle)
+    status = sqlite3_finalize(stmt.ptr)
+    stmt.db.status = status
+    if @failed status
+        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
+        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
+        error(msg)
+    end
+    return
+end
 
-    status = sqlite3_table_column_metadata(db.ptr,
-                                           table,
-                                           column,
-                                           datatype,
-                                           collseq,
-                                           notnull,
-                                           primarykey,
-                                           autoinc)
+function DBI.lastinsertid(db::SQLiteDatabaseHandle)
+    return sqlite3_last_insert_rowid(db.ptr)
+end
 
+function DBI.prepare(db::SQLiteDatabaseHandle, sql::String)
+    stmtptrptr = Array(Ptr{Void}, 1)
+    status = sqlite3_prepare_v2(db.ptr, utf8(sql), stmtptrptr, [C_NULL])
     db.status = status
-    datatype, length = sql2jltype(bytestring(datatype[1]))
-    return DBI.DatabaseColumn(column,
-                              datatype,
-                              length,
-                              bytestring(collseq[1]),
-                              bool(1 - notnull[1]),
-                              bool(primarykey[1]),
-                              bool(autoinc[1]))
+    if @failed status
+        sqlmsg = bytestring(sqlite3_errmsg(db.ptr))
+        msg1 = @sprintf "Failed to prepare SQL: `%s`\n" sql
+        msg2 = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
+        error(string(msg1, msg2))
+    end
+    return SQLiteStatementHandle(db, stmtptrptr[1])
 end
 
 function DBI.tableinfo(db::SQLiteDatabaseHandle, table::String)

@@ -6,8 +6,16 @@ module TestDBI
     db = connect(SQLite3, "test/db/users.sqlite3")
 
     stmt = prepare(db, "CREATE TABLE users (id INT NOT NULL, name VARCHAR(255))")
+    executed(stmt)
     execute(stmt)
+    executed(stmt)
     finish(stmt)
+
+    try
+        stmt = prepare(db, "CREATE TABLE users (id INT NOT NULL, name VARCHAR(255))")
+    end
+    errcode(db)
+    errstring(db)
 
     stmt = prepare(db, "INSERT INTO users VALUES (1, 'Jeff Bezanson')")
     execute(stmt)
