@@ -308,16 +308,6 @@ const SQLITE_TESTCTRL_LAST =                19
 # Virtual table configuration options
 const SQLITE_VTAB_CONSTRAINT_SUPPORT = 1
 
-# Define success and failure
-const SUCCESSCODES = [SQLITE_OK, SQLITE_DONE, SQLITE_ROW]
-macro succeeded(func)
-    :($func in SUCCESSCODES)
-end
-
-macro failed(func)
-    :(!($func in SUCCESSCODES))
-end
-
 # Open options
 const SQLITE_OPEN_READONLY       = 0x00000001  # Ok for sqlite3_open_v2()
 const SQLITE_OPEN_READWRITE      = 0x00000002  # Ok for sqlite3_open_v2()

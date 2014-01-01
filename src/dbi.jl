@@ -3,9 +3,9 @@ function DBI.columninfo(db::SQLiteDatabaseHandle,
                         column::String)
     datatype = Array(Ptr{Uint8}, 1)
     collseq = Array(Ptr{Uint8}, 1)
-    notnull = Cint[0]
-    primarykey = Cint[0]
-    autoinc = Cint[0]
+    notnull = Array(Cint, 1)
+    primarykey = Array(Cint, 1)
+    autoinc = Array(Cint, 1)
 
     status = sqlite3_table_column_metadata(db.ptr,
                                            table,
@@ -15,9 +15,13 @@ function DBI.columninfo(db::SQLiteDatabaseHandle,
                                            notnull,
                                            primarykey,
                                            autoinc)
-
     db.status = status
+    if status != SQLITE_OK
+        error(errstring(db))
+    end
+
     datatype, length = sql2jltype(bytestring(datatype[1]))
+
     return DBI.DatabaseColumn(column,
                               datatype,
                               length,
@@ -36,11 +40,9 @@ function Base.connect(::Type{SQLite3},
     status = sqlite3_open_v2(utf8(path), dbptrptr, accessmode, vfs)
     db = SQLiteDatabaseHandle(dbptrptr[1], status)
     db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(db.ptr))
-        msg1 = @sprintf "Failed to access path: '%s'\n" path
-        msg2 = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(string(msg1, msg2))
+    if status != SQLITE_OK
+        msg = @sprintf "Failed to connect to database at '%s'" path
+        error(msg)
     end
     return db
 end
@@ -48,10 +50,8 @@ end
 function DBI.disconnect(db::SQLiteDatabaseHandle)
     status = sqlite3_close_v2(db.ptr)
     db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
+    if status != SQLITE_OK
+        error(errstring(db))
     end
     return
 end
@@ -63,29 +63,28 @@ end
 function DBI.errstring(db::SQLiteDatabaseHandle)
     errmsg1 = bytestring(sqlite3_errstr(db.status))
     errmsg2 = bytestring(sqlite3_errmsg(db.ptr))
-    msg1 = @sprintf "Error code %d: %s\n" db.status errmsg1
-    msg2 = @sprintf "Error message: %s\n" errmsg2
-    return string(msg1, msg2)
+    io = IOBuffer()
+    @printf io "Error code %d: %s\n" db.status errmsg1
+    @printf io "Error message: %s\n" errmsg2
+    return bytestring(io)
 end
 
 function DBI.execute(stmt::SQLiteStatementHandle)
-    stmt.executed += 1
     status = sqlite3_step(stmt.ptr)
     stmt.db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
+    if !(status in [SQLITE_OK, SQLITE_ROW, SQLITE_DONE])
+        error(errstring(db))
+    else
+        stmt.executed += 1
     end
     return
 end
 
 # Bind parameters, then step and reset
 function DBI.execute(stmt::SQLiteStatementHandle, parameters::Vector)
-    stmt.executed += 1
-    index = 0
-    for parameter in parameters
-        index += 1
+    for index in 1:length(parameters)
+        parameter = parameters[index]
+        # TODO: Error check these bind calls
         if isa(parameter, FloatingPoint)
             sqlite3_bind_double(stmt.ptr, index, parameter)
         elseif isa(parameter, Integer)
@@ -96,26 +95,31 @@ function DBI.execute(stmt::SQLiteStatementHandle, parameters::Vector)
             end
         elseif isa(parameter, NAtype)
             sqlite3_bind_null(stmt.ptr, index)
-        # TODO: Blob
+        # TODO: Allow blob binding
         else
             s = utf8(parameter)
             sqlite3_bind_text(stmt.ptr, index, s, length(s), C_NULL)
         end
     end
+
     status = sqlite3_step(stmt.ptr)
+    stmt.db.status = status
+    if !(status in [SQLITE_OK, SQLITE_ROW, SQLITE_DONE])
+        error(errstring(stmt.db))
+    else
+        stmt.executed += 1
+    end
+
     # TODO: Check status of reset call?
     sqlite3_reset(stmt.ptr)
-    stmt.db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
-    end
+
     return
 end
 
 # Assumes statement has been executed once already
 function DBI.fetchrow(stmt::SQLiteStatementHandle)
+    # Unline sqlite3_column_count, this returns number of values
+    # actually available at this moment
     ncols = SQLite.sqlite3_data_count(stmt.ptr)
     row = Array(Any, ncols)
     if ncols == 0
@@ -140,10 +144,8 @@ function DBI.fetchrow(stmt::SQLiteStatementHandle)
     end
     status = sqlite3_step(stmt.ptr)
     stmt.db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
+    if !(status in [SQLITE_OK, SQLITE_ROW, SQLITE_DONE])
+        error(errstring(stmt.db))
     end
     return row
 end
@@ -166,13 +168,11 @@ end
 # Assumes statement has been executed once already
 function DBI.fetchdf(stmt::SQLiteStatementHandle)
     ncols = sqlite3_column_count(stmt.ptr)
-
     cols = Array(Any, ncols)
-
-    colnames = Array(UTF8String, ncols)
+    names = Array(UTF8String, ncols)
     ntypedcols = 0
     for i in 1:ncols
-        colnames[i] = bytestring(sqlite3_column_name(stmt.ptr, i - 1))
+        names[i] = bytestring(sqlite3_column_name(stmt.ptr, i - 1))
         t = sqlite3_column_type(stmt.ptr, i - 1)
         if t == SQLITE3_TEXT
             cols[i] = DataArray(UTF8String, 0)
@@ -230,16 +230,14 @@ function DBI.fetchdf(stmt::SQLiteStatementHandle)
         end
     end
 
-    return DataFrame(cols, Index(colnames))
+    return DataFrame(cols, Index(names))
 end
 
 function DBI.finish(stmt::SQLiteStatementHandle)
     status = sqlite3_finalize(stmt.ptr)
     stmt.db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(stmt.db.ptr))
-        msg = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(msg)
+    if status != SQLITE_OK
+        error(errstring(db))
     end
     return
 end
@@ -250,13 +248,13 @@ end
 
 function DBI.prepare(db::SQLiteDatabaseHandle, sql::String)
     stmtptrptr = Array(Ptr{Void}, 1)
-    status = sqlite3_prepare_v2(db.ptr, utf8(sql), stmtptrptr, [C_NULL])
+    status = sqlite3_prepare_v2(db.ptr,
+                                utf8(sql),
+                                stmtptrptr,
+                                [C_NULL])
     db.status = status
-    if @failed status
-        sqlmsg = bytestring(sqlite3_errmsg(db.ptr))
-        msg1 = @sprintf "Failed to prepare SQL: `%s`\n" sql
-        msg2 = @sprintf "SQLite3 error message: '%s'\n" sqlmsg
-        error(string(msg1, msg2))
+    if status != SQLITE_OK
+        error(errstring(db))
     end
     return SQLiteStatementHandle(db, stmtptrptr[1])
 end

@@ -1,6 +1,5 @@
 function sql(stmt::SQLiteStatementHandle)
-    chrptr = SQLite.sqlite3_sql(stmt.ptr)
-    return bytestring(chrptr)
+    return bytestring(SQLite.sqlite3_sql(stmt.ptr))
 end
 
 function last_insert_rowid(db::SQLiteDatabaseHandle)
