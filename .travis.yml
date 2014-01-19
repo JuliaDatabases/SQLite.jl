@@ -17,6 +17,7 @@ script:
     - julia -e 'versioninfo(); Pkg.init();'
     - julia -e 'Pkg.add("DataFrames")'
     - julia -e 'Pkg.add("DataArrays")'
+    - julia -e 'Pkg.add("BinDeps")'
     - mkdir -p ~/.julia/SQLite
     - cp -R ./* ~/.julia/SQLite/
     - cd ~/.julia/SQLite/
