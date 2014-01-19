@@ -8,7 +8,7 @@ deps = [sqlite3_lib = library_dependency("sqlite3_lib", aliases=["sqlite3","sqli
   using Homebrew
   provides(Homebrew.HB, {"sqlite" => sqlite3_lib})
 end
-@unix_only
+@unix_only begin
   provides(Yum, {"sqlite3-devel" => sqlite3_lib})
   provides(AptGet, {"sqlite3" => sqlite3_lib})
 end
