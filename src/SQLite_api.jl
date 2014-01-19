@@ -202,20 +202,30 @@ end
 # SQLITE_API int sqlite3_data_count(sqlite3_stmt *pStmt);
 
 function sqlite3_close(handle::Ptr{Void})
-	@windows_only return ccall( (:sqlite3_close, sqlite3_lib), stdcall,
+	try
+		@windows_only return ccall( (:sqlite3_close, sqlite3_lib), stdcall,
+				Cint, (Ptr{Void},),
+				handle)
+		@unix_only return ccall( (:sqlite3_close, sqlite3_lib),
 			Cint, (Ptr{Void},),
 			handle)
-	@unix_only return ccall( (:sqlite3_close, sqlite3_lib),
-		Cint, (Ptr{Void},),
-		handle)
+	catch
+		warn("sqlite3_close not available")
+	end
 end
 function sqlite3_close_v2(handle::Ptr{Void})
-	@windows_only return ccall( (:sqlite3_close_v2, sqlite3_lib), stdcall,
+	try
+		@windows_only return ccall( (:sqlite3_close_v2, sqlite3_lib), stdcall,
+				Cint, (Ptr{Void},),
+				handle)
+		@unix_only return ccall( (:sqlite3_close_v2, sqlite3_lib),
 			Cint, (Ptr{Void},),
 			handle)
-	@unix_only return ccall( (:sqlite3_close_v2, sqlite3_lib),
-		Cint, (Ptr{Void},),
-		handle)
+	catch
+		# Older versions of the library don't have this, abort to other close
+		warn("sqlite3_close_v2 not available.")
+		sqlite3_close(handle)
+	end
 end
 function sqlite3_initialize()
 	@windows_only return ccall( (:sqlite3_initialize, sqlite3_lib), stdcall,
