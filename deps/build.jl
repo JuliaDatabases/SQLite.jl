@@ -2,7 +2,7 @@ using BinDeps
 
 @BinDeps.setup
 
-deps = [sqlite3_lib = library_dependency("sqlite3_lib", aliases=["sqlite3","sqlite3-64","libsqlite3"])]
+deps = [sqlite3_lib = library_dependency("sqlite3_lib", aliases=["sqlite3","sqlite3-64","libsqlite3","libsqlite3-0"])]
 
 @osx_only begin
   using Homebrew
@@ -13,6 +13,9 @@ end
   provides(AptGet, {"sqlite3" => sqlite3_lib})
 end
 
-provides(Binaries, {URI("http://drive.google.com/uc?export=download&id=0B6x_qYLl89S0TnAxS1Jtd3g3QkU") => sqlite3_lib}, os = :Windows)
+@windows_only begin
+  using WinRPM
+  provides(WinRPM.RPM,"libsqlite",sqlite3_lib, os = :Windows)
+end
 
-@BinDeps.install
+@BinDeps.install [:sqlite3_lib => :sqlite3_lib ]

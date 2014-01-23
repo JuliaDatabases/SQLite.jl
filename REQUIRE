@@ -2,3 +2,5 @@ julia 0.2-
 DataFrames
 DataArrays
 BinDeps
+@osx Homebrew
+@windows WinRPM
