@@ -1,25 +1,4 @@
-#http://blog.synopse.info/post/2013/03/23/Latest-version-of-sqlite3.dll-for-Windows-64-bit
-#Link to Sqlite shared library (system-dependent)
-let
-    global sqlite3_lib
-    local lib
-    succeeded=false
-    @linux_only lib_choices = ["libsqlite3"]
-    @windows_only WORD_SIZE == 64 && (lib_choices = [Pkg.dir() * "\\SQLite\\lib\\sqlite3-64"])
-    @windows_only WORD_SIZE != 64 && (lib_choices = [Pkg.dir() * "\\SQLite\\lib\\sqlite3"])
-    @osx_only lib_choices = ["/usr/lib/libsqlite3.dylib", Pkg.dir() * "/SQLite/lib/libsqlite3"]
-    for lib in lib_choices 
-        try
-            dlopen(lib)
-            succeeded=true
-            break
-        end
-    end
-    if !succeeded error("SQLite library not found") end
-    @eval const sqlite3_lib = $lib
-end
-
-# const sqlite3_lib = "C:/Users/karbarcca/Google Drive/Dropbox/Dropbox/GitHub/sqlite.jl/lib/sqlite3-64"
+include("../deps/deps.jl")
 
 #Macros
 macro SUCCEEDED(func)
