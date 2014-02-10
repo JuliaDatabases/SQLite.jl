@@ -16,22 +16,22 @@ end
 function sqlite3_prepare(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
 	return ccall( (:sqlite3_prepare, sqlite3_lib),
 		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
-			handle,query,length(query),stmt,unused)
+			handle,query,sizeof(query),stmt,unused)
 end
 function sqlite3_prepare_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
 	return ccall( (:sqlite3_prepare_v2, sqlite3_lib),
 		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
-			handle,query,length(query),stmt,unused)
+			handle,query,sizeof(query),stmt,unused)
 end
 function sqlite3_prepare16(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
 	return ccall( (:sqlite3_prepare16, sqlite3_lib),
 		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
-			handle,query,length(query),stmt,unused)
+			handle,query,sizeof(query),stmt,unused)
 end
 function sqlite3_prepare16_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
 	return ccall( (:sqlite3_prepare16_v2, sqlite3_lib),
 		Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
-		handle,query,length(query),stmt,unused)
+		handle,query,sizeof(query),stmt,unused)
 end
 function sqlite3_step(stmt::Ptr{Void})
 	return ccall( (:sqlite3_step, sqlite3_lib),
