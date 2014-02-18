@@ -142,7 +142,9 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 		end
 	end
 	sqlite3_finalize(stmt)
-	return (conn.resultset = DataFrame(resultset,Index(colnames)))
+    
+	indices = DataFrames.Index(convert(Array{Symbol,1}, colnames))
+	return (conn.resultset = DataFrame(resultset,indices))
 end
 function createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
 	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
