@@ -33,7 +33,7 @@ end
 
 typealias TableInput Union(DataFrame,String)
 
-const null_resultset = DataFrame(0)
+const null_resultset = DataFrame({})
 const null_SQLiteDB = SQLiteDB("",C_NULL,null_resultset)
 sqlitedb = null_SQLiteDB #Create default connection = null
 const INTrx = r"^\d+$"
@@ -85,11 +85,11 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 	stmt, status = SQLite.internal_query(conn,q,false)
 	#get resultset metadata: column count, column types, and column names
 	ncols = SQLite.sqlite3_column_count(stmt)
-	colnames = Array(UTF8String,ncols)
+	colnames = Array(Symbol,ncols)
 	resultset = Array(Any,ncols)
 	check = 0
 	for i = 1:ncols
-		colnames[i] = bytestring(SQLite.sqlite3_column_name(stmt,i-1))
+		colnames[i] = symbol(bytestring(SQLite.sqlite3_column_name(stmt,i-1)))
 		t = SQLite.sqlite3_column_type(stmt,i-1)
 		if t == SQLite.SQLITE3_TEXT
 			resultset[i] = DataArray(String,0)
@@ -142,7 +142,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 		end
 	end
 	sqlite3_finalize(stmt)
-	return (conn.resultset = DataFrame(resultset,Index(colnames)))
+	return (conn.resultset = DataFrame(resultset,colnames))
 end
 function createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)
 	conn == null_SQLiteDB && error("[sqlite]: A valid SQLiteDB was not specified (and no valid default SQLiteDB exists)")
@@ -169,7 +169,7 @@ function df2table(df::DataFrame,conn::SQLiteDB,name::String)
     end
     # build column specifications
     ncols = length(df)
-    colnames = copy(df.colindex.names)
+    colnames = map(string, df.colindex.names)
     for col = 1 : ncols
         t = eltype(df[col])
         if t <: FloatingPoint
@@ -354,7 +354,7 @@ function split_quoted(str::String, splitter, limit::Integer, keep_empty::Bool)
         j, k = first(r), last(r)+1
     end
     if keep_empty || !done(str,i)
-        push!(strs, str[i:])
+	push!(strs, str[i:end])
     end
     return strs
 end
