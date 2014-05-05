@@ -17,4 +17,4 @@ script:
     - julia -e 'Pkg.init(); Pkg.clone(pwd());'
     - julia -e 'Pkg.add("DataFrames"); Pkg.add("DataArrays"); Pkg.add("BinDeps")'
     - julia -e 'Pkg.build("SQLite")'
-    - julia test/test.jl
+    - julia test/runtests.jl
