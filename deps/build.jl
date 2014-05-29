@@ -15,7 +15,7 @@ end
 
 @windows_only begin
   using WinRPM
-  provides(WinRPM.RPM,"libsqlite",sqlite3_lib, os = :Windows)
+  provides(WinRPM.RPM,"libsqlite3-0",sqlite3_lib, os = :Windows)
 end
 
 @BinDeps.install [:sqlite3_lib => :sqlite3_lib ]

@@ -89,7 +89,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 	resultset = Array(Any,ncols)
 	check = 0
 	for i = 1:ncols
-		colnames[i] = symbol(bytestring(SQLite.sqlite3_column_name(stmt,i-1)))
+		colnames[i] = DataFrames.identifier(bytestring(SQLite.sqlite3_column_name(stmt,i-1)))
 		t = SQLite.sqlite3_column_type(stmt,i-1)
 		if t == SQLite.SQLITE3_TEXT
 			resultset[i] = DataArray(String,0)
