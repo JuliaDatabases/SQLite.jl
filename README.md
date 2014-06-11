@@ -1,12 +1,11 @@
 SQLite.jl
 =======
 
-A Julia interface to the SQLite library and support for operations on DataFrames
+A Julia interface to the SQLite library and support for operations on DataFrames.
 
 Installation through the Julia package manager:
 ```julia
-julia> Pkg.init()        # Creates julia package repository (only runs once for all packages)
-julia> Pkg.add("SQLite")   # Creates the SQLite repo folder and downloads the SQLite package + dependancy (if needed)
+julia> Pkg.add("SQLite")   # Creates the SQLite repo folder and downloads the SQLite package + dependency (if needed)
 julia> using SQLite        # Loads the SQLite module for use (needs to be run with each new Julia instance)
 ```
 
@@ -20,10 +19,10 @@ Testing status: [![Build Status](https://travis-ci.org/karbarcca/SQLite.jl.png)]
 
   `SQLite.connect` requires the `file` string argument as the name of either a pre-defined SQLite database to be opened, or if the database doesn't exist, one will be created.
 
-  `SQLite.connect` returns a `SQLiteDB` type which contains basic information
+  `SQLite.connect` returns a `SQLiteDB` type, which contains basic information
 about the connection and SQLite handle pointers.
 
-  `SQLite.connect` can be used by storing the `Connection` type in
+  `SQLite.connect` can be used by storing a `Connection` type in
 a variable to be able to close or facilitate handling multiple
 databases like so:
   ```julia
@@ -42,7 +41,7 @@ inspect).
   Once the query is executed, the resultset is stored in a
 `DataFrame` by default.
 
-  For the general user, a simple `query(querystring)` is enough to return a single resultset in a DataFrame. Results are stored in the passed SQLiteDB type's resultset field. (i.e. `sqlitedb.resultset`). Results are stored by default to avoid immediate garbarge collection and provide access for the user even if the resultset returned by query isn't stored in a variable.
+  For the general user, a simple `query(querystring)` is enough to return a single resultset in a DataFrame. Results are stored in the passed SQLiteDB type's resultset field. (i.e. `sqlitedb.resultset`). Results are stored by default to avoid immediate garbage collection and provide access for the user even if the resultset returned by query isn't stored in a variable.
 
 * `createtable(input::TableInput,conn::SQLiteDB=sqlitedb;name::String="",delim::Char='\0',header::Bool=true,types::Array{DataType,1}=DataType[],infer::Bool=true)`
  
@@ -81,7 +80,7 @@ stores the last resultset returned from a `query` call.
   const SQLite.sqlite3_lib = "path/to/library/sqlite3.so" (or .dylib on OSX)
   ```
 
-  That said, if you end up doing this, open an issue on GitHub to let me know if the library is on your platform by default and I can add it is as one of the defaults to check for.
+  That said, if you end up doing this, open an issue on GitHub to let me know if the library is on your platform by default and I can add it as one of the defaults to check for.
 
 ### TODO
 * Additional benchmarking: I've only tested `createtable` so far, as I was initially having performance issues with it, but now we're even with the RSQLite package in R (whose functions are all implemented in C).
