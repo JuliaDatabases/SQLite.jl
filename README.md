@@ -10,7 +10,7 @@ julia> Pkg.add("SQLite")   # Creates the SQLite repo folder and downloads the SQ
 julia> using SQLite        # Loads the SQLite module for use (needs to be run with each new Julia instance)
 ```
 
-Testing status: [![Build Status](https://travis-ci.org/karbarcca/SQLite.jl.png)](https://travis-ci.org/karbarcca/SQLite.jl)
+Testing status: [![Build Status](https://travis-ci.org/quinnj/SQLite.jl.png)](https://travis-ci.org/quinnj/SQLite.jl)
 
 
 ## Package Documentation
