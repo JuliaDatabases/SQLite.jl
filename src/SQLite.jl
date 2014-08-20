@@ -91,7 +91,7 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 	for i = 1:ncols
 		colnames[i] = DataFrames.identifier(bytestring(SQLite.sqlite3_column_name(stmt,i-1)))
 		t = SQLite.sqlite3_column_type(stmt,i-1)
-		if t == SQLite.SQLITE3_TEXT
+		if t == SQLite.SQLITE3_TEXT # Either a blob or text See issue #28
 			resultset[i] = DataArray(String,0)
 			check += 1
 		elseif t == SQLite.SQLITE_FLOAT
@@ -109,7 +109,17 @@ function query(q::String,conn::SQLiteDB=sqlitedb)
 		for i = 1:ncols
 			t = SQLite.sqlite3_column_type(stmt,i-1) 
 			if t == SQLITE3_TEXT
-				r = bytestring( sqlite3_column_text(stmt,i-1) )
+				len = sqlite3_column_bytes(stmt,i-1)
+				if eltype(resultset[i]) == String # Try interpreting as string
+				    r = bytestring( sqlite3_column_text(stmt,i-1) )
+				    if length(r) != len # Convert and try again
+					resultset[i] = convert(Vector{Vector{Uint8}}, resultset[i])
+				    end
+				end
+				if eltype(resultset[i]) == Vector{Uint8}
+				    p = convert(Ptr{Uint8}, sqlite3_column_blob(stmt,i-1))
+				    r = copy(pointer_to_array(p,len))
+				end
 			elseif t == SQLITE_FLOAT
 				r = sqlite3_column_double(stmt,i-1)
 			elseif t == SQLITE_INTEGER
