@@ -1,17 +1,13 @@
 SQLite.jl
-=======
+=========
+
+[![Build Status](https://travis-ci.org/quinnj/SQLite.jl.png)](https://travis-ci.org/quinnj/SQLite.jl)
+[![Coverage Status](https://img.shields.io/coveralls/quinnj/SQLite.jl.svg)](https://coveralls.io/r/quinnj/SQLite.jl)
+[![SQLite](http://pkg.julialang.org/badges/SQLite_release.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=release)
 
 A Julia interface to the SQLite library and support for operations on DataFrames
 
-Installation through the Julia package manager:
-```julia
-julia> Pkg.init()        # Creates julia package repository (only runs once for all packages)
-julia> Pkg.add("SQLite")   # Creates the SQLite repo folder and downloads the SQLite package + dependancy (if needed)
-julia> using SQLite        # Loads the SQLite module for use (needs to be run with each new Julia instance)
-```
-
-Testing status: [![Build Status](https://travis-ci.org/karbarcca/SQLite.jl.png)](https://travis-ci.org/karbarcca/SQLite.jl)
-
+**Installation**: `julia> Pkg.add("SQLite")`
 
 ## Package Documentation
 
