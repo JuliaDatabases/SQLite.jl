@@ -19,3 +19,5 @@ end
 end
 
 @BinDeps.install [:sqlite3_lib => :sqlite3_lib ]
+
+#const sqlite3_lib = joinpath(dirname(@__FILE__),"../lib/sqlite3-64.dll")
