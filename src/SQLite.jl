@@ -1,7 +1,7 @@
 module SQLite
 
-export NULL, SQLiteDB, SQLiteStmt, 
-       execute!, query, tables, drop, create
+export NULL, SQLiteDB, SQLiteStmt,
+       execute, query, tables, drop, create
 
 include("consts.jl")
 include("api.jl")
@@ -21,15 +21,16 @@ type SQLiteDB{T<:String}
 end
 #TODO: Support sqlite3_open_v2
 # Normal constructor from filename
-sqliteopen!(file,handle) = sqlite3_open(file,handle)
-sqliteopen!(file::UTF16String,handle) = sqlite3_open16(file,handle)
+sqliteopen(file,handle) = sqlite3_open(file,handle)
+sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
-function SQLiteDB(file::String)
+function SQLiteDB(file::String;UTF16::Bool=false)
     handle = [C_NULL]
-    if @OK sqliteopen!(file,handle)
-        db = SQLiteDB(file,handle[1])
+    utf = UTF16 ? utf16 : utf8
+    if @OK sqliteopen(utf(file),handle)
+        db = SQLiteDB(utf(file),handle[1])
         finalizer(db,close)
         return db
     else # error
@@ -37,10 +38,7 @@ function SQLiteDB(file::String)
         sqliteerror()
     end
 end
-# For creating new temporary connection; will be deleted when connection is closed
-# if memory == true, then the temporary connection will be held in memory
-SQLiteDB(;memory=false,UTF16=false) = UTF16 ? SQLiteDB(memory ? utf16(":memory:") : utf16("")) :
-                                              SQLiteDB(memory ? ":memory:" : "")
+
 function Base.close{T}(db::SQLiteDB{T})
     # Close all prepared statements with db
     stmt = C_NULL
@@ -58,14 +56,14 @@ type SQLiteStmt{T}
     sql::T
 end
 
-sqliteprepare!(db,sql,stmt,null) = 
+sqliteprepare(db,sql,stmt,null) = 
     @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-sqliteprepare!(db::SQLiteDB{UTF16String},sql,stmt,null) = 
+sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     handle = [C_NULL]
-    sqliteprepare!(db,sql,handle,[C_NULL])
+    sqliteprepare(db,sql,handle,[C_NULL])
     stmt = SQLiteStmt(db,handle[1],convert(T,sql))
     finalizer(stmt, close)
     return stmt
@@ -74,50 +72,50 @@ end
 Base.close(stmt::SQLiteStmt) = @CHECK stmt.db sqlite3_finalize(stmt.handle)
 
 # Binding parameters to SQL statements
-function bind!(stmt::SQLiteStmt,name::String,val)
+function Base.bind(stmt::SQLiteStmt,name::String,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
-    return bind!(stmt,i,val)
+    return bind(stmt,i,val)
 end
-bind!(stmt::SQLiteStmt,i::Int,val::FloatingPoint) = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
-bind!(stmt::SQLiteStmt,i::Int,val::Int32)         = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
-bind!(stmt::SQLiteStmt,i::Int,val::Int64)         = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
-bind!(stmt::SQLiteStmt,i::Int,val::NullType)      = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
-bind!(stmt::SQLiteStmt,i::Int,val::String)        = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
-bind!(stmt::SQLiteStmt,i::Int,val::UTF16String)   = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint) = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)         = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)         = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)      = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
+Base.bind(stmt::SQLiteStmt,i::Int,val::String)        = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)   = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
     serialize(t,x)
     return takebuf_array(t)
 end
-bind!(stmt::SQLiteStmt,i::Int,val) = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,sqlserialize(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val) = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
 # Execute SQL statements
-function execute!(stmt::SQLiteStmt)
+function execute(stmt::SQLiteStmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE || r == SQLITE_ROW
         return r
     elseif r == SQLITE_BUSY
-        throw(SQLiteException("Unable to acquire database lock to execute! $stmt"))
+        throw(SQLiteException("Unable to acquire database lock to execute $stmt"))
     elseif r == SQLITE_ERROR
         sqliteerror(stmt.db)
     elseif r == SQLITE_MISUSE
         sqliteerror(stmt.db)
     end
 end
-execute!(db::SQLiteDB,sql::String) = (execute!(SQLiteStmt(db,sql)); nothing)
+execute(db::SQLiteDB,sql::String) = (execute(SQLiteStmt(db,sql)); nothing)
 
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
 function query(db::SQLiteDB,sql::String)
     stmt = SQLiteStmt(db,sql)
-    status = execute!(stmt)
+    status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
         sqlite3_reset(stmt.handle)
@@ -143,19 +141,19 @@ function query(db::SQLiteDB,sql::String)
                 blob = sqlite3_column_blob(stmt.handle,i-1)
                 b = sqlite3_column_bytes(stmt.handle,i-1)
                 buf = zeros(Uint8,b)
-                unsafe_copy!(pointer(buf), convert(Ptr{Uint8},blob), b)
+                unsafe_copy(pointer(buf), convert(Ptr{Uint8},blob), b)
                 r = sqldeserialize(buf)
             else
                 r = NULL
             end
-            push!(results[i],r)
+            push(results[i],r)
         end
         status = sqlite3_step(stmt.handle)
     end
     if status == SQLITE_DONE
         return colnames, hcat(results...)
     elseif status == SQLITE_BUSY
-        throw(SQLiteException("Unable to acquire database lock to execute! $stmt"))
+        throw(SQLiteException("Unable to acquire database lock to execute $stmt"))
     elseif status == SQLITE_ERROR
         sqliteerror(stmt.db)
     elseif status == SQLITE_MISUSE
@@ -168,8 +166,8 @@ function tables(db::SQLiteDB)
 end
 
 function drop(db::SQLiteDB,table::String)
-    execute!(db,"drop table $table")
-    execute!(db,"vacuum")
+    execute(db,"drop table $table")
+    execute(db,"vacuum")
 end
 
 gettype{T<:Integer}(::Type{T}) = " INT"
@@ -185,11 +183,11 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
     length(colnames) == length(coltypes) || throw(SQLiteException("colnames and coltypes must have same length"))
     cols = [colnames[i] * gettype(coltypes[i]) for i = 1:M]
-    execute!(db,"PRAGMA synchronous = OFF")
-    execute!(db,"BEGIN")
+    execute(db,"PRAGMA synchronous = OFF")
+    execute(db,"BEGIN")
     # create table statement
     t = temp ? "TEMP " : ""
-    execute!(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
+    execute(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
     # insert statements
     params = chop(repeat("?,",M))
     stmt = SQLiteStmt(db,"insert into $name values ($params)")
@@ -197,13 +195,37 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
     for row = 1:N
         for col = 1:M
             v = table[row,col]
-            SQLite.bind!(stmt,col,v)
+            bind(stmt,col,v)
         end
-        execute!(stmt)
+        execute(stmt)
         sqlite3_reset(stmt.handle)
     end
-    execute!(db,"COMMIT")
-    execute!(db,"PRAGMA synchronous = ON")
+    execute(db,"COMMIT")
+    execute(db,"PRAGMA synchronous = ON")
+end
+
+function append(db::SQLiteDB,name::String,table::AbstractMatrix)
+    N, M = size(table)
+    execute(db,"PRAGMA synchronous = OFF")
+    execute(db,"BEGIN")
+    # insert statements
+    params = chop(repeat("?,",M))
+    stmt = SQLiteStmt(db,"insert into $name values ($params)")
+    #bind, step, reset loop for inserting values
+    for row = 1:N
+        for col = 1:M
+            v = table[row,col]
+            bind(stmt,col,v)
+        end
+        execute(stmt)
+        sqlite3_reset(stmt.handle)
+    end
+    execute(db,"COMMIT")
+    execute(db,"PRAGMA synchronous = ON")    
 end
 
 end #SQLite module
+
+#TODO
+ #SQLResult type + custom show
+ #create julia functions (https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function)

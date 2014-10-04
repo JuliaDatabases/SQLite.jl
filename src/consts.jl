@@ -1,4 +1,5 @@
-include("../deps/build.jl")
+using BinDeps
+@BinDeps.load_dependencies
 
 #Macros
 macro OK(func)

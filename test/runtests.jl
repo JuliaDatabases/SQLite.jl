@@ -2,13 +2,11 @@ using Base.Test, SQLite
 
 a = SQLiteDB()
 b = SQLiteDB(UTF16=true)
-c = SQLiteDB(;memory=true,UTF16=true)
-d = SQLiteDB(;memory=true)
+c = SQLiteDB(":memory:",UTF16=true)
 
 close(a)
 close(b)
 close(c)
-close(d)
 
 temp = tempname()
 SQLiteDB(temp)
