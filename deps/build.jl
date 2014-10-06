@@ -14,10 +14,7 @@ end
 end
 
 @windows_only begin
-  using WinRPM
-  provides(WinRPM.RPM,"libsqlite",sqlite3_lib, os = :Windows)
+    provides(Binaries,{URI("https://dl.dropboxusercontent.com/u/19048830/sqlite$WORD_SIZE.zip") => sqlite3_lib})
 end
 
 @BinDeps.install [:sqlite3_lib => :sqlite3_lib ]
-
-#const sqlite3_lib = joinpath(dirname(@__FILE__),"../lib/sqlite3-64.dll")
