@@ -1,5 +1,4 @@
-using BinDeps
-@BinDeps.load_dependencies
+include("../deps/deps.jl")
 
 #Macros
 macro OK(func)
@@ -243,8 +242,8 @@ const SQLITE_SHM_EXCLUSIVE =     8 #
 
 #Constants Defining Special Destructor Behavior
 # typedef void (*sqlite3_destructor_type)(void*);
-const SQLITE_STATIC = convert(Ptr{Void},0)
-const SQLITE_TRANSIENT = convert(Ptr{Void},-1)
+const SQLITE_STATIC = reinterpret(Ptr{Void},0)
+const SQLITE_TRANSIENT = reinterpret(Ptr{Void},-1)
 
 #Maximum xShmLock index
 const SQLITE_SHM_NLOCK =         8 #

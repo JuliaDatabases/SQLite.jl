@@ -101,11 +101,7 @@ function execute(stmt::SQLiteStmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE || r == SQLITE_ROW
         return r
-    elseif r == SQLITE_BUSY
-        throw(SQLiteException("Unable to acquire database lock to execute $stmt"))
-    elseif r == SQLITE_ERROR
-        sqliteerror(stmt.db)
-    elseif r == SQLITE_MISUSE
+    else
         sqliteerror(stmt.db)
     end
 end
@@ -146,7 +142,7 @@ function query(db::SQLiteDB,sql::String)
             else
                 r = NULL
             end
-            push(results[i],r)
+            push!(results[i],r)
         end
         status = sqlite3_step(stmt.handle)
     end
@@ -165,9 +161,63 @@ function tables(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 end
 
+function indices(db::SQLiteDB)
+    query(db,"SELECT name FROM sqlite_master WHERE type='index';")
+end
+
+# Transaction-based commands
+function transaction(db, mode="DEFERRED")
+    #=
+     Begin a transaction in the spedified mode, default "DEFERRED".
+
+     If mode is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
+     transaction of that (or the default) type is started. Otherwise a savepoint
+     is created whose name is mode converted to String.
+    =#
+    if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
+        execute(db, "BEGIN $(mode) TRANSACTION;")
+    else
+        execute(db, "SAVEPOINT $(mode);")
+    end
+end
+
+function transaction(f::Function, db)
+    #=
+     Execute the function f within a transaction.
+    =#
+    # generate a random name for the savepoint
+    name = randstring(20)
+    transaction(db, name)
+    try
+        f()
+    catch
+        rollback(db, name)
+        rethrow()
+    finally
+        # savepoints are not released on rollback
+        commit(db, name)
+    end
+end
+
+# commit a transaction or savepoint (if name is given)
+commit(db) = execute(db, "COMMIT TRANSACTION;")
+commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
+
+# rollback transaction or savepoint (if name is given)
+rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
+rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
+
 function drop(db::SQLiteDB,table::String)
-    execute(db,"drop table $table")
+    transaction(db) do
+        execute(db,"drop table $table")
+    end
     execute(db,"vacuum")
+end
+
+function dropindex(db::SQLiteDB,index::String)
+    transaction(db) do
+        execute(db,"drop index $index")
+    end
 end
 
 gettype{T<:Integer}(::Type{T}) = " INT"
@@ -184,44 +234,57 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
     length(colnames) == length(coltypes) || throw(SQLiteException("colnames and coltypes must have same length"))
     cols = [colnames[i] * gettype(coltypes[i]) for i = 1:M]
     execute(db,"PRAGMA synchronous = OFF")
-    execute(db,"BEGIN")
-    # create table statement
-    t = temp ? "TEMP " : ""
-    execute(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
-    # insert statements
-    params = chop(repeat("?,",M))
-    stmt = SQLiteStmt(db,"insert into $name values ($params)")
-    #bind, step, reset loop for inserting values
-    for row = 1:N
-        for col = 1:M
-            v = table[row,col]
-            bind(stmt,col,v)
+    transaction(db) do
+        # create table statement
+        t = temp ? "TEMP " : ""
+        execute(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
+        # insert statements
+        params = chop(repeat("?,",M))
+        stmt = SQLiteStmt(db,"insert into $name values ($params)")
+        #bind, step, reset loop for inserting values
+        for row = 1:N
+            for col = 1:M
+                v = table[row,col]
+                bind(stmt,col,v)
+            end
+            execute(stmt)
+            sqlite3_reset(stmt.handle)
         end
-        execute(stmt)
-        sqlite3_reset(stmt.handle)
     end
-    execute(db,"COMMIT")
     execute(db,"PRAGMA synchronous = ON")
+end
+
+function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=true)
+    u = unique ? "unique" : ""
+    transaction(db) do
+        execute(db,"create $u index $index on $table ($cols)")
+    end
 end
 
 function append(db::SQLiteDB,name::String,table::AbstractMatrix)
     N, M = size(table)
     execute(db,"PRAGMA synchronous = OFF")
-    execute(db,"BEGIN")
-    # insert statements
-    params = chop(repeat("?,",M))
-    stmt = SQLiteStmt(db,"insert into $name values ($params)")
-    #bind, step, reset loop for inserting values
-    for row = 1:N
-        for col = 1:M
-            v = table[row,col]
-            bind(stmt,col,v)
+    transaction(db) do
+        # insert statements
+        params = chop(repeat("?,",M))
+        stmt = SQLiteStmt(db,"insert into $name values ($params)")
+        #bind, step, reset loop for inserting values
+        for row = 1:N
+            for col = 1:M
+                v = table[row,col]
+                bind(stmt,col,v)
+            end
+            execute(stmt)
+            sqlite3_reset(stmt.handle)
         end
-        execute(stmt)
-        sqlite3_reset(stmt.handle)
     end
-    execute(db,"COMMIT")
     execute(db,"PRAGMA synchronous = ON")    
+end
+
+function deleteduplicates(db,table::String,cols::String)
+    transaction(db) do
+        execute(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
+    end
 end
 
 end #SQLite module
