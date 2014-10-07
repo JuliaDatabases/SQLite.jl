@@ -95,8 +95,12 @@ macro scalarfunc(name, func)
     return quote
         function $(esc(name))(context, nargs, values)
             args = [sqlvalue(values, i) for i in 1:nargs]
-            ret = $(func)(args...)
-            sqlreturn(context, ret)
+            try
+                ret = $(func)(args...)
+                sqlreturn(context, ret)
+            catch err
+                sqlerror(context, err.msg)
+            end
             nothing
         end
     end
