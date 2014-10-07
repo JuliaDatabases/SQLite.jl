@@ -88,25 +88,6 @@ sqlreturn(context, val)               = sqlite3_result_blob(context, sqlserializ
 sqlerror(context, msg::String)      = sqlite3_result_error(context, msg)
 sqlerror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
-# TODO:
- # use sqlserialize with these
- # actually test these
-function sqlaggval(context, value)
-    nbytes = sizeof(value)
-    aggptr = sqlite3_aggregate_context(context, nbytes)
-
-    T = typeof(value)
-    aggptr = convert(Ptr{T}, aggptr)
-
-    unsafe_store!(aggptr, value, 1)
-end
-
-function sqlaggval(context, T::DataType, nbytes=0)
-    aggptr = sqlite3_aggregate_context(context, nbytes)
-    aggptr = convert(Ptr{T}, aggptr)
-    return unsafe_load(aggptr, 1)
-end
-
 
 function regexp(context, nargs, values)
     rgx = Regex(sqlvalue(values, 1))
