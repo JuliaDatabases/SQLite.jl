@@ -81,13 +81,7 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     handle = [C_NULL]
     sqliteprepare(db,sql,handle,[C_NULL])
     stmt = SQLiteStmt(db,handle[1],convert(T,sql))
-    finalizer(stmt, close)
     return stmt
-end
-
-function Base.close(stmt::SQLiteStmt)
-    sqlite3_reset(stmt.handle)
-    @CHECK stmt.db sqlite3_finalize(stmt.handle)
 end
 
 # Binding parameters to SQL statements
@@ -170,7 +164,7 @@ function query(db::SQLiteDB,sql::String)
         end
         status = sqlite3_step(stmt.handle)
     end
-    sqlite3_reset(stmt.handle)
+    sqlite3_finalize(stmt.handle)
     if status == SQLITE_DONE
         return ResultSet(colnames, hcat(results...))
     else
