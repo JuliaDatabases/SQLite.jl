@@ -97,7 +97,7 @@ const SQLITE_UTF8 =            1 #
 const SQLITE_UTF16LE =         2 #
 const SQLITE_UTF16BE =         3 #
 const SQLITE_UTF16 =           4 #    /* Use native byte order */
-const SQLITE_ANY =             5 #    /* sqlite3_create_function only */
+const SQLITE_ANY =             5 #    /* DEPRECATED */
 const SQLITE_UTF16_ALIGNED =   8 #    /* sqlite3_create_collation only */
 
 #Fundamental Data Types
@@ -244,6 +244,9 @@ const SQLITE_SHM_EXCLUSIVE =     8 #
 # typedef void (*sqlite3_destructor_type)(void*);
 const SQLITE_STATIC = reinterpret(Ptr{Void},0)
 const SQLITE_TRANSIENT = reinterpret(Ptr{Void},-1)
+
+#Function Flags
+const SQLITE_DETERMINISTIC = 0x800
 
 #Maximum xShmLock index
 const SQLITE_SHM_NLOCK =         8 #

@@ -28,6 +28,13 @@ type SQLiteDB{T<:String}
 end
 SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 
+
+# functions in UDF.jl require SQLiteDB so must be placed below it
+include("UDF.jl")
+# TODO: rename sqlerror so it doesn't get confused with sqliteerror
+export registerfunc, sqlvalue, sqlreturn, sqlerror
+
+
 function changes(db::SQLiteDB)
     new_tot = sqlite3_total_changes(db.handle)
     diff = new_tot - db.changes
