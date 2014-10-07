@@ -2,6 +2,7 @@ function registerfunc(db, name, nargs, func, step, final, isdeterm)
     #= 
      Create a function in the database connection db.
     =#
+    # TODO: use sqliteerror
     if func != C_NULL
         if !(step == final == C_NULL)
             msg = "step and final can not be defined for scalar functions"
@@ -85,19 +86,26 @@ sqlreturn(context, val::String)       = sqlite3_result_text(context, val)
 sqlreturn(context, val::UTF16String)  = sqlite3_result_text16(context, val)
 sqlreturn(context, val)               = sqlite3_result_blob(context, sqlserialize(val))
 
+sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
+
 sqlerror(context, msg::String)      = sqlite3_result_error(context, msg)
 sqlerror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
-
-function regexp(context, nargs, values)
-    rgx = Regex(sqlvalue(values, 1))
-    str = sqlvalue(values, 2)
-
-    if ismatch(rgx, str)
-        sqlreturn(context, 1)
-    else
-        sqlreturn(context, 0)
+macro scalarfunc(name, func)
+    return quote
+        function $(esc(name))(context, nargs, values)
+            args = [sqlvalue(values, i) for i in 1:nargs]
+            ret = $(func)(args...)
+            sqlreturn(context, ret)
+            nothing
+        end
     end
+end
 
-    nothing
+
+# If ismatch() had a method ismatch(::String, ::String) this could simply be
+# @scalarfunc regexp ismatch
+@scalarfunc regexp function regexp(r, s)
+    r = Regex(r)
+    ismatch(r, s)
 end

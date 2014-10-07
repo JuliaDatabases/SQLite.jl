@@ -176,6 +176,8 @@ function query(db::SQLiteDB,sql::String)
         end
         status = sqlite3_step(stmt.handle)
     end
+    # TODO: leaving this unfinalised means that you can't modify user functions
+    # once a query has been run
     sqlite3_reset(stmt.handle)
     if status == SQLITE_DONE
         return ResultSet(colnames, hcat(results...))
