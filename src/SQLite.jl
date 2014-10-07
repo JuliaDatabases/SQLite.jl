@@ -28,8 +28,6 @@ type SQLiteDB{T<:String}
 end
 SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 
-
-# functions in UDF.jl require SQLiteDB so must be placed below it
 include("UDF.jl")
 # TODO: rename sqlerror so it doesn't get confused with sqliteerror
 export registerfunc, sqlvalue, sqlreturn, sqlerror
@@ -54,6 +52,7 @@ function SQLiteDB(file::String;UTF16::Bool=false)
     utf = UTF16 ? utf16 : utf8
     if @OK sqliteopen(utf(file),handle)
         db = SQLiteDB(utf(file),handle[1])
+        registerfunc(db, 2, regexp)
         finalizer(db,close)
         return db
     else # error
