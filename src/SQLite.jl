@@ -29,8 +29,7 @@ end
 SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 
 include("UDF.jl")
-# TODO: rename sqlerror so it doesn't get confused with sqliteerror
-export registerfunc, sqlvalue, sqlreturn, sqlerror
+export registerfunc, @scalarfunc
 
 
 function changes(db::SQLiteDB)

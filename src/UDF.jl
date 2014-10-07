@@ -88,8 +88,8 @@ sqlreturn(context, val)               = sqlite3_result_blob(context, sqlserializ
 
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 
-sqlerror(context, msg::String)      = sqlite3_result_error(context, msg)
-sqlerror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
+sqludferror(context, msg::String)      = sqlite3_result_error(context, msg)
+sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
 macro scalarfunc(name, func)
     return quote
@@ -99,7 +99,7 @@ macro scalarfunc(name, func)
                 ret = $(func)(args...)
                 sqlreturn(context, ret)
             catch err
-                sqlerror(context, err.msg)
+                sqludferror(context, err.msg)
             end
             nothing
         end
