@@ -15,10 +15,26 @@ immutable NullType end
 const NULL = NullType()
 Base.show(io::IO,::NullType) = print(io,"NULL")
 
+type ResultSet
+    colnames
+    values::Array{Any,2}
+end
+include("show.jl")
+
 type SQLiteDB{T<:String}
     file::T
     handle::Ptr{Void}
+    changes::Int
 end
+SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
+
+function changes(db::SQLiteDB)
+    new_tot = sqlite3_total_changes(db.handle)
+    diff = new_tot - db.changes
+    db.changes = new_tot
+    return ResultSet(["Rows Updated"],Any[diff]')
+end
+
 #TODO: Support sqlite3_open_v2
 # Normal constructor from filename
 sqliteopen(file,handle) = sqlite3_open(file,handle)
@@ -69,7 +85,10 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     return stmt
 end
 
-Base.close(stmt::SQLiteStmt) = @CHECK stmt.db sqlite3_finalize(stmt.handle)
+function Base.close(stmt::SQLiteStmt)
+    sqlite3_reset(stmt.handle)
+    @CHECK stmt.db sqlite3_finalize(stmt.handle)
+end
 
 # Binding parameters to SQL statements
 function Base.bind(stmt::SQLiteStmt,name::String,val)
@@ -105,7 +124,12 @@ function execute(stmt::SQLiteStmt)
         sqliteerror(stmt.db)
     end
 end
-execute(db::SQLiteDB,sql::String) = (execute(SQLiteStmt(db,sql)); nothing)
+function execute(db::SQLiteDB,sql::String)
+    stmt = SQLiteStmt(db,sql)
+    execute(stmt)
+    sqlite3_reset(stmt.handle)
+    return changes(db)
+end
 
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
@@ -115,7 +139,7 @@ function query(db::SQLiteDB,sql::String)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
         sqlite3_reset(stmt.handle)
-        return String[], Any[]
+        return changes(db)
     end
     colnames = Array(String,ncols)
     results = Array(Any,ncols)
@@ -146,13 +170,10 @@ function query(db::SQLiteDB,sql::String)
         end
         status = sqlite3_step(stmt.handle)
     end
+    sqlite3_reset(stmt.handle)
     if status == SQLITE_DONE
-        return colnames, hcat(results...)
-    elseif status == SQLITE_BUSY
-        throw(SQLiteException("Unable to acquire database lock to execute $stmt"))
-    elseif status == SQLITE_ERROR
-        sqliteerror(stmt.db)
-    elseif status == SQLITE_MISUSE
+        return ResultSet(colnames, hcat(results...))
+    else
         sqliteerror(stmt.db)
     end
 end
@@ -186,7 +207,8 @@ function transaction(f::Function, db)
      Execute the function f within a transaction.
     =#
     # generate a random name for the savepoint
-    name = randstring(20)
+    name = string("SQLITE",randstring(10))
+    execute(db,"PRAGMA synchronous = OFF")
     transaction(db, name)
     try
         f()
@@ -196,6 +218,7 @@ function transaction(f::Function, db)
     finally
         # savepoints are not released on rollback
         commit(db, name)
+        execute(db,"PRAGMA synchronous = ON")
     end
 end
 
@@ -212,12 +235,14 @@ function drop(db::SQLiteDB,table::String)
         execute(db,"drop table $table")
     end
     execute(db,"vacuum")
+    return changes(db)
 end
 
 function dropindex(db::SQLiteDB,index::String)
     transaction(db) do
         execute(db,"drop index $index")
     end
+    return changes(db)
 end
 
 gettype{T<:Integer}(::Type{T}) = " INT"
@@ -233,7 +258,6 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
     length(colnames) == length(coltypes) || throw(SQLiteException("colnames and coltypes must have same length"))
     cols = [colnames[i] * gettype(coltypes[i]) for i = 1:M]
-    execute(db,"PRAGMA synchronous = OFF")
     transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
@@ -251,7 +275,8 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
             sqlite3_reset(stmt.handle)
         end
     end
-    execute(db,"PRAGMA synchronous = ON")
+    execute(db,"analyze $name")
+    return changes(db)
 end
 
 function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=true)
@@ -259,11 +284,12 @@ function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=
     transaction(db) do
         execute(db,"create $u index $index on $table ($cols)")
     end
+    execute(db,"analyze $index")
+    return changes(db)
 end
 
 function append(db::SQLiteDB,name::String,table::AbstractMatrix)
     N, M = size(table)
-    execute(db,"PRAGMA synchronous = OFF")
     transaction(db) do
         # insert statements
         params = chop(repeat("?,",M))
@@ -278,17 +304,19 @@ function append(db::SQLiteDB,name::String,table::AbstractMatrix)
             sqlite3_reset(stmt.handle)
         end
     end
-    execute(db,"PRAGMA synchronous = ON")    
+    execute(db,"analyze $name")
+    return return changes(db)
 end
 
 function deleteduplicates(db,table::String,cols::String)
     transaction(db) do
         execute(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
     end
+    execute(db,"analyze $table")
+    return changes(db)
 end
 
 end #SQLite module
 
 #TODO
- #SQLResult type + custom show
  #create julia functions (https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function)

@@ -179,6 +179,17 @@ function sqlite3_column_name16(stmt::Ptr{Void},n::Int)
         Ptr{Uint8}, (Ptr{Void},Cint),
         stmt,n)
 end
+
+function sqlite3_changes(db::Ptr{Void})
+   return ccall( (:sqlite3_changes, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        db)
+end
+function sqlite3_total_changes(db::Ptr{Void})
+   return ccall( (:sqlite3_changes, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        db)
+end
 # SQLITE_API const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 
 # SQLITE_API const char *sqlite3_column_database_name(sqlite3_stmt*,int);
