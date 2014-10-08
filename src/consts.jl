@@ -14,6 +14,15 @@ macro CHECK(db,ex)
     end
 end
 
+const SQLNullPtrError = SQLiteException("Cannot operate on null pointer")
+macro NULLCHECK(ptr)
+    quote
+        if $ptr == C_NULL
+            throw(SQLNullPtrError)
+        end
+    end
+end
+
 #Return codes
 const SQLITE_OK =           0   # /* Successful result */
 const SQLITE_ERROR =        1   # /* SQL error or missing database */
@@ -108,7 +117,6 @@ const SQLITE_BLOB    = 4
 const SQLITE_NULL    = 5
 
 const SQLITE3_TEXT   = 3
-const SQL2Julia = [SQLITE_INTEGER=>Int,SQLITE_FLOAT=>Float64,SQLITE3_TEXT=>String,SQLITE_BLOB=>Uint8,SQLITE_NULL=>String]
 
 #Checkpoint operation parameters
 const SQLITE_CHECKPOINT_PASSIVE =  0 #
