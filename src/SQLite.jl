@@ -1,7 +1,7 @@
 module SQLite
 
-export NULL, SQLiteDB, SQLiteStmt,
-       execute, query, tables, drop, create
+export NULL, SQLiteDB, SQLiteStmt, ResultSet,
+       execute, query, tables, drop, create, append
 
 type SQLiteException <: Exception
     msg::String
@@ -20,6 +20,7 @@ type ResultSet
     colnames
     values::Vector{Any}
 end
+==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
 
 type SQLiteDB{T<:String}
@@ -43,7 +44,7 @@ sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
-function SQLiteDB(file::String;UTF16::Bool=false)
+function SQLiteDB(file::String="";UTF16::Bool=false)
     handle = [C_NULL]
     utf = UTF16 ? utf16 : utf8
     if @OK sqliteopen(utf(file),handle)
@@ -166,7 +167,7 @@ function query(db::SQLiteDB,sql::String)
                 blob = sqlite3_column_blob(stmt.handle,i-1)
                 b = sqlite3_column_bytes(stmt.handle,i-1)
                 buf = zeros(Uint8,b)
-                unsafe_copy(pointer(buf), convert(Ptr{Uint8},blob), b)
+                unsafe_copy!(pointer(buf), convert(Ptr{Uint8},blob), b)
                 r = sqldeserialize(buf)
             else
                 r = NULL
@@ -255,7 +256,7 @@ gettype{T<:String}(::Type{T}) = " TEXT"
 gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
-function create(db::SQLiteDB,name::String,table::AbstractMatrix,
+function create(db::SQLiteDB,name::String,table,
             colnames=String[],coltypes=DataType[];temp::Bool=false)
     N, M = size(table)
     colnames = isempty(colnames) ? ["x$i" for i=1:M] : colnames
@@ -272,7 +273,7 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
         #bind, step, reset loop for inserting values
         for row = 1:N
             for col = 1:M
-                v = table[row,col]
+                @inbounds v = table[row,col]
                 bind(stmt,col,v)
             end
             execute(stmt)
@@ -291,7 +292,7 @@ function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=
     return changes(db)
 end
 
-function append(db::SQLiteDB,name::String,table::AbstractMatrix)
+function append(db::SQLiteDB,name::String,table)
     N, M = size(table)
     transaction(db) do
         # insert statements
@@ -300,7 +301,7 @@ function append(db::SQLiteDB,name::String,table::AbstractMatrix)
         #bind, step, reset loop for inserting values
         for row = 1:N
             for col = 1:M
-                v = table[row,col]
+                @inbounds v = table[row,col]
                 bind(stmt,col,v)
             end
             execute(stmt)
