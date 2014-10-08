@@ -99,7 +99,7 @@ macro scalarfunc(name, func)
                 ret = $(func)(args...)
                 sqlreturn(context, ret)
             catch err
-                sqludferror(context, err.msg)
+                sqludferror(context, string(err))
             end
             nothing
         end
