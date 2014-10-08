@@ -33,7 +33,7 @@ function changes(db::SQLiteDB)
     new_tot = sqlite3_total_changes(db.handle)
     diff = new_tot - db.changes
     db.changes = new_tot
-    return ResultSet(["Rows Updated"],Any[Any[diff]])
+    return ResultSet(["Rows Affected"],Any[Any[diff]])
 end
 
 #TODO: Support sqlite3_open_v2
