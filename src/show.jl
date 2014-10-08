@@ -93,8 +93,19 @@ ourshowcompact(io::IO, x::Symbol) = print(io, x) # -> Nothing
 #'
 #' df = DataFrame(A = 1:3, B = ["x", "yy", "z"])
 #' maxwidths = getmaxwidths(df, 1:1, 3:3, :Row)
-Base.size(r::ResultSet) = size(r.values)
-Base.size(r::ResultSet, i) = size(r.values, i)
+ncol(df::ResultSet) = length(df.colnames)
+nrow(df::ResultSet) = ncol(df) > 0 ? length(df.values[1])::Int : 0
+
+Base.size(df::ResultSet) = (nrow(df), ncol(df))
+function Base.size(df::ResultSet, i::Integer)
+    if i == 1
+        nrow(df)
+    elseif i == 2
+        ncol(df)
+    else
+        throw(ArgumentError("ResultSets have only two dimensions"))
+    end
+end
 
 function getmaxwidths(adf::ResultSet,
                       rowindices1::AbstractVector{Int},
@@ -244,8 +255,8 @@ end
 #'
 #' df = DataFrame(A = 1:3, B = ["x", "y", "z"])
 #' showrowindices(STDOUT, df, 1:2, [1, 1, 5], 1, 2)
-Base.getindex(r::ResultSet, i, j) = getindex(r.values, i, j)
-Base.getindex(r::ResultSet, i) = r.values[:,i]
+Base.getindex(r::ResultSet, i, j) = r.values[j][i]
+Base.getindex(r::ResultSet, i) = r.values[i]
 
 function showrowindices(io::IO,
                         adf::ResultSet,

@@ -3,12 +3,13 @@ module SQLite
 export NULL, SQLiteDB, SQLiteStmt,
        execute, query, tables, drop, create
 
-include("consts.jl")
-include("api.jl")
-
 type SQLiteException <: Exception
     msg::String
 end
+
+include("consts.jl")
+include("api.jl")
+
 
 # Custom NULL type
 immutable NullType end
@@ -17,7 +18,7 @@ Base.show(io::IO,::NullType) = print(io,"NULL")
 
 type ResultSet
     colnames
-    values::Array{Any,2}
+    values::Vector{Any}
 end
 include("show.jl")
 
@@ -56,6 +57,7 @@ function SQLiteDB(file::String;UTF16::Bool=false)
 end
 
 function Base.close{T}(db::SQLiteDB{T})
+    db.handle == C_NULL && return
     # Close all prepared statements with db
     stmt = C_NULL
     while true
@@ -64,6 +66,8 @@ function Base.close{T}(db::SQLiteDB{T})
         @CHECK db sqlite3_finalize(stmt)
     end
     @CHECK db sqlite3_close(db.handle)
+    db.handle = C_NULL
+    return
 end
 
 type SQLiteStmt{T}
@@ -86,8 +90,10 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
 end
 
 function Base.close(stmt::SQLiteStmt)
-    sqlite3_reset(stmt.handle)
+    stmt.handle == C_NULL && return
     @CHECK stmt.db sqlite3_finalize(stmt.handle)
+    stmt.handle = C_NULL
+    return
 end
 
 # Binding parameters to SQL statements
@@ -118,16 +124,16 @@ Base.bind(stmt::SQLiteStmt,i::Int,val) = @CHECK stmt.db sqlite3_bind_blob(stmt.h
 # Execute SQL statements
 function execute(stmt::SQLiteStmt)
     r = sqlite3_step(stmt.handle)
-    if r == SQLITE_DONE || r == SQLITE_ROW
-        return r
-    else
+    if r == SQLITE_DONE
+        sqlite3_reset(stmt.handle)
+    elseif r != SQLITE_ROW
         sqliteerror(stmt.db)
     end
+    return r
 end
 function execute(db::SQLiteDB,sql::String)
     stmt = SQLiteStmt(db,sql)
     execute(stmt)
-    sqlite3_reset(stmt.handle)
     return changes(db)
 end
 
@@ -138,7 +144,6 @@ function query(db::SQLiteDB,sql::String)
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
-        sqlite3_reset(stmt.handle)
         return changes(db)
     end
     colnames = Array(String,ncols)
@@ -170,9 +175,8 @@ function query(db::SQLiteDB,sql::String)
         end
         status = sqlite3_step(stmt.handle)
     end
-    sqlite3_reset(stmt.handle)
     if status == SQLITE_DONE
-        return ResultSet(colnames, hcat(results...))
+        return ResultSet(colnames, results)
     else
         sqliteerror(stmt.db)
     end
@@ -272,7 +276,6 @@ function create(db::SQLiteDB,name::String,table::AbstractMatrix,
                 bind(stmt,col,v)
             end
             execute(stmt)
-            sqlite3_reset(stmt.handle)
         end
     end
     execute(db,"analyze $name")
@@ -301,7 +304,6 @@ function append(db::SQLiteDB,name::String,table::AbstractMatrix)
                 bind(stmt,col,v)
             end
             execute(stmt)
-            sqlite3_reset(stmt.handle)
         end
     end
     execute(db,"analyze $name")
