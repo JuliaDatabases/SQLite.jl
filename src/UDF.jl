@@ -117,7 +117,7 @@ end
 # If ismatch() had a method ismatch(::String, ::String) this could simply be
 # @scalarfunc regexp ismatch
 # TODO: think of a nice way to escape the regex
-@scalarfunc regexp function regexp(r, s)
+@scalarfunc function regexp(r, s)
     r = Regex(r)
     ismatch(r, s)
 end
