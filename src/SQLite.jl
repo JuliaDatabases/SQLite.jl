@@ -60,13 +60,6 @@ end
 
 function Base.close{T}(db::SQLiteDB{T})
     db.handle == C_NULL && return
-    # Close all prepared statements with db
-    stmt = C_NULL
-    while true
-        stmt = sqlite3_next_stmt(db.handle,stmt)
-        stmt == C_NULL && break
-        @CHECK db sqlite3_finalize(stmt)
-    end
     @CHECK db sqlite3_close(db.handle)
     db.handle = C_NULL
     return
@@ -87,7 +80,6 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     handle = [C_NULL]
     sqliteprepare(db,sql,handle,[C_NULL])
     stmt = SQLiteStmt(db,handle[1],convert(T,sql))
-    finalizer(stmt, close)
     return stmt
 end
 
@@ -136,6 +128,7 @@ end
 function execute(db::SQLiteDB,sql::String)
     stmt = SQLiteStmt(db,sql)
     execute(stmt)
+    close(stmt)
     return changes(db)
 end
 
@@ -146,6 +139,7 @@ function query(db::SQLiteDB,sql::String)
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
+        close(stmt)
         return changes(db)
     end
     colnames = Array(String,ncols)
@@ -177,6 +171,7 @@ function query(db::SQLiteDB,sql::String)
         end
         status = sqlite3_step(stmt.handle)
     end
+    close(stmt)
     if status == SQLITE_DONE
         return ResultSet(colnames, results)
     else
@@ -279,6 +274,7 @@ function create(db::SQLiteDB,name::String,table,
             end
             execute(stmt)
         end
+        close(stmt)
     end
     execute(db,"analyze $name")
     return changes(db)
@@ -307,6 +303,7 @@ function append(db::SQLiteDB,name::String,table)
             end
             execute(stmt)
         end
+        close(stmt)
     end
     execute(db,"analyze $name")
     return return changes(db)
