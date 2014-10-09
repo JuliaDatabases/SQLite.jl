@@ -59,6 +59,7 @@ if VERSION > v"0.4.0-"
     @test size(r) == (10,5)
     @test typeof(r[1,5]) == Date
     @test all(r[:,5] .== Date(2014,1,1))
+    close(stmt)
 end
 @test query(db,"drop table temp") == EMPTY_RESULTSET
 
