@@ -47,7 +47,7 @@ sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 function SQLiteDB(file::String="";UTF16::Bool=false)
     handle = [C_NULL]
     utf = UTF16 ? utf16 : utf8
-    file = expanduser(file)
+    file = isempty(file) ? file : expanduser(file)
     if @OK sqliteopen(utf(file),handle)
         db = SQLiteDB(utf(file),handle[1])
         finalizer(db,close)
