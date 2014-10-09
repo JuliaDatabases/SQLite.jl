@@ -2,7 +2,6 @@ function registerfunc(db, name, nargs, func, step, final, isdeterm)
     #= 
      Create a function in the database connection db.
     =#
-    # TODO: use sqliteerror
     if func != C_NULL
         if !(step == final == C_NULL)
             msg = "step and final can not be defined for scalar functions"
@@ -117,6 +116,7 @@ end
 
 # If ismatch() had a method ismatch(::String, ::String) this could simply be
 # @scalarfunc regexp ismatch
+# TODO: think of a nice way to escape the regex
 @scalarfunc regexp function regexp(r, s)
     r = Regex(r)
     ismatch(r, s)
