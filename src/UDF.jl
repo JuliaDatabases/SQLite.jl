@@ -90,24 +90,24 @@ sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 sqludferror(context, msg::String)      = sqlite3_result_error(context, msg)
 sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
-macro scalarfunc(args...)
-    if length(args) == 2
-        func = args[2]
-        name = args[1]
+function funcname(expr)
+    if length(expr) == 2
+        func = expr[2]
+        name = expr[1]
     else
-        func = args[1]
+        func = expr[1]
         name = func.args[1].args[1]
     end
+    name, func
+end
+
+macro scalarfunc(args...)
+    name, func = funcname(args)
     return quote
-        function $(esc(name))(context, nargs, values)
+        function $(esc(name))(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
             args = [sqlvalue(values, i) for i in 1:nargs]
-            # TODO: would it be better to let the exceptions propagate?
-            try
-                ret = $(func)(args...)
-                sqlreturn(context, ret)
-            catch err
-                sqludferror(context, string(err))
-            end
+            ret = $(func)(args...)
+            sqlreturn(context, ret)
             nothing
         end
     end
