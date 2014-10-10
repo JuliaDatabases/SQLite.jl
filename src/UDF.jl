@@ -116,8 +116,9 @@ end
 
 # If ismatch() had a method ismatch(::String, ::String) this could simply be
 # @scalarfunc regexp ismatch
-# TODO: think of a nice way to escape the regex
 @scalarfunc function regexp(r, s)
     r = Regex(r)
     ismatch(r, s)
 end
+# macro for preserving the backslashes in a string
+macro sr_str(s) s end
