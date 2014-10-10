@@ -104,7 +104,7 @@ if VERSION > v"0.4.0-"
     @test drop(db,"temp") == EMPTY_RESULTSET
 end
 
-r = query(db, "SELECT  LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'")
+r = query(db, sr"SELECT  LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
 @test size(tables(db)) == (11,1)
