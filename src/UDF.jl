@@ -114,11 +114,7 @@ macro scalarfunc(args...)
 end
 
 
-# If ismatch() had a method ismatch(::String, ::String) this could simply be
-# @scalarfunc regexp ismatch
-@scalarfunc function regexp(r, s)
-    r = Regex(r)
-    ismatch(r, s)
-end
-# macro for preserving the backslashes in a string
+# annotate types because the MethodError makes more sense that way
+@scalarfunc regexp(r::String, s::String) = ismatch(Regex(r), s)
+# macro for preserving the special characters in a string
 macro sr_str(s) s end
