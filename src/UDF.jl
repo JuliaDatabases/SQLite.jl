@@ -18,6 +18,8 @@ function registerfunc(db, name, nargs, func, step, final, isdeterm)
         end
     end
 
+    @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
+
     cfunc = func == C_NULL ? C_NULL : cfunction(
         func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}})
     )

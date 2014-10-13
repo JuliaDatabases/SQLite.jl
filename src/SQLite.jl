@@ -31,7 +31,7 @@ end
 SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 
 include("UDF.jl")
-export registerfunc, @scalarfunc, @sr_str
+export registerfunc, sqlreturn, @scalarfunc, @sr_str
 
 
 function changes(db::SQLiteDB)
