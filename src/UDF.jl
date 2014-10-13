@@ -1,56 +1,34 @@
-function registerfunc(db, name, nargs, func, step, final, isdeterm)
-    #= 
-     Create a function in the database connection db.
-    =#
-    if func != C_NULL
-        if !(step == final == C_NULL)
-            msg = "step and final can not be defined for scalar functions"
-            throw(SQLiteException(msg))
-        end
-    else
-        if step == C_NULL || final == C_NULL
-            msg = "both step and final must be defined for aggregate functions"
-            throw(SQLiteException(msg))
-        end
-        if func != C_NULL
-            msg = "func must not be defined for aggregate functions"
-            throw(SQLiteException(msg))
-        end
-    end
-
+# scalar functions
+function registerfunc(db::SQLiteDB, nargs::Integer, func::Function, isdeterm::Bool=true; name="")
     @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
 
-    cfunc = func == C_NULL ? C_NULL : cfunction(
-        func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}})
-    )
-    cstep = step == C_NULL ? C_NULL : cfunction(
-        step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}})
-    )
-    cfinal = final == C_NULL ? C_NULL : cfunction(
-        step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}})
-    )
+    name = isempty(name) ? string(func) : name::String
+    cfunc = cfunction(func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
 
     # TODO: allow the other encodings
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
 
     @CHECK db sqlite3_create_function_v2(
-        db.handle, name, nargs, enc, C_NULL, cfunc, cstep, cfinal, C_NULL
+        db.handle, name, nargs, enc, C_NULL, cfunc, C_NULL, C_NULL, C_NULL
     )
 end
 
-# scalar functions
-function registerfunc(db::SQLiteDB, nargs::Integer, func::Function,
-                      isdeterm::Bool=true; name="")
-    name = isempty(name) ? string(func) : name::String
-    registerfunc(db, name, nargs, func, C_NULL, C_NULL, isdeterm)
-end
-
 # aggregate functions
-function registerfunc(db::SQLiteDB, nargs::Integer, step::Function,
-                      final::Function, isdeterm::Bool=true; name="")
+function registerfunc(db::SQLiteDB, nargs::Integer, step::Function, final::Function, isdeterm::Bool=true; name="")
+    @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
+
     name = isempty(name) ? string(step) : name::String
-    registerfunc(db, name, nargs, C_NULL, step, final, isdeterm)
+    cstep = cfunction(step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cfinal = cfunction(final, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+
+    # TODO: allow the other encodings
+    enc = SQLITE_UTF8
+    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
+
+    @CHECK db sqlite3_create_function_v2(
+        db.handle, name, nargs, enc, C_NULL, C_NULL, cstep, cfinal, C_NULL
+    )
 end
 
 function sqlvalue(values, i)
