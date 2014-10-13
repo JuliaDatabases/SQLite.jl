@@ -74,6 +74,23 @@ A Julia interface to the SQLite library and support for operations on DataFrames
 
   `drop` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
 
+* `registerfunc(db::SQLiteDB, nargs::Int, func::Function, isdeterm::Bool=true; name="")`
+
+  Register a function `func` (which takes `nargs` number of arguments) with the SQLite database connection `db`. If the keyword argument `name` is given the function is registered with that name, otherwise it is registered with the name of `func`. If the function is stochastic (e.g. uses a random number) `isdeterm` should be set to `false`, see SQLite's [function creation documentation](http://sqlite.org/c3ref/create_function.html) for more information.
+
+* `@scalarfunc function`
+  `@scalarfunc name function`
+
+  Define a function which can then be passed to `registerfunc`. In the first usage the function name is infered from the function definition, in the second it is explicitly given as the first parameter. The second form is only recommended when it's use is absolutely necessary, see below.
+
+* `sr"..."`
+
+  This string literal is used to escape all special characters in the string, useful for using regex in a query.
+
+* `sqlreturn(contex, val)`
+
+  This function should never be called explicitly. Instead it is exported so that it can be overloaded when necessary, see below.
+
 #### User Defined Functions
 
 ##### SQLite Regular Expressions
