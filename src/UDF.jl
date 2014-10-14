@@ -1,5 +1,6 @@
 # scalar functions
 function registerfunc(db::SQLiteDB, nargs::Integer, func::Function, isdeterm::Bool=true; name="")
+    @assert sizeof(name) <= 255 "size of function name must be <= 255"
     @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
 
     name = isempty(name) ? string(func) : name::String
