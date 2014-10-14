@@ -296,8 +296,8 @@ function sqlite3_create_function_v2(db::Ptr{Void},name::String,nargs::Integer,
                                     enc::Integer,data::Ptr{Void},func::Ptr{Void},
                                     step::Ptr{Void},final::Ptr{Void},
                                     destructor::Ptr{Void})
+    @NULLCHECK db
     return ccall(
-        @NULLCHECK db
         (:sqlite3_create_function_v2, sqlite3_lib),
         Cint,
         (Ptr{Void}, Ptr{Uint8}, Cint, Cint, Ptr{Void},
