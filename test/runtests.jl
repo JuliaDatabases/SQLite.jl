@@ -114,6 +114,17 @@ r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
 drop(db, "temp")
 
+query(db,"CREATE TABLE temp AS SELECT * FROM Album")
+r = query(db, "SELECT * FROM temp LIMIT :a", Dict("a" => 3))
+@test size(r) == (3,3)
+r = query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+@test r.values[1] == [76, 111, 187]
+query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
+@test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
+drop(db, "temp")
+
+
 @test size(tables(db)) == (11,1)
 
 close(db)

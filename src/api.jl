@@ -49,12 +49,20 @@ function sqlite3_finalize(stmt::Ptr{Void})
         Cint, (Ptr{Void},),
         stmt)
 end
+
 # SQLITE_API int sqlite3_bind_paramter_count(sqlite3_stmt*)
 function sqlite3_bind_parameter_count(stmt::Ptr{Void})
     @NULLCHECK stmt
     return ccall( (:sqlite3_bind_parameter_count, sqlite3_lib),
         Cint, (Ptr{Void},),
         stmt)
+end
+#SQLITE_API const char* sqlite3_bind_parameter_name(sqlite3_stmt*, int)
+function sqlite3_bind_parameter_name(stmt::Ptr{Void}, col::Int)
+    @NULLCHECK stmt
+    return ccall( (:sqlite3_bind_parameter_name, sqlite3_lib),
+        Ptr{Uint8}, (Ptr{Void}, Cint),
+        stmt, col)
 end
 # SQLITE_API int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *zName);
 function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::String)
@@ -115,8 +123,6 @@ end
 # SQLITE_API int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
 # SQLITE_API int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
-# SQLITE_API int sqlite3_bind_parameter_count(sqlite3_stmt*);
-# SQLITE_API const char *sqlite3_bind_parameter_name(sqlite3_stmt*, int);
 # SQLITE_API int sqlite3_clear_bindings(sqlite3_stmt*);
 
 function sqlite3_step(stmt::Ptr{Void})
