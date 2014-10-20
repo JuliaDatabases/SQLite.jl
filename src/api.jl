@@ -49,6 +49,13 @@ function sqlite3_finalize(stmt::Ptr{Void})
         Cint, (Ptr{Void},),
         stmt)
 end
+# SQLITE_API int sqlite3_bind_paramter_count(sqlite3_stmt*)
+function sqlite3_bind_parameter_count(stmt::Ptr{Void})
+    @NULLCHECK stmt
+    return ccall( (:sqlite3_bind_parameter_count, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        stmt)
+end
 # SQLITE_API int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *zName);
 function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::String)
     @NULLCHECK stmt
