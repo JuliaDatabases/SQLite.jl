@@ -86,7 +86,7 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     return stmt
 end
 
-function SQLiteStmt{T}(db::SQLiteDB{T}, sql::String, values::(Any...))
+function SQLiteStmt{T}(db::SQLiteDB{T}, sql::String, values::Vector)
     stmt = SQLiteStmt(db, sql)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
@@ -165,7 +165,7 @@ end
 
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
-function query(db::SQLiteDB,sql::String, values=())
+function query(db::SQLiteDB,sql::String, values=[])
     stmt = SQLiteStmt(db,sql,values)
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)

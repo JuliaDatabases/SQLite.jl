@@ -105,11 +105,11 @@ if VERSION > v"0.4.0-"
 end
 
 query(db,"CREATE TABLE temp AS SELECT * FROM Album")
-r = query(db, "SELECT * FROM temp LIMIT ?", (3,))
+r = query(db, "SELECT * FROM temp LIMIT ?", [3])
 @test size(r) == (3,3)
-r = query(db, "SELECT * FROM temp WHERE Title LIKE ?", ("%time%",))
+r = query(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"])
 @test r.values[1] == [76, 111, 187]
-query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", (0,0,"Test Album"))
+query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", [0,0,"Test Album"])
 r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
 drop(db, "temp")
