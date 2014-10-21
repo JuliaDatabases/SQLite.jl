@@ -104,6 +104,28 @@ if VERSION > v"0.4.0-"
     @test drop(db,"temp") == EMPTY_RESULTSET
 end
 
+r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
+@test r.values[1][1] == "Peacock"
+
+@scalarfunc function triple(x)
+    x * 3
+end
+@test_throws ErrorException registerfunc(db, 186, triple)
+registerfunc(db, 1, triple)
+r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
+s = query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")
+for (i, j) in zip(r.values[1], s.values[1])
+    @test_approx_eq i j*3
+end
+
+@scalarfunc mult (*)
+registerfunc(db, -1, mult)
+r = query(db, "SELECT Milliseconds, Bytes FROM Track")
+s = query(db, "SELECT mult(Milliseconds, Bytes) FROM Track")
+@test r[1].*r[2] == s[1]
+t = query(db, "SELECT mult(Milliseconds, Bytes, 3, 4) FROM Track")
+@test r[1].*r[2]*3*4 == t[1]
+
 @test size(tables(db)) == (11,1)
 
 close(db)

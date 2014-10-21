@@ -231,6 +231,145 @@ end
 
 # SQLITE_API int sqlite3_data_count(sqlite3_stmt *pStmt);
 
+# SQLITE_API void sqlite3_result_double(sqlite3_context*, double);
+function sqlite3_result_double(context::Ptr{Void},value::Float64)
+    return ccall( (:sqlite3_result_double, sqlite3_lib),
+        Void, (Ptr{Void},Float64),
+        context,value)
+end
+# SQLITE_API void sqlite3_result_error(sqlite3_context*, const char*, int)
+function sqlite3_result_error(context::Ptr{Void},msg::String)
+    return ccall( (:sqlite3_result_error, sqlite3_lib),
+        Void, (Ptr{Void},Ptr{Uint8},Cint),
+        context,value,sizeof(msg)+1)
+end
+# SQLITE_API void sqlite3_result_error16(sqlite3_context*, const void*, int)
+function sqlite3_result_error(context::Ptr{Void},msg::UTF16String)
+    return ccall( (:sqlite3_result_error16, sqlite3_lib),
+        Void, (Ptr{Void},Ptr{Uint16},Cint),
+        context,value,sizeof(msg)+1)
+end
+# SQLITE_API void sqlite3_result_int(sqlite3_context*, int);
+function sqlite3_result_int(context::Ptr{Void},value::Int32)
+    return ccall( (:sqlite3_result_int, sqlite3_lib),
+        Void, (Ptr{Void},Int32),
+        context,value)
+end
+# SQLITE_API void sqlite3_result_int64(sqlite3_context*, sqlite3_int64);
+function sqlite3_result_int64(context::Ptr{Void},value::Int64)
+    return ccall( (:sqlite3_result_int64, sqlite3_lib),
+        Void, (Ptr{Void},Int64),
+        context,value)
+end
+# SQLITE_API void sqlite3_result_null(sqlite3_context*);
+function sqlite3_result_null(context::Ptr{Void})
+    return ccall( (:sqlite3_result_null, sqlite3_lib),
+        Void, (Ptr{Void},),
+        context)
+end
+# SQLITE_API void sqlite3_result_text(sqlite3_context*, const char*, int n, void(*)(void*));
+function sqlite3_result_text(context::Ptr{Void},value::String)
+    return ccall( (:sqlite3_result_text, sqlite3_lib),
+        Void, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void}),
+        context,value,sizeof(value)+1,SQLITE_TRANSIENT)
+end
+# SQLITE_API void sqlite3_result_text16(sqlite3_context*, const void*, int, void(*)(void*));
+function sqlite3_result_text16(context::Ptr{Void},value::UTF16String)
+    return ccall( (:sqlite3_result_text, sqlite3_lib),
+        Void, (Ptr{Void},Ptr{Uint16},Cint,Ptr{Void}),
+        context,value,sizeof(value)+1,SQLITE_TRANSIENT)
+end
+# SQLITE_API void sqlite3_result_blob(sqlite3_context*, const void*, int n, void(*)(void*));
+function sqlite3_result_blob(context::Ptr{Void},value)
+    return ccall( (:sqlite3_result_blob, sqlite3_lib),
+        Void, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void}),
+        context,value,sizeof(value),SQLITE_TRANSIENT)
+end
+# SQLITE_API void sqlite3_result_zeroblob(sqlite3_context*, int n);
+# SQLITE_API void sqlite3_result_value(sqlite3_context*, const sqlite3_value*);
+# SQLITE_API void sqlite3_result_error_toobig(sqlite3_context*)
+# SQLITE_API void sqlite3_result_error_nomem(sqlite3_context*)
+# SQLITE_API void sqlite3_result_error_code(sqlite3_context*, int)
+
+
+function sqlite3_create_function_v2(db::Ptr{Void},name::String,nargs::Integer,
+                                    enc::Integer,data::Ptr{Void},func::Ptr{Void},
+                                    step::Ptr{Void},final::Ptr{Void},
+                                    destructor::Ptr{Void})
+    @NULLCHECK db
+    return ccall(
+        (:sqlite3_create_function_v2, sqlite3_lib),
+        Cint,
+        (Ptr{Void}, Ptr{Uint8}, Cint, Cint, Ptr{Void},
+         Ptr{Void}, Ptr{Void}, Ptr{Void}, Ptr{Void}),
+        db, name, nargs, enc, data, func, step, final, destructor)
+end
+
+# SQLITE_API void* sqlite3_aggregate_context(sqlite3_context*, int nBytes)
+function sqlite3_aggregate_context(context::Ptr{Void}, nbytes::Integer)
+    return ccall( (:sqlite3_aggregate_context, sqlite3_lib),
+        Ptr{Void}, (Ptr{Void}, Cint),
+        context, nbytes)
+end
+
+# SQLITE_API int sqlite3_value_type(sqlite3_value*)
+function sqlite3_value_type(value::Ptr{Void})
+    return ccall( (:sqlite3_value_type, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        value)
+end
+
+# SQLITE_API const void* sqlite3_value_blob(sqlite3_value*)
+function sqlite3_value_blob(value::Ptr{Void})
+    return ccall( (:sqlite3_value_blob, sqlite3_lib),
+        Ptr{Void}, (Ptr{Void},),
+        value)
+end
+# SQLITE_API int sqlite3_value_bytes(sqlite3_value*)
+function sqlite3_value_bytes(value::Ptr{Void})
+    return ccall( (:sqlite3_value_bytes, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        value)
+end
+# SQLITE_API int sqlite3_value_bytes16(sqlite3_value*)
+function sqlite3_value_bytes16(value::Ptr{Void})
+    return ccall( (:sqlite3_value_bytes16, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        value)
+end
+# SQLITE_API double sqlite3_value_double(sqlite3_value*)
+function sqlite3_value_double(value::Ptr{Void})
+    return ccall( (:sqlite3_value_double, sqlite3_lib),
+        Cdouble, (Ptr{Void},),
+        value)
+end
+# SQLITE_API int sqlite3_value_int(sqlite3_value*)
+function sqlite3_value_int(value::Ptr{Void})
+    return ccall( (:sqlite3_value_int, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        value)
+end
+# SQLITE_API sqlite_int64 sqlite3_value_int64(sqlite3_value*)
+function sqlite3_value_int64(value::Ptr{Void})
+    return ccall( (:sqlite3_value_int64, sqlite3_lib),
+        Clonglong, (Ptr{Void},),
+        value)
+end
+# SQLITE_API const unsigned char* sqlite3_value_text(sqlite3_value*)
+function sqlite3_value_text(value::Ptr{Void})
+    return ccall( (:sqlite3_value_text, sqlite3_lib),
+        Ptr{Uint8}, (Ptr{Void},),
+        value)
+end
+# SQLITE_API const void* sqlite3_value_text16(sqlite3_value*)
+function sqlite3_value_text16(value::Ptr{Void})
+    return ccall( (:sqlite3_value_text16, sqlite3_lib),
+        Ptr{Void}, (Ptr{Void},),
+        value)
+end
+# SQLITE_API int sqlite3_value_numeric_type(sqlite3_value*)
+
+
 function sqlite3_initialize()
     return ccall( (:sqlite3_initialize, sqlite3_lib),
         Cint, (),
