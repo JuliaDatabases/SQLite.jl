@@ -111,7 +111,6 @@ r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08
     x * 3
 end
 @test_throws ErrorException registerfunc(db, 186, triple)
-@test_throws ErrorException registerfunc(db, -2, triple)
 registerfunc(db, 1, triple)
 r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
 s = query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")

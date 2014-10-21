@@ -1,8 +1,12 @@
 # scalar functions
 function registerfunc(db::SQLiteDB, nargs::Integer, func::Function, isdeterm::Bool=true; name="")
-    @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
+    @assert nargs <= 127 "only varargs functions can have more than 127 arguments"
+    # assume any negative number means a varargs function
+    nargs < -1 && (nargs = -1)
 
     name = isempty(name) ? string(func) : name::String
+    @assert sizeof(name) <= 255 "size of function name must be <= 255"
+
     cfunc = cfunction(func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
 
     # TODO: allow the other encodings
@@ -16,7 +20,9 @@ end
 
 # aggregate functions
 function registerfunc(db::SQLiteDB, nargs::Integer, step::Function, final::Function, isdeterm::Bool=true; name="")
-    @assert (-1 <= nargs <= 127) "nargs must follow the inequality -1 <= nargs <= 127"
+    @assert nargs <= 127 "only varargs functions can have more than 127 arguments"
+    # assume any negative number means a varargs function
+    nargs < -1 && (nargs = -1)
 
     name = isempty(name) ? string(step) : name::String
     cstep = cfunction(step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
@@ -92,7 +98,6 @@ macro scalarfunc(args...)
         end
     end
 end
-
 
 # annotate types because the MethodError makes more sense that way
 @scalarfunc regexp(r::String, s::String) = ismatch(Regex(r), s)
