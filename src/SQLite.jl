@@ -54,7 +54,7 @@ function SQLiteDB(file::String="";UTF16::Bool=false)
     file = isempty(file) ? file : expanduser(file)
     if @OK sqliteopen(utf(file),handle)
         db = SQLiteDB(utf(file),handle[1])
-        registerfunc(db, 2, regexp)
+        register(db, regexp, nargs=2)
         finalizer(db,close)
         return db
     else # error
