@@ -115,7 +115,7 @@ r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 drop(db, "temp")
 
 query(db,"CREATE TABLE temp AS SELECT * FROM Album")
-r = query(db, "SELECT * FROM temp LIMIT :a", Dict("a" => 3))
+r = query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
 @test size(r) == (3,3)
 r = query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
 @test r.values[1] == [76, 111, 187]

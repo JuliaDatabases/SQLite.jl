@@ -86,35 +86,6 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
     return stmt
 end
 
-function SQLiteStmt{T}(db::SQLiteDB{T}, sql::String, values::Vector)
-    stmt = SQLiteStmt(db, sql)
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all placeholders"
-    for i in 1:nparams
-        bind(stmt, i, values[i])
-    end
-    return stmt
-end
-
-# TODO: allow Dict{Any, V}?
-function SQLiteStmt{T, S <: String, V}(db::SQLiteDB{T}, sql::String, values::Dict{S,V})
-    stmt = SQLiteStmt(db, sql)
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all placeholders"
-    for i in 1:nparams
-        name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
-        @assert !isempty(name) "nameless parameters should be passed as a tuple"
-        # name is returned with the ':', '@' or '$' at the start
-        name = name[2:end]
-        bind(stmt, i, values[name])
-    end
-    return stmt
-end
-
-# TODO: this method loops through the dictionary twice, will this be a bottleneck?
-SQLiteStmt{T, S <: Symbol, V}(db::SQLiteDB{T}, sql::String, values::Dict{S,V}) =
-    SQLiteStmt(db, sql, [string(k) => v for (k,v) in values])
-
 function Base.close(stmt::SQLiteStmt)
     stmt.handle == C_NULL && return
     @CHECK stmt.db sqlite3_finalize(stmt.handle)
@@ -122,6 +93,26 @@ function Base.close(stmt::SQLiteStmt)
     return
 end
 
+# bind a row to nameless parameters
+function Base.bind(stmt::SQLiteStmt, values::Vector)
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all placeholders"
+    for i in 1:nparams
+        bind(stmt, i, values[i])
+    end
+end
+# bind a row to named parameters
+function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all placeholders"
+    for i in 1:nparams
+        name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
+        @assert !isempty(name) "nameless parameters should be passed as a tuple"
+        # name is returned with the ':', '@' or '$' at the start
+        name = name[2:end]
+        bind(stmt, i, values[symbol(name)])
+    end
+end
 # Binding parameters to SQL statements
 function Base.bind(stmt::SQLiteStmt,name::String,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
@@ -166,7 +157,8 @@ end
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
 function query(db::SQLiteDB,sql::String, values=[])
-    stmt = SQLiteStmt(db,sql,values)
+    stmt = SQLiteStmt(db,sql)
+    bind(stmt, values)
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
