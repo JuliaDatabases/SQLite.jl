@@ -107,9 +107,7 @@ end
 r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
-@scalarfunc function triple(x)
-    x * 3
-end
+triple(x) = x * 3
 @test_throws ErrorException SQLite.register(db, triple, 186)
 SQLite.register(db, triple, 1)
 r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
@@ -118,8 +116,14 @@ for (i, j) in zip(r.values[1], s.values[1])
     @test_approx_eq i j*3
 end
 
-@scalarfunc (*) mult
-SQLite.register(db, mult, -1)
+SQLite.@register db function add4(q)
+    q+4
+end
+r = query(db, "SELECT add4(AlbumId) FROM Album")
+s = query(db, "SELECT AlbumId FROM Album")
+@test r[1] == s[1]+4
+
+SQLite.@register db mult(args...) = *(args...)
 r = query(db, "SELECT Milliseconds, Bytes FROM Track")
 s = query(db, "SELECT mult(Milliseconds, Bytes) FROM Track")
 @test r[1].*r[2] == s[1]

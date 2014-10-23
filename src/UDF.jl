@@ -80,8 +80,12 @@ end
 macro register(db, func)
     :(register($(esc(db)), $(esc(func))))
 end
-# User-facing method with keyword arguments for registering a Julia
-# function to be used within SQLite
+# User-facing method with keyword arguments for registering a function
+# to be used within SQLite
+function register(db::SQLiteDB, func::Function; nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
+    register(db, func, nargs, isdeterm, name)
+end
+# User-facing method for registering a Julia function to be used within SQLite
 function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
