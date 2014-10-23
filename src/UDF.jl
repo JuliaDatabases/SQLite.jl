@@ -66,7 +66,7 @@ function scalarfunc(func,fsym=symbol(string(func)))
         function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
             args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
             ret = $(func)(args...)
-             SQLite.sqlreturn(context, ret)
+            SQLite.sqlreturn(context, ret)
             nothing
         end
     end
@@ -80,30 +80,27 @@ macro scalarfunc(args...)
 end
 # User-facing macro for convenience in registering a simple function
 # with no configurations needed
-macro register(db, args...)
-    func, nm, scalar = scalarfunc(args...)
-    return quote
-        $(esc(scalar))
-        register($(esc(db)), $(esc(func)), -1, true, $(esc(string(nm))))
-    end
+macro register(db, func)
+    :(register($(esc(db)), $(esc(func))))
 end
 # User-facing method with keyword arguments for registering a Julia
 # function to be used within SQLite
-function register(db::SQLiteDB, func::Function; nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
-    _, __, scalar = scalarfunc(func,symbol(name))
-    f = eval(scalar)
-    return register(db, f, nargs, isdeterm, name)
-end
+#function register(db::SQLiteDB, func::Function; nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
+#    return register(db, f, nargs, isdeterm, name)
+#end
 # Internal method called by @register and user-facing register method
 # assumes `func(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})`
 # has already been defined
-function register(db::SQLiteDB, func::Function, nargs::Int, isdeterm::Bool=true, name::String=string(func))
+function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
- 
-    cfunc = cfunction(func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+
+    _, __, scalar = scalarfunc(func,symbol(name))
+    f = eval(scalar)
+
+    cfunc = cfunction(f, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     # TODO: allow the other encodings
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
