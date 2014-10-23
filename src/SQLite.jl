@@ -98,6 +98,26 @@ function Base.close(stmt::SQLiteStmt)
     return
 end
 
+# bind a row to nameless parameters
+function Base.bind(stmt::SQLiteStmt, values::Vector)
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all placeholders"
+    for i in 1:nparams
+        @inbounds bind(stmt, i, values[i])
+    end
+end
+# bind a row to named parameters
+function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all placeholders"
+    for i in 1:nparams
+        name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
+        @assert !isempty(name) "nameless parameters should be passed as a tuple"
+        # name is returned with the ':', '@' or '$' at the start
+        name = name[2:end]
+        bind(stmt, i, values[symbol(name)])
+    end
+end
 # Binding parameters to SQL statements
 function Base.bind(stmt::SQLiteStmt,name::String,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
@@ -141,8 +161,9 @@ end
 
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
-function query(db::SQLiteDB,sql::String)
+function query(db::SQLiteDB,sql::String, values=[])
     stmt = SQLiteStmt(db,sql)
+    bind(stmt, values)
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
     if status == SQLITE_DONE || ncols == 0
