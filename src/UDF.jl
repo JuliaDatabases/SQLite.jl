@@ -61,7 +61,7 @@ sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 function scalarfunc(func,fsym=symbol(string(func)))
     # check if name defined in Base so we don't clobber Base methods
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
-    return func, fsym, quote
+    return quote
         #nm needs to be a symbol or expr, i.e. :sin or :(Base.sin)
         function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
             args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
@@ -75,9 +75,6 @@ function scalarfunc(expr::Expr)
     f = eval(expr)
     return scalarfunc(f)
 end
-macro scalarfunc(args...)
-    esc(scalarfunc(args...)[3])
-end
 # User-facing macro for convenience in registering a simple function
 # with no configurations needed
 macro register(db, func)
@@ -85,20 +82,13 @@ macro register(db, func)
 end
 # User-facing method with keyword arguments for registering a Julia
 # function to be used within SQLite
-#function register(db::SQLiteDB, func::Function; nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
-#    return register(db, f, nargs, isdeterm, name)
-#end
-# Internal method called by @register and user-facing register method
-# assumes `func(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})`
-# has already been defined
 function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
 
-    _, __, scalar = scalarfunc(func,symbol(name))
-    f = eval(scalar)
+    f = eval(scalarfunc(func,symbol(name)))
 
     cfunc = cfunction(f, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     # TODO: allow the other encodings
@@ -111,6 +101,6 @@ function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=tr
 end
 
 # annotate types because the MethodError makes more sense that way
-@scalarfunc regexp(r::String, s::String) = ismatch(Regex(r), s)
+regexp(r::String, s::String) = ismatch(Regex(r), s)
 # macro for preserving the special characters in a string
 macro sr_str(s) s end
