@@ -98,7 +98,7 @@ function Base.bind(stmt::SQLiteStmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
-        bind(stmt, i, values[i])
+        @inbounds bind(stmt, i, values[i])
     end
 end
 # bind a row to named parameters
