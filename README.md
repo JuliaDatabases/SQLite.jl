@@ -59,7 +59,7 @@ A Julia interface to the SQLite library and support for operations on DataFrames
   
   An SQL statement `sql` is prepared, executed in the context of `db`, and results, if any, are returned. The return values are a `(String[],Any[])` tuple representing `(column names, result values)`.
 
-  The values in `values` are used in parameter binding (see `bind` above). If your statement uses nameless parameters `values` must be a Vector of the values you wish to bind to your statment. If your statement uses named parameters `values` must be a Dict where the keys are of type String or Symbol. The key must match an identifier name in the statement (the name **does not** include the ':', '@' or '$' prefix). You can not use a dictionary which has Strings *and* Symbols for it's keys.
+  The values in `values` are used in parameter binding (see `bind` above). If your statement uses nameless parameters `values` must be a `Vector` of the values you wish to bind to your statment. If your statement uses named parameters `values` must be a Dict where the keys are of type `Symbol`. The key must match an identifier name in the statement (the name **does not** include the ':', '@' or '$' prefix).
 
 * `create(db::SQLiteDB,name::String,table::AbstractMatrix,
             colnames=String[],coltypes=DataType[];temp::Bool=false)`
