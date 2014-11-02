@@ -1,22 +1,3 @@
-# aggregate functions
-function registerfunc(db::SQLiteDB, nargs::Integer, step::Function, final::Function, isdeterm::Bool=true; name="")
-    @assert nargs <= 127 "only varargs functions can have more than 127 arguments"
-    # assume any negative number means a varargs function
-    nargs < -1 && (nargs = -1)
-
-    name = isempty(name) ? string(step) : name::String
-    cstep = cfunction(step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
-    cfinal = cfunction(final, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
-
-    # TODO: allow the other encodings
-    enc = SQLITE_UTF8
-    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
-
-    @CHECK db sqlite3_create_function_v2(
-        db.handle, name, nargs, enc, C_NULL, C_NULL, cstep, cfinal, C_NULL
-    )
-end
-
 function sqlvalue(values, i)
     temp_val_ptr = unsafe_load(values, i)
     valuetype = sqlite3_value_type(temp_val_ptr)
