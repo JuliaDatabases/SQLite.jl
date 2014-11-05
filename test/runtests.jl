@@ -27,7 +27,7 @@ results = query(db,"SELECT * FROM Employee;")
 @test length(results.colnames) == 15
 @test size(results) == (8,15)
 @test typeof(results[1,1]) == Int64
-@test typeof(results[1,2]) <: String
+@test typeof(results[1,2]) <: AbstractString
 @test results[1,5] == NULL
 
 query(db,"SELECT * FROM Album;")

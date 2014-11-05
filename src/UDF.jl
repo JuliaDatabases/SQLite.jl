@@ -4,7 +4,7 @@ function registerfunc(db::SQLiteDB, nargs::Integer, func::Function, isdeterm::Bo
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
 
-    name = isempty(name) ? string(func) : name::String
+    name = isempty(name) ? string(func) : name::AbstractString
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
 
     cfunc = cfunction(func, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
@@ -24,7 +24,7 @@ function registerfunc(db::SQLiteDB, nargs::Integer, step::Function, final::Funct
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
 
-    name = isempty(name) ? string(step) : name::String
+    name = isempty(name) ? string(step) : name::AbstractString
     cstep = cfunction(step, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     cfinal = cfunction(final, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
 
@@ -63,17 +63,17 @@ function sqlvalue(values, i)
     end
 end
 
-sqlreturn(context, ::NullType)        = sqlite3_result_null(context)
-sqlreturn(context, val::Int32)        = sqlite3_result_int(context, val)
-sqlreturn(context, val::Int64)        = sqlite3_result_int64(context, val)
-sqlreturn(context, val::Float64)      = sqlite3_result_double(context, val)
-sqlreturn(context, val::String)       = sqlite3_result_text(context, val)
-sqlreturn(context, val::UTF16String)  = sqlite3_result_text16(context, val)
-sqlreturn(context, val)               = sqlite3_result_blob(context, sqlserialize(val))
+sqlreturn(context, ::NullType)          = sqlite3_result_null(context)
+sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
+sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
+sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
+sqlreturn(context, val::UTF16String)    = sqlite3_result_text16(context, val)
+sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
+sqlreturn(context, val)                 = sqlite3_result_blob(context, sqlserialize(val))
 
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 
-sqludferror(context, msg::String)      = sqlite3_result_error(context, msg)
+sqludferror(context, msg::AbstractString)      = sqlite3_result_error(context, msg)
 sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
 function funcname(expr)
@@ -100,6 +100,6 @@ macro scalarfunc(args...)
 end
 
 # annotate types because the MethodError makes more sense that way
-@scalarfunc regexp(r::String, s::String) = ismatch(Regex(r), s)
+@scalarfunc regexp(r::AbstractString, s::AbstractString) = ismatch(Regex(r), s)
 # macro for preserving the special characters in a string
 macro sr_str(s) s end

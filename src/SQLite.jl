@@ -4,7 +4,7 @@ export NULL, SQLiteDB, SQLiteStmt, ResultSet,
        execute, query, tables, drop, create, append
 
 type SQLiteException <: Exception
-    msg::String
+    msg::AbstractString
 end
 
 include("consts.jl")
@@ -23,7 +23,7 @@ end
 ==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
 
-type SQLiteDB{T<:String}
+type SQLiteDB{T<:AbstractString}
     file::T
     handle::Ptr{Void}
     changes::Int
@@ -48,7 +48,7 @@ sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
-function SQLiteDB(file::String="";UTF16::Bool=false)
+function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
     handle = [C_NULL]
     utf = UTF16 ? utf16 : utf8
     file = isempty(file) ? file : expanduser(file)
@@ -83,7 +83,7 @@ sqliteprepare(db,sql,stmt,null) =
 sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
-function SQLiteStmt{T}(db::SQLiteDB{T},sql::String)
+function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
     handle = [C_NULL]
     sqliteprepare(db,sql,handle,[C_NULL])
     stmt = SQLiteStmt(db,handle[1],convert(T,sql))
@@ -119,19 +119,19 @@ function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
     end
 end
 # Binding parameters to SQL statements
-function Base.bind(stmt::SQLiteStmt,name::String,val)
+function Base.bind(stmt::SQLiteStmt,name::AbstractString,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
     return bind(stmt,i,val)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint) = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)         = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)         = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)      = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
-Base.bind(stmt::SQLiteStmt,i::Int,val::String)        = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)   = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
+Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
@@ -153,7 +153,7 @@ function execute(stmt::SQLiteStmt)
     end
     return r
 end
-function execute(db::SQLiteDB,sql::String)
+function execute(db::SQLiteDB,sql::AbstractString)
     stmt = SQLiteStmt(db,sql)
     execute(stmt)
     return changes(db)
@@ -161,7 +161,7 @@ end
 
 sqldeserialize(r) = deserialize(IOBuffer(r))
 
-function query(db::SQLiteDB,sql::String, values=[])
+function query(db::SQLiteDB,sql::AbstractString, values=[])
     stmt = SQLiteStmt(db,sql)
     bind(stmt, values)
     status = execute(stmt)
@@ -169,7 +169,7 @@ function query(db::SQLiteDB,sql::String, values=[])
     if status == SQLITE_DONE || ncols == 0
         return changes(db)
     end
-    colnames = Array(String,ncols)
+    colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
         colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i-1))
@@ -220,7 +220,7 @@ function transaction(db, mode="DEFERRED")
 
      If mode is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
      transaction of that (or the default) type is started. Otherwise a savepoint
-     is created whose name is mode converted to String.
+     is created whose name is mode converted to AbstractString.
     =#
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
         execute(db, "BEGIN $(mode) TRANSACTION;")
@@ -257,7 +257,7 @@ commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-function drop(db::SQLiteDB,table::String)
+function drop(db::SQLiteDB,table::AbstractString)
     transaction(db) do
         execute(db,"drop table $table")
     end
@@ -265,7 +265,7 @@ function drop(db::SQLiteDB,table::String)
     return changes(db)
 end
 
-function dropindex(db::SQLiteDB,index::String)
+function dropindex(db::SQLiteDB,index::AbstractString)
     transaction(db) do
         execute(db,"drop index $index")
     end
@@ -274,12 +274,12 @@ end
 
 gettype{T<:Integer}(::Type{T}) = " INT"
 gettype{T<:Real}(::Type{T}) = " REAL"
-gettype{T<:String}(::Type{T}) = " TEXT"
+gettype{T<:AbstractString}(::Type{T}) = " TEXT"
 gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
-function create(db::SQLiteDB,name::String,table,
-            colnames=String[],coltypes=DataType[];temp::Bool=false)
+function create(db::SQLiteDB,name::AbstractString,table,
+            colnames=AbstractString[],coltypes=DataType[];temp::Bool=false)
     N, M = size(table)
     colnames = isempty(colnames) ? ["x$i" for i=1:M] : colnames
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
@@ -305,7 +305,7 @@ function create(db::SQLiteDB,name::String,table,
     return changes(db)
 end
 
-function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=true)
+function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols;unique::Bool=true)
     u = unique ? "unique" : ""
     transaction(db) do
         execute(db,"create $u index $index on $table ($cols)")
@@ -314,7 +314,7 @@ function createindex(db::SQLiteDB,table::String,index::String,cols;unique::Bool=
     return changes(db)
 end
 
-function append(db::SQLiteDB,name::String,table)
+function append(db::SQLiteDB,name::AbstractString,table)
     N, M = size(table)
     transaction(db) do
         # insert statements
@@ -333,7 +333,7 @@ function append(db::SQLiteDB,name::String,table)
     return return changes(db)
 end
 
-function deleteduplicates(db,table::String,cols::String)
+function deleteduplicates(db,table::AbstractString,cols::AbstractString)
     transaction(db) do
         execute(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
     end
