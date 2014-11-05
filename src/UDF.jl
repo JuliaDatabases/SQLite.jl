@@ -61,13 +61,8 @@ end
 macro register(db, func)
     :(register($(esc(db)), $(esc(func))))
 end
-# User-facing method with keyword arguments for registering a function
-# to be used within SQLite
-function register(db::SQLiteDB, func::Function; nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
-    register(db, func, nargs, isdeterm, name)
-end
 # User-facing method for registering a Julia function to be used within SQLite
-function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=true, name::String=string(func))
+function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
@@ -86,6 +81,6 @@ function register(db::SQLiteDB, func::Function, nargs::Int=-1, isdeterm::Bool=tr
 end
 
 # annotate types because the MethodError makes more sense that way
-regexp(r::String, s::String) = ismatch(Regex(r), s)
+regexp(r::AbstractString, s::AbstractString) = ismatch(Regex(r), s)
 # macro for preserving the special characters in a string
 macro sr_str(s) s end

@@ -131,8 +131,8 @@ r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08
 @test r.values[1][1] == "Peacock"
 
 triple(x) = x * 3
-@test_throws ErrorException SQLite.register(db, triple, 186)
-SQLite.register(db, triple, 1)
+@test_throws ErrorException SQLite.register(db, triple, nargs=186)
+SQLite.register(db, triple, nargs=1)
 r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
 s = query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")
 for (i, j) in zip(r.values[1], s.values[1])
