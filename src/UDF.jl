@@ -24,17 +24,17 @@ function sqlvalue(values, i)
     end
 end
 
-sqlreturn(context, ::NullType)        = sqlite3_result_null(context)
-sqlreturn(context, val::Int32)        = sqlite3_result_int(context, val)
-sqlreturn(context, val::Int64)        = sqlite3_result_int64(context, val)
-sqlreturn(context, val::Float64)      = sqlite3_result_double(context, val)
-sqlreturn(context, val::String)       = sqlite3_result_text(context, val)
-sqlreturn(context, val::UTF16String)  = sqlite3_result_text16(context, val)
-sqlreturn(context, val)               = sqlite3_result_blob(context, sqlserialize(val))
+sqlreturn(context, ::NullType)          = sqlite3_result_null(context)
+sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
+sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
+sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
+sqlreturn(context, val::UTF16String)    = sqlite3_result_text16(context, val)
+sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
+sqlreturn(context, val)                 = sqlite3_result_blob(context, sqlserialize(val))
 
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 
-sqludferror(context, msg::String)      = sqlite3_result_error(context, msg)
+sqludferror(context, msg::AbstractString)      = sqlite3_result_error(context, msg)
 sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
 
 # Internal method for generating an SQLite scalar function from

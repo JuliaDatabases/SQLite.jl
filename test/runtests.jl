@@ -27,7 +27,7 @@ results = query(db,"SELECT * FROM Employee;")
 @test length(results.colnames) == 15
 @test size(results) == (8,15)
 @test typeof(results[1,1]) == Int64
-@test typeof(results[1,2]) <: String
+@test typeof(results[1,2]) <: AbstractString
 @test results[1,5] == NULL
 
 query(db,"SELECT * FROM Album;")
@@ -102,6 +102,29 @@ if VERSION > v"0.4.0-"
     @test all([typeof(i) for i in r.values[1]] .== Date)
     @test r.colnames == ["x1","x2","x3","x4","x5"]
     @test drop(db,"temp") == EMPTY_RESULTSET
+end
+
+query(db,"CREATE TABLE temp AS SELECT * FROM Album")
+r = query(db, "SELECT * FROM temp LIMIT ?", [3])
+@test size(r) == (3,3)
+r = query(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"])
+@test r.values[1] == [76, 111, 187]
+query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", [0,0,"Test Album"])
+r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
+@test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
+drop(db, "temp")
+
+# I can't be arsed to create a new one using old dictionary syntax
+if VERSION > v"0.4.0-"
+    query(db,"CREATE TABLE temp AS SELECT * FROM Album")
+    r = query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
+    @test size(r) == (3,3)
+    r = query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+    @test r.values[1] == [76, 111, 187]
+    query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+    r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
+    @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
+    drop(db, "temp")
 end
 
 r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
