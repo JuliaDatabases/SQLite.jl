@@ -34,9 +34,6 @@ sqlreturn(context, val)                 = sqlite3_result_blob(context, sqlserial
 
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 
-sqludferror(context, msg::AbstractString)      = sqlite3_result_error(context, msg)
-sqludferror(context, msg::UTF16String) = sqlite3_result_error16(context, msg)
-
 # Internal method for generating an SQLite scalar function from
 # a Julia function name
 function scalarfunc(func,fsym=symbol(string(func)))
