@@ -30,9 +30,10 @@ sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
 sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
 sqlreturn(context, val::UTF16String)    = sqlite3_result_text16(context, val)
 sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
-sqlreturn(context, val)                 = sqlite3_result_blob(context, sqlserialize(val))
+sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, sqlserialize(val))
 
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
+sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
 # Internal method for generating an SQLite scalar function from
 # a Julia function name

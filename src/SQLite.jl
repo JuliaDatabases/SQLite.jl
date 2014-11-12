@@ -16,6 +16,11 @@ immutable NullType end
 const NULL = NullType()
 Base.show(io::IO,::NullType) = print(io,"NULL")
 
+# internal wrapper type to, in-effect, mark something which has been serialized
+type Serialization
+    object
+end
+
 type ResultSet
     colnames
     values::Vector{Any}
@@ -132,13 +137,18 @@ Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_
 Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
 Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
 Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+Base.bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
-    serialize(t,x)
+    # deserialize will sometimes return a random object when called on an array
+    # which has not been previously serialized, we can use this type to check
+    # that the array has been serialized
+    s = Serialization(x)
+    serialize(t,s)
     return takebuf_array(t)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val) = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,sqlserialize(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
@@ -159,7 +169,23 @@ function execute(db::SQLiteDB,sql::AbstractString)
     return changes(db)
 end
 
-sqldeserialize(r) = deserialize(IOBuffer(r))
+function sqldeserialize(r)
+    # try blocks introduce new scope
+    local v
+    # deserialize will sometimes, but not consistently (see comment in
+    # sqlserialize), throw an error when called on an object which hasn't been
+    # previously serialized
+    try
+        v = deserialize(IOBuffer(r))
+    catch
+        return r
+    end
+    if isa(v, Serialization)
+        return v.object
+    else
+        return r
+    end
+end
 
 function query(db::SQLiteDB,sql::AbstractString, values=[])
     stmt = SQLiteStmt(db,sql)
