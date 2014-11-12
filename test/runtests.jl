@@ -114,6 +114,34 @@ r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
 drop(db, "temp")
 
+binddb = SQLiteDB()
+query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
+query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[NULL, int64(6), 6.4, "some text", b"bytearray"])
+r = query(binddb, "SELECT * FROM temp")
+for (v, t) in zip(r.values, [SQLite.NullType, Int64, Float64, AbstractString, Vector{UInt8}])
+    @test isa(v[1], t)
+end
+query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", b"b"])
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", BigInt(2)])
+type Point{T}
+    x::T
+    y::T
+end
+==(a::Point, b::Point) = a.x == b.x && a.y == b.y
+p1 = Point(1, 2)
+p2 = Point(1.3, 2.4)
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p1])
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p2])
+r = query(binddb, "SELECT * FROM blobtest")
+for v in r.values[1]
+    @test v == b"a"
+end
+for (v1, v2) in zip(r.values[2], Any[b"b", BigInt(2), p1, p2])
+    @test v1 == v2
+end
+close(binddb)
+
 # I can't be arsed to create a new one using old dictionary syntax
 if VERSION > v"0.4.0-"
     query(db,"CREATE TABLE temp AS SELECT * FROM Album")
