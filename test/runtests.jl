@@ -189,6 +189,14 @@ SQLite.register(db, hypot; nargs=2, name="hypotenuse")
 v = query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5")
 @test [int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
+SQLite.@register db str2arr(s) = convert(Array{UInt8}, s)
+r = query(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2")
+@test r[1] == Any[UInt8[0x41,0x64,0x61,0x6d,0x73],UInt8[0x45,0x64,0x77,0x61,0x72,0x64,0x73]]
+
+SQLite.@register db big
+r = query(db, "SELECT big(5)")
+@test r[1][1] == big(5)
+
 @test size(tables(db)) == (11,1)
 
 close(db)
