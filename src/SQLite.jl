@@ -3,6 +3,11 @@ module SQLite
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
        execute, query, tables, drop, create, append
 
+if VERSION < v"0.4.0-dev"
+    const AbstractString = String
+    const UInt8 = Uint8
+end
+
 type SQLiteException <: Exception
     msg::AbstractString
 end
@@ -368,6 +373,3 @@ function deleteduplicates(db,table::AbstractString,cols::AbstractString)
 end
 
 end #SQLite module
-
-#TODO
- #create julia functions (https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function)
