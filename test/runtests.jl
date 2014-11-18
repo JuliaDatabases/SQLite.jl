@@ -27,7 +27,7 @@ results = query(db,"SELECT * FROM Employee;")
 @test length(results.colnames) == 15
 @test size(results) == (8,15)
 @test typeof(results[1,1]) == Int64
-@test typeof(results[1,2]) <: String
+@test typeof(results[1,2]) <: AbstractString
 @test results[1,5] == NULL
 
 query(db,"SELECT * FROM Album;")
@@ -130,24 +130,36 @@ end
 r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
-@scalarfunc function triple(x)
-    x * 3
-end
-@test_throws ErrorException registerfunc(db, 186, triple)
-registerfunc(db, 1, triple)
+triple(x) = x * 3
+@test_throws ErrorException SQLite.register(db, triple, nargs=186)
+SQLite.register(db, triple, nargs=1)
 r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
 s = query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")
 for (i, j) in zip(r.values[1], s.values[1])
     @test_approx_eq i j*3
 end
 
-@scalarfunc mult (*)
-registerfunc(db, -1, mult)
+SQLite.@register db function add4(q)
+    q+4
+end
+r = query(db, "SELECT add4(AlbumId) FROM Album")
+s = query(db, "SELECT AlbumId FROM Album")
+@test r[1] == s[1]+4
+
+SQLite.@register db mult(args...) = *(args...)
 r = query(db, "SELECT Milliseconds, Bytes FROM Track")
 s = query(db, "SELECT mult(Milliseconds, Bytes) FROM Track")
 @test r[1].*r[2] == s[1]
 t = query(db, "SELECT mult(Milliseconds, Bytes, 3, 4) FROM Track")
 @test r[1].*r[2]*3*4 == t[1]
+
+SQLite.@register db sin
+u = query(db, "select sin(milliseconds) from track limit 5")
+@test all(-1 .< u[1] .< 1)
+
+SQLite.register(db, hypot; nargs=2, name="hypotenuse")
+v = query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5")
+@test [int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
 @test size(tables(db)) == (11,1)
 

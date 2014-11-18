@@ -9,7 +9,7 @@ function sqlite3_errmsg(db::Ptr{Void})
         Ptr{Uint8}, (Ptr{Void},),
         db)
 end
-function sqlite3_open(file::String,handle::Array{Ptr{Void},1})
+function sqlite3_open(file::AbstractString,handle::Array{Ptr{Void},1})
     return ccall( (:sqlite3_open, sqlite3_lib),
         Cint, (Ptr{Uint8},Ptr{Void}),
         file,handle)
@@ -31,13 +31,13 @@ function sqlite3_next_stmt(db::Ptr{Void},stmt::Ptr{Void})
         Ptr{Void}, (Ptr{Void},Ptr{Void}),
         db, stmt)
 end
-function sqlite3_prepare_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
+function sqlite3_prepare_v2(handle::Ptr{Void},query::AbstractString,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
     @NULLCHECK handle
     return ccall( (:sqlite3_prepare_v2, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
             handle,query,sizeof(query),stmt,unused)
 end
-function sqlite3_prepare16_v2(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
+function sqlite3_prepare16_v2(handle::Ptr{Void},query::AbstractString,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
     @NULLCHECK handle
     return ccall( (:sqlite3_prepare16_v2, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{Uint16},Cint,Ptr{Void},Ptr{Void}),
@@ -65,7 +65,7 @@ function sqlite3_bind_parameter_name(stmt::Ptr{Void}, col::Int)
         stmt, col)
 end
 # SQLITE_API int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *zName);
-function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::String)
+function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::AbstractString)
     @NULLCHECK stmt
     return ccall( (:sqlite3_bind_parameter_index, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{Uint8}),
@@ -100,7 +100,7 @@ function sqlite3_bind_null(stmt::Ptr{Void},col::Int)
         stmt,col)
 end
 # SQLITE_API int sqlite3_bind_text(sqlite3_stmt*, int, const char*, int n, void(*)(void*));
-function sqlite3_bind_text(stmt::Ptr{Void},col::Int,value::String)
+function sqlite3_bind_text(stmt::Ptr{Void},col::Int,value::AbstractString)
     @NULLCHECK stmt
     return ccall( (:sqlite3_bind_text, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
@@ -251,7 +251,7 @@ function sqlite3_result_double(context::Ptr{Void},value::Float64)
         context,value)
 end
 # SQLITE_API void sqlite3_result_error(sqlite3_context*, const char*, int)
-function sqlite3_result_error(context::Ptr{Void},msg::String)
+function sqlite3_result_error(context::Ptr{Void},msg::AbstractString)
     return ccall( (:sqlite3_result_error, sqlite3_lib),
         Void, (Ptr{Void},Ptr{Uint8},Cint),
         context,value,sizeof(msg)+1)
@@ -281,7 +281,7 @@ function sqlite3_result_null(context::Ptr{Void})
         context)
 end
 # SQLITE_API void sqlite3_result_text(sqlite3_context*, const char*, int n, void(*)(void*));
-function sqlite3_result_text(context::Ptr{Void},value::String)
+function sqlite3_result_text(context::Ptr{Void},value::AbstractString)
     return ccall( (:sqlite3_result_text, sqlite3_lib),
         Void, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void}),
         context,value,sizeof(value)+1,SQLITE_TRANSIENT)
@@ -305,7 +305,7 @@ end
 # SQLITE_API void sqlite3_result_error_code(sqlite3_context*, int)
 
 
-function sqlite3_create_function_v2(db::Ptr{Void},name::String,nargs::Integer,
+function sqlite3_create_function_v2(db::Ptr{Void},name::AbstractString,nargs::Integer,
                                     enc::Integer,data::Ptr{Void},func::Ptr{Void},
                                     step::Ptr{Void},final::Ptr{Void},
                                     destructor::Ptr{Void})
@@ -403,7 +403,7 @@ function sqlite3_os_end()
         Cint, (),
         )
 end
-function sqlite3_free_table(result::Array{String,1})
+function sqlite3_free_table(result::Array{AbstractString,1})
     return ccall( (:sqlite3_free_table, sqlite_lib),
         Void, (Ptr{Ptr{Void}},),
         result)
@@ -454,18 +454,18 @@ end
 # SQLITE_API int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 # Not directly used
-function sqlite3_open_v2(file::String,handle::Array{Ptr{Void},1},flags::Cint,vfs::String)
+function sqlite3_open_v2(file::AbstractString,handle::Array{Ptr{Void},1},flags::Cint,vfs::AbstractString)
     return ccall( (:sqlite3_open_v2, sqlite3_lib),
             Cint, (Ptr{Uint8},Ptr{Void},Cint,Ptr{Uint8}),
             file,handle,flags,vfs)
 end
-function sqlite3_prepare(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
+function sqlite3_prepare(handle::Ptr{Void},query::AbstractString,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
     @NULLCHECK handle
     return ccall( (:sqlite3_prepare, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),
             handle,query,sizeof(query),stmt,unused)
 end
-function sqlite3_prepare16(handle::Ptr{Void},query::String,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
+function sqlite3_prepare16(handle::Ptr{Void},query::AbstractString,stmt::Array{Ptr{Void},1},unused::Array{Ptr{Void},1})
     @NULLCHECK handle
     return ccall( (:sqlite3_prepare16, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{Uint8},Cint,Ptr{Void},Ptr{Void}),

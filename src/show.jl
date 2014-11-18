@@ -38,7 +38,7 @@ begin
         ourshowcompact(io, x)
         return position(io)
     end
-    ourstrwidth(x::String) = strwidth(x) + 2 # -> Int
+    ourstrwidth(x::AbstractString) = strwidth(x) + 2 # -> Int
     ourstrwidth(s::Symbol) = int(ccall(:u8_strwidth,
                                        Csize_t,
                                        (Ptr{Uint8}, ),
@@ -61,7 +61,7 @@ end
 #' ourshowcompact(STDOUT, "abc")
 #' ourshowcompact(STDOUT, 10000)
 ourshowcompact(io::IO, x::Any) = showcompact(io, x) # -> Nothing
-ourshowcompact(io::IO, x::String) = showcompact(io, x) # -> Nothing
+ourshowcompact(io::IO, x::AbstractString) = showcompact(io, x) # -> Nothing
 ourshowcompact(io::IO, x::Symbol) = print(io, x) # -> Nothing
 
 #' @description
@@ -83,7 +83,7 @@ ourshowcompact(io::IO, x::Symbol) = print(io, x) # -> Nothing
 #'        chunk of the AbstractDataFrame that would be rendered to IO. Can
 #'        be empty if the AbstractDataFrame would be printed without any
 #'        ellipses.
-#' @param rowlabel::String The label that will be used when rendered the
+#' @param rowlabel::AbstractString The label that will be used when rendered the
 #'        numeric ID's of each row. Typically, this will be set to "Row".
 #'
 #' @returns widths::Vector{Int} The maximum string widths required to render
