@@ -22,7 +22,7 @@ const NULL = NullType()
 Base.show(io::IO,::NullType) = print(io,"NULL")
 
 # internal wrapper type to, in-effect, mark something which has been serialized
-type Serialization
+immutable Serialization
     object
 end
 
@@ -142,6 +142,8 @@ Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_
 Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
 Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
 Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+# We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
+# as the "official" bytes type instead of Vector{UInt8}
 Base.bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
@@ -219,8 +221,8 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
             elseif t == SQLITE_BLOB
                 blob = sqlite3_column_blob(stmt.handle,i-1)
                 b = sqlite3_column_bytes(stmt.handle,i-1)
-                buf = zeros(Uint8,b)
-                unsafe_copy!(pointer(buf), convert(Ptr{Uint8},blob), b)
+                buf = zeros(UInt8,b)
+                unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
                 r = sqldeserialize(buf)
             else
                 r = NULL
