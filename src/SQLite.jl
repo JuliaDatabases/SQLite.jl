@@ -176,18 +176,13 @@ function execute(db::SQLiteDB,sql::AbstractString)
     return changes(db)
 end
 
+const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
 function sqldeserialize(r)
-    # try blocks introduce new scope
-    local v
-    # deserialize will sometimes, but not consistently (see comment in
-    # sqlserialize), throw an error when called on an object which hasn't been
-    # previously serialized
-    try
+    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
+            SERIALIZATION, r, min(18,length(r)))
+    
+    if ret == 0
         v = deserialize(IOBuffer(r))
-    catch
-        return r
-    end
-    if isa(v, Serialization)
         return v.object
     else
         return r
