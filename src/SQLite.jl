@@ -6,6 +6,11 @@ export NULL, SQLiteDB, SQLiteStmt, ResultSet,
 if VERSION < v"0.4.0-dev"
     const AbstractString = String
     const UInt8 = Uint8
+    const UInt16 = Uint16
+    const UInt32 = Uint32
+    const UInt64 = Uint64
+    const UInt128 = Uint128
+    const UInt = Uint
 end
 
 type SQLiteException <: Exception
