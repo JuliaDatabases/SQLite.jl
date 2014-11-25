@@ -246,6 +246,8 @@ function indices(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
+columns(db::SQLiteDB,table::String) = query(db,"pragma table_info($table)")
+
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
     #=
