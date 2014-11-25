@@ -1,7 +1,8 @@
 module SQLite
 
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
-       execute, query, tables, drop, create, append
+       execute, query, tables, indices, columns, drop, dropindex,
+       create, createindex, append, deleteduplicates
 
 if VERSION < v"0.4.0-dev"
     const AbstractString = String
