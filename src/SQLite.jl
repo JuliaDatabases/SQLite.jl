@@ -292,17 +292,19 @@ commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-function drop(db::SQLiteDB,table::AbstractString)
+function drop(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
+    exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop table $table")
+        execute(db,"drop table $exists $table")
     end
     execute(db,"vacuum")
     return changes(db)
 end
 
-function dropindex(db::SQLiteDB,index::AbstractString)
+function dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
+    exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop index $index")
+        execute(db,"drop index $exists $index")
     end
     return changes(db)
 end
@@ -314,7 +316,9 @@ gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
 function create(db::SQLiteDB,name::AbstractString,table,
-            colnames=AbstractString[],coltypes=DataType[];temp::Bool=false)
+            colnames=AbstractString[],
+            coltypes=DataType[]
+            ;temp::Bool=false,ifnotexists::Bool=false)
     N, M = size(table)
     colnames = isempty(colnames) ? ["x$i" for i=1:M] : colnames
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
@@ -323,7 +327,8 @@ function create(db::SQLiteDB,name::AbstractString,table,
     transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
-        execute(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
+        exists = ifnotexists ? "if not exists" : ""
+        execute(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
         # insert statements
         params = chop(repeat("?,",M))
         stmt = SQLiteStmt(db,"insert into $name values ($params)")
@@ -340,10 +345,12 @@ function create(db::SQLiteDB,name::AbstractString,table,
     return changes(db)
 end
 
-function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols;unique::Bool=true)
+function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols
+                    ;unique::Bool=true,ifnotexists::Bool=false)
     u = unique ? "unique" : ""
+    exists = ifnotexists ? "if not exists" : ""
     transaction(db) do
-        execute(db,"create $u index $index on $table ($cols)")
+        execute(db,"create $u index $exists $index on $table ($cols)")
     end
     execute(db,"analyze $index")
     return changes(db)
