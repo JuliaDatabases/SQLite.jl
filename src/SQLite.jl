@@ -20,7 +20,6 @@ end
 include("consts.jl")
 include("api.jl")
 
-
 # Custom NULL type
 immutable NullType end
 const NULL = NullType()
@@ -37,6 +36,7 @@ type ResultSet
 end
 ==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
+Base.convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
 
 type SQLiteDB{T<:AbstractString}
     file::T
