@@ -211,12 +211,12 @@ r = query(db, "SELECT big(5)")
 db2 = SQLiteDB()
 query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
-@test_throws ErrorException create(db2, "tab1", [2.1 3; 3.4 8])
+@test_throws SQLite.SQLiteException create(db2, "tab1", [2.1 3; 3.4 8])
 # should not throw any exceptions
 create(db2, "tab1", [2.1 3; 3.4 8], ifnotexists=true)
 create(db2, "tab2", [2.1 3; 3.4 8])
 
-@test_throws ErrorException drop(db2, "nonexistant")
+@test_throws SQLite.SQLiteException drop(db2, "nonexistant")
 # should not throw anything
 drop(db2, "nonexistant", ifexists=true)
 # should drop "tab2"
