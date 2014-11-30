@@ -207,6 +207,25 @@ SQLite.@register db big
 r = query(db, "SELECT big(5)")
 @test r[1][1] == big(5)
 
+
+db2 = SQLiteDB()
+query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
+
+@test_throws ErrorException create(db2, "tab1", [2.1 3; 3.4 8])
+# should not throw any exceptions
+create(db2, "tab1", [2.1 3; 3.4 8], ifnotexists=true)
+create(db2, "tab2", [2.1 3; 3.4 8])
+
+@test_throws ErrorException drop(db2, "nonexistant")
+# should not throw anything
+drop(db2, "nonexistant", ifexists=true)
+# should drop "tab2"
+drop(db2, "tab2", ifexists=true)
+@test !in("tab2", tables(db2)[1])
+
+close(db2)
+
+
 @test size(tables(db)) == (11,1)
 
 close(db)
