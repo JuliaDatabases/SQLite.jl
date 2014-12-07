@@ -207,6 +207,12 @@ SQLite.@register db big
 r = query(db, "SELECT big(5)")
 @test r[1][1] == big(5)
 
+doublesum_step(persist, current) = persist + current
+doublesum_final(persist) = 2 * persist
+register(db, 0, doublesum_step, doublesum_final, name="doublesum")
+r = query(db, "SELECT doublesum(UnitPrice) FROM Track")
+s = query(db, "SELECT UnitPrice FROM Track")
+@test_approx_eq r[1][1] 2*sum(s[1])
 
 db2 = SQLiteDB()
 query(db2, "CREATE TABLE tab1 (r REAL, s INT)")

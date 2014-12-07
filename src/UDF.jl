@@ -120,6 +120,8 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
         function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
+            # TODO: I don't think arguments are ever passed to this function,
+            # should we leave them in anyway?
             args = [sqlvalue(context, i) for i in 1:nargs]
             acptr = sqlite3_aggregate_context(context, 0)
             # step function wasn't run
