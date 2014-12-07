@@ -35,6 +35,26 @@ sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, val)
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
+# Internal method for generating an SQLite scalar function from
+# a Julia function name
+function scalarfunc(func,fsym=symbol(string(func)))
+    # check if name defined in Base so we don't clobber Base methods
+    nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
+    return quote
+        #nm needs to be a symbol or expr, i.e. :sin or :(Base.sin)
+        function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
+            args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
+            ret = $(func)(args...)
+            SQLite.sqlreturn(context, ret)
+            nothing
+        end
+    end
+end
+function scalarfunc(expr::Expr)
+    f = eval(expr)
+    return scalarfunc(f)
+end
+
 # convert a bytearray to an int arr[1] is 256^0, arr[2] is 256^1...
 # TODO: would making this a method of convert needlessly pollute the Base namespace?
 function bytestoint(arr::Vector{UInt8})
@@ -120,9 +140,6 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
         function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
-            # TODO: I don't think arguments are ever passed to this function,
-            # should we leave them in anyway?
-            args = [sqlvalue(context, i) for i in 1:nargs]
             acptr = sqlite3_aggregate_context(context, 0)
             # step function wasn't run
             if acptr === C_NULL
@@ -145,33 +162,13 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
                 unsafe_copy!(pointer(acvalbuf), valptr, valsize)
 
                 acval = sqldeserialize(acvalbuf)
-                ret = $(func)(acval, args...)
+                ret = $(func)(acval)
                 c_free(valptr)
                 sqlreturn(context, ret)
             end
             nothing
         end
     end
-end
-
-# Internal method for generating an SQLite scalar function from
-# a Julia function name
-function scalarfunc(func,fsym=symbol(string(func)))
-    # check if name defined in Base so we don't clobber Base methods
-    nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
-    return quote
-        #nm needs to be a symbol or expr, i.e. :sin or :(Base.sin)
-        function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
-            args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
-            ret = $(func)(args...)
-            SQLite.sqlreturn(context, ret)
-            nothing
-        end
-    end
-end
-function scalarfunc(expr::Expr)
-    f = eval(expr)
-    return scalarfunc(f)
 end
 
 # User-facing macro for convenience in registering a simple function
