@@ -35,22 +35,6 @@ sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, val)
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
-# a fixed size type to store the aggregate context
-#type AggCont
-#    nbytes::Int
-#    optr::Ptr{UInt8}
-#
-#    function AggCont(o)
-#        # TODO: is serialization necessary? maybe just store an array instead
-#        oarr = sqlserialize(o)
-#        osize = sizeof(oarr)
-#        # TODO: can we stop julia from garbage collecting without c_malloc?
-#        optr = convert(Ptr{UInt8}, c_malloc(osize))
-#        unsafe_copy!(optr, pointer(oarr), osize)
-#
-#        return new(osize, optr)
-#    end
-#end
 # convert a bytearray to an int arr[1] is 256^0, arr[2] is 256^1...
 # TODO: would making this a method of convert needlessly pollute the Base namespace?
 function bytestoint(arr::Vector{UInt8})
@@ -61,8 +45,6 @@ function bytestoint(arr::Vector{UInt8})
     end
     s
 end
-# TODO: remove this
-inttobytes(i::Int) = reinterpret(UInt8, [i])
 
 function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
