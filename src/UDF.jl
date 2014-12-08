@@ -55,15 +55,16 @@ function scalarfunc(expr::Expr)
     return scalarfunc(f)
 end
 
-# convert a bytearray to an int arr[1] is 256^0, arr[2] is 256^1...
-# TODO: would making this a method of convert needlessly pollute the Base namespace?
-function bytestoint(arr::Vector{UInt8})
-    l = length(arr)
+# convert a byteptr to an int, ptr[start] -> 256^0, ptr[start+1] -> 256^1...
+# TODO: this assumes little-endian
+function bytestoint(ptr::Ptr{UInt8}, start::Int, len::Int)
     s = 0
-    for (i, v) in enumerate(arr)
-        s += v * 256^(i - 1)
+    for i in start:start+len-1
+        v = unsafe_load(ptr, i)
+        s += v * 256^(i - start)
     end
-    s
+
+    return s
 end
 
 function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
@@ -74,31 +75,25 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
             intsize = sizeof(Int)
             ptrsize = sizeof(Ptr)
             acsize = intsize + ptrsize
-            acarr = pointer_to_array(
-                convert(Ptr{UInt8}, sqlite3_aggregate_context(context, acsize)),
-                acsize,
-                false,
-            )
-            # acarr will be zeroed-out if this is the first iteration
+            acptr = convert(Ptr{UInt8}, sqlite3_aggregate_context(context, acsize))
+            # acptr will be zeroed-out if this is the first iteration
             ret = ccall(
                 :memcmp, Cint, (Ptr{UInt8}, Ptr{UInt8}, Cuint),
-                zeros(UInt8, acsize), acarr, acsize,
+                zeros(UInt8, acsize), acptr, acsize,
             )
             try
                 if ret == 0
                     acval = $(init)
-                    # TODO: i'm sure there's a better way
+                    # TODO: allocate 256 byte
                     valsize = sizeof(sqlserialize(acval))
                     valptr = convert(Ptr{UInt8}, c_malloc(valsize))
                 else
-                    # retrieve the size of the serialized value (first sizeof(Int) bytes)
-                    sizebuf = zeros(UInt8, intsize)
-                    unsafe_copy!(sizebuf, 1, acarr, 1, intsize)
-                    valsize = bytestoint(sizebuf)
-                    # retrieve the ptr to the serialized value (last sizeof(Ptr) bytes)
-                    ptrbuf = zeros(UInt8, ptrsize)
-                    unsafe_copy!(ptrbuf, 1, acarr, intsize+1, ptrsize)
-                    valptr = reinterpret(Ptr{UInt8}, bytestoint(ptrbuf))
+                    # size of serialized value is first sizeof(Int) bytes
+                    valsize = bytestoint(acptr, 1, intsize)
+                    # ptr to serialized value is last sizeof(Ptr) bytes
+                    valptr = reinterpret(
+                        Ptr{UInt8}, bytestoint(acptr, intsize+1, ptrsize)
+                    )
                     # deserialize the value pointed to by valptr
                     acvalbuf = zeros(UInt8, valsize)
                     unsafe_copy!(pointer(acvalbuf), valptr, valsize)
@@ -110,21 +105,24 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                 newsize > valsize && (valptr = convert(Ptr{UInt8}, c_realloc(valptr, newsize)))
                 # copy serialized return value
                 unsafe_copy!(valptr, pointer(funcret), newsize)
+                # following copies are easier with arrays
+                acptr = pointer_to_array(acptr, acsize, false)
                 # copy the size of the serialized value
                 unsafe_copy!(
-                    acarr, 1,
+                    acptr, 1,
                     reinterpret(UInt8, [newsize]), 1,
                     intsize,
                 )
-                # copy the value of the pointer to the serialized value
-                # TODO: can we just use ptrbuf here?
+                # copy the address of the pointer to the serialized value
                 unsafe_copy!(
-                    acarr, intsize+1,
+                    acptr, intsize+1,
                     reinterpret(UInt8, [valptr]), 1,
                     ptrsize,
                 )
             catch
-                # TODO: this won't catch all memory leaks so add an else clause
+                # TODO:
+                 # this won't catch all memory leaks so add an else clause
+                 # alternatively use c-style checking in this function
                 if isdefined(:valptr)
                     c_free(valptr)
                 end
@@ -140,28 +138,25 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
         function $(nm)(context::Ptr{Void}, nargs::Cint, values::Ptr{Ptr{Void}})
-            acptr = sqlite3_aggregate_context(context, 0)
+            acptr = convert(Ptr{UInt8}, sqlite3_aggregate_context(context, 0))
             # step function wasn't run
-            if acptr === C_NULL
+            if acptr == C_NULL
                 sqlreturn(context, $(init))
             else
                 intsize = sizeof(Int)
                 ptrsize = sizeof(Ptr)
                 acsize = intsize + ptrsize
-                acarr = pointer_to_array(convert(Ptr{UInt8}, acptr), acsize, false)
                 # load size
-                sizebuf = zeros(UInt8, intsize)
-                unsafe_copy!(sizebuf, 1, acarr, 1, intsize)
-                valsize = bytestoint(sizebuf)
+                valsize = bytestoint(acptr, 1, intsize)
                 # load ptr
-                ptrbuf = zeros(UInt8, ptrsize)
-                unsafe_copy!(ptrbuf, 1, acarr, intsize+1, ptrsize)
-                valptr = reinterpret(Ptr{UInt8}, bytestoint(ptrbuf))
+                valptr = reinterpret(
+                    Ptr{UInt8}, bytestoint(acptr, intsize+1, ptrsize)
+                )
                 # load value
                 acvalbuf = zeros(UInt8, valsize)
                 unsafe_copy!(pointer(acvalbuf), valptr, valsize)
-
                 acval = sqldeserialize(acvalbuf)
+
                 ret = $(func)(acval)
                 c_free(valptr)
                 sqlreturn(context, ret)
