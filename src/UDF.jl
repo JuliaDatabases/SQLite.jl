@@ -113,20 +113,16 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                 # copy serialized return value
                 unsafe_copy!(valptr, pointer(funcret), newsize)
 
-                # following copies are easier with arrays
-                acptr = pointer_to_array(acptr, acsize, false)
                 # copy the size of the serialized value
                 unsafe_copy!(
-                    acptr, 1,
-                    reinterpret(UInt8, [newsize]), 1,
-                    intsize,
+                    acptr,
+                    pointer(reinterpret(UInt8, [newsize])),
+                    intsize
                 )
                 # copy the address of the pointer to the serialized value
-                unsafe_copy!(
-                    acptr, intsize+1,
-                    reinterpret(UInt8, [valptr]), 1,
-                    ptrsize,
-                )
+                for (i, byte) in enumerate(reinterpret(UInt8, [valptr]))
+                    unsafe_store!(acptr, byte, intsize+i)
+                end
             catch
                 # TODO:
                  # this won't catch all memory leaks so add an else clause
