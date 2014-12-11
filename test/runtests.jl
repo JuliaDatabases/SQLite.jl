@@ -220,6 +220,29 @@ r = query(db, "SELECT mycount(TrackId) FROM PlaylistTrack")
 s = query(db, "SELECT count(TrackId) FROM PlaylistTrack")
 @test r[1] == s[1]
 
+bigsum(p, c) = p + big(c)
+register(db, big(0), bigsum)
+r = query(db, "SELECT bigsum(TrackId) FROM PlaylistTrack")
+s = query(db, "SELECT TrackId FROM PlaylistTrack")
+@test r[1][1] == big(sum(s[1]))
+
+query(db, "CREATE TABLE points (x INT, y INT, z INT)")
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [1, 2, 3])
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [4, 5, 6])
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [7, 8, 9])
+type Point3D{T<:Number}
+    x::T
+    y::T
+    z::T
+end
+==(a::Point3D, b::Point3D) = a.x == b.x && a.y == b.y && a.z == b.z
++(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
+sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
+register(db, Point3D(0, 0, 0), sumpoint)
+r = query(db, "SELECT sumpoint(x, y, z) FROM points")
+@test r[1][1] == Point3D(12, 15, 18)
+drop(db, "points")
+
 db2 = SQLiteDB()
 query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
@@ -236,7 +259,6 @@ drop(db2, "tab2", ifexists=true)
 @test !in("tab2", tables(db2)[1])
 
 close(db2)
-
 
 @test size(tables(db)) == (11,1)
 
