@@ -76,14 +76,14 @@ A Julia interface to the SQLite library and support for operations on DataFrames
 
   `drop` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
 
-* `registerfunc(db::SQLiteDB, nargs::Int, func::Function, isdeterm::Bool=true; name="")`
+* `register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)`
+* `register(db::SQLiteDB, init, step::Function, final::Function; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)`
 
-  Register a function `func` (which takes `nargs` number of arguments) with the SQLite database connection `db`. If the keyword argument `name` is given the function is registered with that name, otherwise it is registered with the name of `func`. If the function is stochastic (e.g. uses a random number) `isdeterm` should be set to `false`, see SQLite's [function creation documentation](http://sqlite.org/c3ref/create_function.html) for more information.
+  Register a scalar (first method) or aggregate (second method) function with a `SQLiteDB`.
 
-* `@scalarfunc function`
-  `@scalarfunc name function`
+* `@register db function`
 
-  Define a function which can then be passed to `registerfunc`. In the first usage the function name is infered from the function definition, in the second it is explicitly given as the first parameter. The second form is only recommended when it's use is absolutely necessary, see below.
+  Automatically define then register `function` with a `SQLiteDB`.
 
 * `sr"..."`
 
@@ -188,45 +188,31 @@ The sr"..." currently escapes all special characters in a string but it may be c
 
 ##### Custom Scalar Functions
 
-SQLite.jl also provides a way that you can implement your own [Scalar Functions](https://www.sqlite.org/lang_corefunc.html) (though [Aggregate Functions](https://www.sqlite.org/lang_aggfunc.html) are not currently supported). This is done using the `registerfunc` function and `@scalarfunc` macro.
+SQLite.jl also provides a way that you can implement your own [Scalar Functions](https://www.sqlite.org/lang_corefunc.html). This is done using the `register` function and macro.
 
-`@scalarfunc` takes an optional function name and a function and defines a new function which can be passed to `registerfunc`. It can be used with block function syntax
+`@register` takes a `SQLiteDB` and a function. The function can be in block syntax
 
 ```julia
-julia> @scalarfunc function add3(x)
+julia> @register db function add3(x)
        x + 3
        end
-add3 (generic function with 1 method)
-
-julia> @scalarfunc add5 function irrelevantfuncname(x)
-       x + 5
-       end
-add5 (generic function with 1 method)
 ```
 
 inline function syntax
 
 ```julia
-julia> @scalarfunc mult3(x) = 3 * x
-mult3 (generic function with 1 method)
-
-julia> @scalarfunc mult5 anotherirrelevantname(x) = 5 * x
-mult5 (generic function with 1 method)
+julia> @register db mult3(x) = 3 * x
 ```
 
-and previously defined functions (note that name inference does not work with this method)
+and previously defined functions
 
 ```julia
-julia> @scalarfunc sin sin
-sin (generic function with 1 method)
-
-julia> @scalarfunc subtract -
-subtract (generic function with 1 method)
+julia> @register db sin
 ```
 
-The function that is defined can then be passed to `registerfunc`. `registerfunc` takes three arguments; the database to which the function should be registered, the number of arguments that the function takes and the function itself. The function is registered to the database connection rather than the database itself so must be registered each time the database opens. Your function can not take more than 127 arguments unless it takes a variable number of arguments, if it does take a variable number of arguments then you must pass -1 as the second argument to `registerfunc`.
+The `register` function takes optional arguments; `nargs` which defaults to `-1`, `name` which defaults to the name of the function, `isdeterm` which defaults to `true`. In practice these rarely need to be used.
 
-The `@scalarfunc` macro uses the `sqlreturn` function to return your function's return value to SQLite. By default, `sqlreturn` maps the returned value to a [native SQLite type](http://sqlite.org/c3ref/result_blob.html) or, failing that, serializes the julia value and stores it as a `BLOB`. To change this behaviour simply define a new method for `sqlreturn` which then calls a previously defined method for `sqlreturn`. Methods which map to native SQLite types are
+The `register` function uses the `sqlreturn` function to return your function's return value to SQLite. By default, `sqlreturn` maps the returned value to a [native SQLite type](http://sqlite.org/c3ref/result_blob.html) or, failing that, serializes the julia value and stores it as a `BLOB`. To change this behaviour simply define a new method for `sqlreturn` which then calls a previously defined method for `sqlreturn`. Methods which map to native SQLite types are
 
 ```julia
 sqlreturn(context, ::NullType)
@@ -251,3 +237,23 @@ sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 ```
 
 Any new method defined for `sqlreturn` must take two arguments and must pass the first argument straight through as the first argument.
+
+#### Custom Aggregate Functions
+
+Using the `register` function, you can also define your own aggregate functions with largely the same semantics.
+
+The `register` function for aggregates must take a `SQLiteDB`, an initial value, a step function and a final function. The first argument to the step function will be the return value of the previous function (or the initial value if it is the first iteration). The final function must take a single argument which will be the return value of the last step function.
+
+```julia
+julia> dsum(prev, cur) = prev + cur
+
+julia> dsum(prev) = 2 * prev
+
+julia> register(db, 0, dsum, dsum)
+```
+
+If no name is given the name of the second (final) function is used (in this case "dsum"). You can also use lambdas, the following does the same as the previous code snippet
+
+```julia
+julia> register(db, 0, (p,c) -> p+c, p -> 2p, name="dsum")
+```
