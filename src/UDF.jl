@@ -120,8 +120,9 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                     intsize
                 )
                 # copy the address of the pointer to the serialized value
-                for (i, byte) in enumerate(reinterpret(UInt8, [valptr]))
-                    unsafe_store!(acptr, byte, intsize+i)
+                valarr = reinterpret(UInt8, [valptr])
+                for i in 1:length(valarr)
+                    unsafe_store!(acptr, a[i], intsize+i)
                 end
             catch
                 # TODO:
