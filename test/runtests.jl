@@ -215,8 +215,7 @@ s = query(db, "SELECT UnitPrice FROM Track")
 @test_approx_eq r[1][1] 2*sum(s[1])
 
 mycount(p, c) = p + 1
-mycount(p) = p
-register(db, 0, mycount, mycount)
+register(db, 0, mycount)
 r = query(db, "SELECT mycount(TrackId) FROM PlaylistTrack")
 s = query(db, "SELECT count(TrackId) FROM PlaylistTrack")
 @test r[1] == s[1]

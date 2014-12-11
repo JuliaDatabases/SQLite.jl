@@ -206,8 +206,8 @@ end
 
 # as above but for aggregate functions
 function register(
-    db::SQLiteDB, init, step::Function, final::Function;
-    nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true
+    db::SQLiteDB, init, step::Function, final::Function=identity;
+    nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     nargs < -1 && (nargs = -1)

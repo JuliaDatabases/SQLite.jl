@@ -77,7 +77,7 @@ A Julia interface to the SQLite library and support for operations on DataFrames
   `drop` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
 
 * `register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)`
-* `register(db::SQLiteDB, init, step::Function, final::Function; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)`
+* `register(db::SQLiteDB, init, step::Function, final::Function=identity; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)`
 
   Register a scalar (first method) or aggregate (second method) function with a `SQLiteDB`.
 
@@ -252,7 +252,7 @@ julia> dsum(prev) = 2 * prev
 julia> register(db, 0, dsum, dsum)
 ```
 
-If no name is given the name of the second (final) function is used (in this case "dsum"). You can also use lambdas, the following does the same as the previous code snippet
+If no name is given the name of the first (step) function is used (in this case "dsum"). You can also use lambdas, the following does the same as the previous code snippet
 
 ```julia
 julia> register(db, 0, (p,c) -> p+c, p -> 2p, name="dsum")
