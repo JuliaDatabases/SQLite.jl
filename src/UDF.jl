@@ -102,36 +102,32 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                 acval = sqldeserialize(acvalbuf)
             end
 
+            local funcret
             try
                 funcret = sqlserialize($(func)(acval, args...))
-
-                newsize = sizeof(funcret)
-                if newsize > valsize
-                    # TODO: increase this in a cleverer way?
-                    valptr = convert(Ptr{UInt8}, c_realloc(valptr, newsize))
-                end
-                # copy serialized return value
-                unsafe_copy!(valptr, pointer(funcret), newsize)
-
-                # copy the size of the serialized value
-                unsafe_copy!(
-                    acptr,
-                    pointer(reinterpret(UInt8, [newsize])),
-                    intsize
-                )
-                # copy the address of the pointer to the serialized value
-                valarr = reinterpret(UInt8, [valptr])
-                for i in 1:length(valarr)
-                    unsafe_store!(acptr, valarr[i], intsize+i)
-                end
             catch
-                # TODO:
-                 # this won't catch all memory leaks so add an else clause
-                 # alternatively use c-style checking in this function
-                if isdefined(:valptr)
-                    c_free(valptr)
-                end
+                c_free(valptr)
                 rethrow()
+            end
+
+            newsize = sizeof(funcret)
+            if newsize > valsize
+                # TODO: increase this in a cleverer way?
+                valptr = convert(Ptr{UInt8}, c_realloc(valptr, newsize))
+            end
+            # copy serialized return value
+            unsafe_copy!(valptr, pointer(funcret), newsize)
+
+            # copy the size of the serialized value
+            unsafe_copy!(
+                acptr,
+                pointer(reinterpret(UInt8, [newsize])),
+                intsize
+            )
+            # copy the address of the pointer to the serialized value
+            valarr = reinterpret(UInt8, [valptr])
+            for i in 1:length(valarr)
+                unsafe_store!(acptr, valarr[i], intsize+i)
             end
             nothing
         end
@@ -159,17 +155,18 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
                     Ptr{UInt8}, bytestoint(acptr, intsize+1, ptrsize)
                 )
 
-                try
-                    # load value
-                    acvalbuf = zeros(UInt8, valsize)
-                    unsafe_copy!(pointer(acvalbuf), valptr, valsize)
-                    acval = sqldeserialize(acvalbuf)
+                # load value
+                acvalbuf = zeros(UInt8, valsize)
+                unsafe_copy!(pointer(acvalbuf), valptr, valsize)
+                acval = sqldeserialize(acvalbuf)
 
+                local ret
+                try
                     ret = $(func)(acval)
-                    sqlreturn(context, ret)
                 finally
                     c_free(valptr)
                 end
+                sqlreturn(context, ret)
             end
             nothing
         end
