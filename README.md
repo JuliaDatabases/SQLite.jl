@@ -77,11 +77,11 @@ A Julia interface to the SQLite library and support for operations on DataFrames
   `drop` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
 
 * `@register database function`
-  `register(db::SQLiteDB, func::Function; nargs::Integer=-1, name::AbstractString=string(symbol(func)), isdeterm::Bool=true)
+  `register(db::SQLiteDB, func::Function; nargs::Integer=-1, name::AbstractString=string(symbol(func)), isdeterm::Bool=true)`
 
   Register an arbitrary julia function `func` with the SQLite database connection `db`. The macro roughly expands to `register(database, function)` and can be placed before a block- or inline-style function definition. `nargs` is the number of arguments that your julia function takes but this should be left at the default unless you need to do something exceptionally weird. `name` is the name under which the function will be registered and defaults to the name of the julia function. If your julia function has an element of randomness to it then you should set `isdeterm` to `false`.
 
-  For more information see SQLite's [function creation documentation](http://sqlite.org/c3ref/create_function.html) the IJulia Notebook.
+  For more information see SQLite's [function creation documentation](http://sqlite.org/c3ref/create_function.html) or the IJulia Notebook.
 
 * `sr"..."`
 
