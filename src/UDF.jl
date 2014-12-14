@@ -89,6 +89,7 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                 valsize = 256
                 # avoid the garbage collector using malloc
                 valptr = convert(Ptr{UInt8}, c_malloc(valsize))
+                valptr == C_NULL && throw(SQLiteException("memory error"))
             else
                 # size of serialized value is first sizeof(Int) bytes
                 valsize = bytestoint(acptr, 1, intsize)
@@ -113,7 +114,13 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
             newsize = sizeof(funcret)
             if newsize > valsize
                 # TODO: increase this in a cleverer way?
-                valptr = convert(Ptr{UInt8}, c_realloc(valptr, newsize))
+                tmp = convert(Ptr{UInt8}, c_realloc(valptr, newsize))
+                if tmp == C_NULL
+                    c_free(valptr)
+                    throw(SQLiteException("memory error"))
+                else
+                    valptr = tmp
+                end
             end
             # copy serialized return value
             unsafe_copy!(valptr, pointer(funcret), newsize)
