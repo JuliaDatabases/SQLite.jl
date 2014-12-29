@@ -1,7 +1,18 @@
 module SQLite
 
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
-       execute, query, tables, drop, create, append
+       execute, query, tables, indices, columns, drop, dropindex,
+       create, createindex, append, deleteduplicates
+
+if VERSION < v"0.4.0-dev"
+    const AbstractString = String
+    const UInt8 = Uint8
+    const UInt16 = Uint16
+    const UInt32 = Uint32
+    const UInt64 = Uint64
+    const UInt128 = Uint128
+    const UInt = Uint
+end
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -10,11 +21,15 @@ end
 include("consts.jl")
 include("api.jl")
 
-
 # Custom NULL type
 immutable NullType end
 const NULL = NullType()
 Base.show(io::IO,::NullType) = print(io,"NULL")
+
+# internal wrapper type to, in-effect, mark something which has been serialized
+immutable Serialization
+    object
+end
 
 type ResultSet
     colnames
@@ -22,6 +37,7 @@ type ResultSet
 end
 ==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
+Base.convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
 
 type SQLiteDB{T<:AbstractString}
     file::T
@@ -132,13 +148,20 @@ Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_
 Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
 Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
 Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+# We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
+# as the "official" bytes type instead of Vector{UInt8}
+Base.bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
-    serialize(t,x)
+    # deserialize will sometimes return a random object when called on an array
+    # which has not been previously serialized, we can use this type to check
+    # that the array has been serialized
+    s = Serialization(x)
+    serialize(t,s)
     return takebuf_array(t)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val) = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,sqlserialize(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
@@ -159,7 +182,18 @@ function execute(db::SQLiteDB,sql::AbstractString)
     return changes(db)
 end
 
-sqldeserialize(r) = deserialize(IOBuffer(r))
+const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
+function sqldeserialize(r)
+    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
+            SERIALIZATION, r, min(18,length(r)))
+    
+    if ret == 0
+        v = deserialize(IOBuffer(r))
+        return v.object
+    else
+        return r
+    end
+end
 
 function query(db::SQLiteDB,sql::AbstractString, values=[])
     stmt = SQLiteStmt(db,sql)
@@ -188,8 +222,8 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
             elseif t == SQLITE_BLOB
                 blob = sqlite3_column_blob(stmt.handle,i-1)
                 b = sqlite3_column_bytes(stmt.handle,i-1)
-                buf = zeros(Uint8,b)
-                unsafe_copy!(pointer(buf), convert(Ptr{Uint8},blob), b)
+                buf = zeros(UInt8,b)
+                unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
                 r = sqldeserialize(buf)
             else
                 r = NULL
@@ -212,6 +246,8 @@ end
 function indices(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
+
+columns(db::SQLiteDB,table::String) = query(db,"pragma table_info($table)")
 
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
@@ -257,17 +293,19 @@ commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-function drop(db::SQLiteDB,table::AbstractString)
+function drop(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
+    exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop table $table")
+        execute(db,"drop table $exists $table")
     end
     execute(db,"vacuum")
     return changes(db)
 end
 
-function dropindex(db::SQLiteDB,index::AbstractString)
+function dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
+    exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop index $index")
+        execute(db,"drop index $exists $index")
     end
     return changes(db)
 end
@@ -279,7 +317,9 @@ gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
 function create(db::SQLiteDB,name::AbstractString,table,
-            colnames=AbstractString[],coltypes=DataType[];temp::Bool=false)
+            colnames=AbstractString[],
+            coltypes=DataType[]
+            ;temp::Bool=false,ifnotexists::Bool=false)
     N, M = size(table)
     colnames = isempty(colnames) ? ["x$i" for i=1:M] : colnames
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
@@ -288,7 +328,8 @@ function create(db::SQLiteDB,name::AbstractString,table,
     transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
-        execute(db,"CREATE $(t)TABLE $name ($(join(cols,',')))")
+        exists = ifnotexists ? "if not exists" : ""
+        execute(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
         # insert statements
         params = chop(repeat("?,",M))
         stmt = SQLiteStmt(db,"insert into $name values ($params)")
@@ -305,10 +346,12 @@ function create(db::SQLiteDB,name::AbstractString,table,
     return changes(db)
 end
 
-function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols;unique::Bool=true)
+function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols
+                    ;unique::Bool=true,ifnotexists::Bool=false)
     u = unique ? "unique" : ""
+    exists = ifnotexists ? "if not exists" : ""
     transaction(db) do
-        execute(db,"create $u index $index on $table ($cols)")
+        execute(db,"create $u index $exists $index on $table ($cols)")
     end
     execute(db,"analyze $index")
     return changes(db)
@@ -342,6 +385,3 @@ function deleteduplicates(db,table::AbstractString,cols::AbstractString)
 end
 
 end #SQLite module
-
-#TODO
- #create julia functions (https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function)

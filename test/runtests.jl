@@ -1,5 +1,15 @@
 using Base.Test, SQLite
 
+if VERSION < v"0.4.0-dev"
+    const AbstractString = String
+    const UInt8 = Uint8
+    const UInt16 = Uint16
+    const UInt32 = Uint32
+    const UInt64 = Uint64
+    const UInt128 = Uint128
+    const UInt = Uint
+end
+
 a = SQLiteDB()
 b = SQLiteDB(UTF16=true)
 c = SQLiteDB(":memory:",UTF16=true)
@@ -114,6 +124,34 @@ r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
 drop(db, "temp")
 
+binddb = SQLiteDB()
+query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
+query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[NULL, int64(6), 6.4, "some text", b"bytearray"])
+r = query(binddb, "SELECT * FROM temp")
+for (v, t) in zip(r.values, [SQLite.NullType, Int64, Float64, AbstractString, Vector{UInt8}])
+    @test isa(v[1], t)
+end
+query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", b"b"])
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", BigInt(2)])
+type Point{T}
+    x::T
+    y::T
+end
+==(a::Point, b::Point) = a.x == b.x && a.y == b.y
+p1 = Point(1, 2)
+p2 = Point(1.3, 2.4)
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p1])
+query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p2])
+r = query(binddb, "SELECT * FROM blobtest")
+for v in r.values[1]
+    @test v == b"a"
+end
+for (v1, v2) in zip(r.values[2], Any[b"b", BigInt(2), p1, p2])
+    @test v1 == v2
+end
+close(binddb)
+
 # I can't be arsed to create a new one using old dictionary syntax
 if VERSION > v"0.4.0-"
     query(db,"CREATE TABLE temp AS SELECT * FROM Album")
@@ -160,6 +198,67 @@ u = query(db, "select sin(milliseconds) from track limit 5")
 SQLite.register(db, hypot; nargs=2, name="hypotenuse")
 v = query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5")
 @test [int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
+
+SQLite.@register db str2arr(s) = convert(Array{UInt8}, s)
+r = query(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2")
+@test r[1] == Any[UInt8[0x41,0x64,0x61,0x6d,0x73],UInt8[0x45,0x64,0x77,0x61,0x72,0x64,0x73]]
+
+SQLite.@register db big
+r = query(db, "SELECT big(5)")
+@test r[1][1] == big(5)
+
+doublesum_step(persist, current) = persist + current
+doublesum_final(persist) = 2 * persist
+register(db, 0, doublesum_step, doublesum_final, name="doublesum")
+r = query(db, "SELECT doublesum(UnitPrice) FROM Track")
+s = query(db, "SELECT UnitPrice FROM Track")
+@test_approx_eq r[1][1] 2*sum(s[1])
+
+mycount(p, c) = p + 1
+register(db, 0, mycount)
+r = query(db, "SELECT mycount(TrackId) FROM PlaylistTrack")
+s = query(db, "SELECT count(TrackId) FROM PlaylistTrack")
+@test r[1] == s[1]
+
+bigsum(p, c) = p + big(c)
+register(db, big(0), bigsum)
+r = query(db, "SELECT bigsum(TrackId) FROM PlaylistTrack")
+s = query(db, "SELECT TrackId FROM PlaylistTrack")
+@test r[1][1] == big(sum(s[1]))
+
+query(db, "CREATE TABLE points (x INT, y INT, z INT)")
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [1, 2, 3])
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [4, 5, 6])
+query(db, "INSERT INTO points VALUES (?, ?, ?)", [7, 8, 9])
+type Point3D{T<:Number}
+    x::T
+    y::T
+    z::T
+end
+==(a::Point3D, b::Point3D) = a.x == b.x && a.y == b.y && a.z == b.z
++(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
+sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
+register(db, Point3D(0, 0, 0), sumpoint)
+r = query(db, "SELECT sumpoint(x, y, z) FROM points")
+@test r[1][1] == Point3D(12, 15, 18)
+drop(db, "points")
+
+db2 = SQLiteDB()
+query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
+
+@test_throws SQLite.SQLiteException create(db2, "tab1", [2.1 3; 3.4 8])
+# should not throw any exceptions
+create(db2, "tab1", [2.1 3; 3.4 8], ifnotexists=true)
+create(db2, "tab2", [2.1 3; 3.4 8])
+
+@test_throws SQLite.SQLiteException drop(db2, "nonexistant")
+# should not throw anything
+drop(db2, "nonexistant", ifexists=true)
+# should drop "tab2"
+drop(db2, "tab2", ifexists=true)
+@test !in("tab2", tables(db2)[1])
+
+close(db2)
 
 @test size(tables(db)) == (11,1)
 
