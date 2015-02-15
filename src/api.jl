@@ -404,7 +404,7 @@ function sqlite3_os_end()
         )
 end
 function sqlite3_free_table(result::Array{AbstractString,1})
-    return ccall( (:sqlite3_free_table, sqlite_lib),
+    return ccall( (:sqlite3_free_table, sqlite3_lib),
         Void, (Ptr{Ptr{Void}},),
         result)
 end
