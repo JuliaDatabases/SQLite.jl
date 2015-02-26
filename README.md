@@ -1,9 +1,10 @@
 SQLite.jl
 =========
 
+[![SQLite on Julia release](http://pkg.julialang.org/badges/SQLite_release.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=release)
+[![SQLite on Julia nightly](http://pkg.julialang.org/badges/SQLite_nightly.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=nightly)
 [![Build Status](https://travis-ci.org/quinnj/SQLite.jl.png)](https://travis-ci.org/quinnj/SQLite.jl)
 [![Coverage Status](https://img.shields.io/coveralls/quinnj/SQLite.jl.svg)](https://coveralls.io/r/quinnj/SQLite.jl)
-[![SQLite](http://pkg.julialang.org/badges/SQLite_release.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=release)
 
 A Julia interface to the SQLite library and support for operations on DataFrames
 
@@ -56,7 +57,7 @@ A Julia interface to the SQLite library and support for operations on DataFrames
   Used to execute prepared `SQLiteStmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `query` below. Also consider the `create`, `drop`, and `append` methods for manipulation statements as further SQLite performance tricks are incorporated automatically.
 
 * `query(db::SQLiteDB, sql::String, values=[])`
-  
+
   An SQL statement `sql` is prepared, executed in the context of `db`, and results, if any, are returned. The return values are a `(String[],Any[])` tuple representing `(column names, result values)`.
 
   The values in `values` are used in parameter binding (see `bind` above). If your statement uses nameless parameters `values` must be a `Vector` of the values you wish to bind to your statment. If your statement uses named parameters `values` must be a Dict where the keys are of type `Symbol`. The key must match an identifier name in the statement (the name **does not** include the ':', '@' or '$' prefix).
