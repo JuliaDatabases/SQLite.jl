@@ -8,6 +8,7 @@ if VERSION < v"0.4.0-dev"
     const UInt64 = Uint64
     const UInt128 = Uint128
     const UInt = Uint
+    typealias AssertionError ErrorException
 end
 
 a = SQLiteDB()
@@ -41,9 +42,9 @@ results = query(db,"SELECT * FROM Employee;")
 @test results[1,5] == NULL
 
 query(db,"SELECT * FROM Album;")
-query(db,"SELECT a.*, b.AlbumId 
-	FROM Artist a 
-	LEFT OUTER JOIN Album b ON b.ArtistId = a.ArtistId 
+query(db,"SELECT a.*, b.AlbumId
+	FROM Artist a
+	LEFT OUTER JOIN Album b ON b.ArtistId = a.ArtistId
 	ORDER BY name;")
 
 EMPTY_RESULTSET = ResultSet(["Rows Affected"],Any[Any[0]])
@@ -168,13 +169,13 @@ end
 r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
-triple(x) = x * 3
-@test_throws ErrorException SQLite.register(db, triple, nargs=186)
+triple(x) = 3x
+@test_throws AssertionError SQLite.register(db, triple, nargs=186)
 SQLite.register(db, triple, nargs=1)
 r = query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
 s = query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")
 for (i, j) in zip(r.values[1], s.values[1])
-    @test_approx_eq i j*3
+    @test_approx_eq i 3j
 end
 
 SQLite.@register db function add4(q)
