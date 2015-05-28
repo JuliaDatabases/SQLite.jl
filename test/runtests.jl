@@ -198,7 +198,7 @@ u = query(db, "select sin(milliseconds) from track limit 5")
 
 SQLite.register(db, hypot; nargs=2, name="hypotenuse")
 v = query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5")
-@test [int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
+@test [Int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
 SQLite.@register db str2arr(s) = convert(Array{UInt8}, s)
 r = query(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2")

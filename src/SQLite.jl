@@ -1,18 +1,10 @@
 module SQLite
 
+using Compat, CSV, Mmap
+
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
        execute, query, tables, indices, columns, drop, dropindex,
        create, createindex, append, deleteduplicates
-
-if VERSION < v"0.4.0-dev"
-    const AbstractString = String
-    const UInt8 = Uint8
-    const UInt16 = Uint16
-    const UInt32 = Uint32
-    const UInt64 = Uint64
-    const UInt128 = Uint128
-    const UInt = Uint
-end
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -20,6 +12,7 @@ end
 
 include("consts.jl")
 include("api.jl")
+include("utils.jl")
 
 # Custom NULL type
 immutable NullType end
@@ -49,7 +42,6 @@ SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 include("UDF.jl")
 export @sr_str, @register, register
 
-
 function changes(db::SQLiteDB)
     new_tot = sqlite3_total_changes(db.handle)
     diff = new_tot - db.changes
@@ -78,6 +70,7 @@ function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
         sqliteerror()
     end
 end
+SQLiteDB() = SQLiteDB(":memory:")
 
 function Base.close{T}(db::SQLiteDB{T})
     db.handle == C_NULL && return
@@ -92,6 +85,11 @@ type SQLiteStmt{T}
     db::SQLiteDB{T}
     handle::Ptr{Void}
     sql::T
+end
+
+type Table
+    db::SQLiteDB
+    name::AbstractString
 end
 
 sqliteprepare(db,sql,stmt,null) = 
@@ -142,7 +140,7 @@ function Base.bind(stmt::SQLiteStmt,name::AbstractString,val)
     end
     return bind(stmt,i,val)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
+Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,Float64(val))
 Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
 Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
 Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
@@ -172,6 +170,7 @@ function execute(stmt::SQLiteStmt)
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)
     elseif r != SQLITE_ROW
+        close(stmt)
         sqliteerror(stmt.db)
     end
     return r
@@ -195,48 +194,93 @@ function sqldeserialize(r)
     end
 end
 
-function query(db::SQLiteDB,sql::AbstractString, values=[])
+type Stream <: IO
+    stmt::SQLiteStmt
+    cols::Int
+    status::Cint
+end
+
+function Base.open(db::SQLiteDB,sql::AbstractString, values=[])
     stmt = SQLiteStmt(db,sql)
     bind(stmt, values)
     status = execute(stmt)
-    ncols = sqlite3_column_count(stmt.handle)
-    if status == SQLITE_DONE || ncols == 0
-        return changes(db)
+    cols = sqlite3_column_count(stmt.handle)
+    return Stream(stmt,cols,status)
+end
+
+function Base.open(table::Table)
+    return open(table.db,"select * from $(table.name)")
+end
+
+function Base.eof(s::Stream)
+    (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
+    return s.status == SQLITE_DONE
+end
+
+Base.start(s::Stream) = 1
+Base.done(s::Stream,col) = eof(s)
+function Base.next(s::Stream,i)
+    t = sqlite3_column_type(s.stmt.handle,i-1)
+    r::Any
+    if t == SQLITE_INTEGER
+        r = sqlite3_column_int64(s.stmt.handle,i-1)
+    elseif t == SQLITE_FLOAT
+        r = sqlite3_column_double(s.stmt.handle,i-1)
+    elseif t == SQLITE_TEXT
+        #TODO: have a way to return text16?
+        r = bytestring( sqlite3_column_text(s.stmt.handle,i-1) )
+    elseif t == SQLITE_BLOB
+        blob = sqlite3_column_blob(s.stmt.handle,i-1)
+        b = sqlite3_column_bytes(s.stmt.handle,i-1)
+        buf = zeros(UInt8,b)
+        unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
+        r = sqldeserialize(buf)
+    else
+        r = NULL
     end
+    if i == s.cols
+        s.status = sqlite3_step(s.stmt.handle)
+        i = 1
+    else
+        i += 1
+    end
+    return r, i
+end
+
+const STREAMBUF = IOBuffer(2048)
+function Base.readline(s::Stream,delim::Char=',',buf::IOBuffer=STREAMBUF)
+    eof(s) && return ""
+    for i = 1:s.cols
+        val = sqlite3_column_text(s.stmt.handle,i-1)
+        write(buf,val == C_NULL ? "" : bytestring(val))
+        write(buf,ifelse(i == s.cols,'\n',delim))
+    end
+    s.status = sqlite3_step(s.stmt.handle)
+    return takebuf_string(buf)
+end
+
+function scalarquery(db::SQLiteDB,sql)
+    stream = SQLite.open(db,sql)
+    return next(stream,1)[1]
+end
+
+function query(db::SQLiteDB,sql::AbstractString, values=[])
+    stream = SQLite.open(db,sql,values)
+    ncols = stream.cols
+    (eof(stream) || ncols == 0) && return changes(db)
     colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
-        colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i-1))
+        colnames[i] = bytestring(sqlite3_column_name(stream.stmt.handle,i-1))
         results[i] = Any[]
     end
-    while status == SQLITE_ROW
-        for i = 1:ncols
-            t = sqlite3_column_type(stmt.handle,i-1) 
-            if t == SQLITE_INTEGER
-                r = sqlite3_column_int64(stmt.handle,i-1)
-            elseif t == SQLITE_FLOAT
-                r = sqlite3_column_double(stmt.handle,i-1)
-            elseif t == SQLITE_TEXT
-                #TODO: have a way to return text16?
-                r = bytestring( sqlite3_column_text(stmt.handle,i-1) )
-            elseif t == SQLITE_BLOB
-                blob = sqlite3_column_blob(stmt.handle,i-1)
-                b = sqlite3_column_bytes(stmt.handle,i-1)
-                buf = zeros(UInt8,b)
-                unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
-                r = sqldeserialize(buf)
-            else
-                r = NULL
-            end
-            push!(results[i],r)
-        end
-        status = sqlite3_step(stmt.handle)
+    col = 1
+    while !eof(stream)
+        c = col
+        r, col = next(stream,col)
+        push!(results[c],r)
     end
-    if status == SQLITE_DONE
-        return ResultSet(colnames, results)
-    else
-        sqliteerror(stmt.db)
-    end
+    return ResultSet(colnames, results)
 end
 
 function tables(db::SQLiteDB)
@@ -316,6 +360,12 @@ gettype{T<:AbstractString}(::Type{T}) = " TEXT"
 gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
+function create(db::SQLiteDB,name::AbstractString,table::AbstractVector,
+            colnames=AbstractString[],coltypes=DataType[]
+            ;temp::Bool=false,ifnotexists::Bool=false)
+    table = reshape(table,(length(table),1))
+    return create(db,name,table,colnames,coltypes;temp=temp,ifnotexists=ifnotexists)
+end
 function create(db::SQLiteDB,name::AbstractString,table,
             colnames=AbstractString[],
             coltypes=DataType[]
@@ -324,26 +374,128 @@ function create(db::SQLiteDB,name::AbstractString,table,
     colnames = isempty(colnames) ? ["x$i" for i=1:M] : colnames
     coltypes = isempty(coltypes) ? [typeof(table[1,i]) for i=1:M] : coltypes
     length(colnames) == length(coltypes) || throw(SQLiteException("colnames and coltypes must have same length"))
-    cols = [colnames[i] * gettype(coltypes[i]) for i = 1:M]
+    cols = [colnames[i] * SQLite.gettype(coltypes[i]) for i = 1:length(colnames)]
     transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
         exists = ifnotexists ? "if not exists" : ""
-        execute(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
+        SQLite.execute(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
         # insert statements
-        params = chop(repeat("?,",M))
-        stmt = SQLiteStmt(db,"insert into $name values ($params)")
-        #bind, step, reset loop for inserting values
-        for row = 1:N
-            for col = 1:M
-                @inbounds v = table[row,col]
-                bind(stmt,col,v)
+        if N*M != 0
+            params = chop(repeat("?,",M))
+            stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+            #bind, step, reset loop for inserting values
+            for row = 1:N
+                for col = 1:M
+                    @inbounds v = table[row,col]
+                    bind(stmt,col,v)
+                end
+                execute(stmt)
             end
-            execute(stmt)
         end
     end
     execute(db,"analyze $name")
-    return changes(db)
+    return ResultSet(["Rows Loaded"],Any[Any[N]])
+end
+
+const SPACE = UInt8(' ')
+const TAB = UInt8('\t')
+const MINUS = UInt8('-')
+const PLUS = UInt8('+')
+const NEG_ONE = UInt8('0')-UInt8(1)
+const ZERO = UInt8('0')
+const TEN = UInt8('9')+UInt8(1)
+
+# io = Mmap.Array, pos = current parsing position, eof = length(io) + 1
+@inline function readbind{T<:Integer}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
+    @inbounds begin
+    b = io[pos]; pos += 1
+    while pos < eof && (b == SPACE || b == TAB || b == q)
+        b = io[pos]; pos += 1
+    end
+    if pos == eof || b == d || b == n
+        bind(stmt,col,NULL)
+        return pos
+    end
+    negative = false
+    if b == MINUS
+        negative = true
+        b = io[pos]; pos += 1
+    elseif b == PLUS
+        b = io[pos]; pos += 1
+    end
+    v = zero(T)
+    while pos < eof && NEG_ONE < b < TEN
+        # process digits
+        v *= 10
+        v += b - ZERO
+        b = io[pos]; pos += 1
+    end
+    end # @inbounds
+    if b == d || b == n || pos == eof
+        bind(stmt,col,negative ? -v : v)
+        return pos
+    else
+        throw(CSV.CSVError("error parsing $T on column $col, row $row; parsed $v before encountering $(Char(b)) character"))
+    end
+end
+
+@inline function readbind{T<:AbstractString}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
+    orig_pos = pos
+    @inbounds while pos < eof
+        b = io[pos]; pos += 1
+        if b == q
+            while pos < eof
+                b = io[pos]; pos += 1
+                if b == e
+                    b = io[pos]; pos += 2
+                elseif b == q
+                    break
+                end
+            end
+        elseif b == d || b == n
+            break
+        end
+    end
+    if orig_pos == pos-1
+        bind(stmt,col,NULL)
+    else
+        ccall( (:sqlite3_bind_text, sqlite3_lib),
+            Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
+            stmt.handle,col,pointer(io.array)+Uint(orig_pos-1),pos-orig_pos-1,C_NULL)
+    end
+    return pos
+end
+
+function create(db::SQLiteDB,file::CSV.File,name::AbstractString=basename(file.fullpath)
+                ;temp::Bool=false,ifnotexists::Bool=false)
+    names = make_unique([identifier(i) for i in file.header])
+    sqltypes = [string(names[i]) * SQLite.gettype(file.types[i]) for i = 1:file.cols]
+    N = transaction(db) do
+        # create table statement
+        t = temp ? "TEMP " : ""
+        exists = ifnotexists ? "if not exists" : ""
+        SQLite.execute(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
+        # insert statements
+        params = chop(repeat("?,",file.cols))
+        stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+        #bind, step, reset loop for inserting values
+        io = Mmap.Array(file.fullpath)
+        pos = file.datapos
+        len = length(io)+1
+        q = file.quotechar; e = file.escapechar; d = file.delim; n = file.newline
+        N = 0
+        while pos < len
+            for col = 1:file.cols
+                pos = readbind(io,pos,len,file.types[col],N,col,stmt,q,e,d,n)
+            end
+            execute(stmt)
+            N += 1
+        end
+        return N
+    end
+    execute(db,"analyze $name")
+    return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
 function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols
@@ -357,6 +509,27 @@ function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,co
     return changes(db)
 end
 
+function append(db::SQLiteDB,name::AbstractString,file::CSV.File)
+    N = transaction(db) do
+        # insert statements
+        params = chop(repeat("?,",file.cols))
+        stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+        #bind, step, reset loop for inserting values
+        io = Mmap.Stream(file.fullpath)
+        CSV.skipto!(io,file,1,file.datarow)
+        N = 0
+        while !eof(io)
+            for col = 1:file.cols
+                readbind(io,file,file.types[col],col,stmt)
+            end
+            execute(stmt)
+            N += 1
+        end
+        return N
+    end
+    execute(db,"analyze $name")
+    return ResultSet(["Rows Loaded"],Any[Any[N]])
+end
 function append(db::SQLiteDB,name::AbstractString,table)
     N, M = size(table)
     transaction(db) do
@@ -373,7 +546,7 @@ function append(db::SQLiteDB,name::AbstractString,table)
         end
     end
     execute(db,"analyze $name")
-    return return changes(db)
+    return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
 function deleteduplicates(db,table::AbstractString,cols::AbstractString)
