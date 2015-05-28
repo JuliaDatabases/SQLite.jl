@@ -39,10 +39,10 @@ begin
         return position(io)
     end
     ourstrwidth(x::AbstractString) = strwidth(x) + 2 # -> Int
-    ourstrwidth(s::Symbol) = int(ccall(:u8_strwidth,
+    ourstrwidth(s::Symbol) = Int(ccall(:u8_strwidth,
                                        Csize_t,
                                        (Ptr{Uint8}, ),
-                                       convert(Ptr{Uint8}, s)))
+                                       s))
 end
 
 #' @description
