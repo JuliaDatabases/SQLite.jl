@@ -88,7 +88,7 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
                 acval = $(init)
                 valsize = 256
                 # avoid the garbage collector using malloc
-                valptr = convert(Ptr{UInt8}, c_malloc(valsize))
+                valptr = convert(Ptr{UInt8}, Libc.malloc(valsize))
                 valptr == C_NULL && throw(SQLiteException("memory error"))
             else
                 # size of serialized value is first sizeof(Int) bytes
@@ -107,16 +107,16 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
             try
                 funcret = sqlserialize($(func)(acval, args...))
             catch
-                c_free(valptr)
+                Libc.free(valptr)
                 rethrow()
             end
 
             newsize = sizeof(funcret)
             if newsize > valsize
                 # TODO: increase this in a cleverer way?
-                tmp = convert(Ptr{UInt8}, c_realloc(valptr, newsize))
+                tmp = convert(Ptr{UInt8}, Libc.realloc(valptr, newsize))
                 if tmp == C_NULL
-                    c_free(valptr)
+                    Libc.free(valptr)
                     throw(SQLiteException("memory error"))
                 else
                     valptr = tmp
@@ -171,7 +171,7 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
                 try
                     ret = $(func)(acval)
                 finally
-                    c_free(valptr)
+                    Libc.free(valptr)
                 end
                 sqlreturn(context, ret)
             end
@@ -187,7 +187,7 @@ macro register(db, func)
 end
 
 # User-facing method for registering a Julia function to be used within SQLite
-function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
+function register(db::SQLite.DB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
@@ -207,7 +207,7 @@ end
 
 # as above but for aggregate functions
 function register(
-    db::SQLiteDB, init, step::Function, final::Function=identity;
+    db::SQLite.DB, init, step::Function, final::Function=identity;
     nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
