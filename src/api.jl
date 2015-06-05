@@ -106,6 +106,11 @@ function sqlite3_bind_text(stmt::Ptr{Void},col::Int,value::AbstractString)
         Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
         stmt,col,value,sizeof(value),C_NULL)
 end
+function sqlite3_bind_text(stmt::Ptr{Void},col::Int,ptr::Ptr,len::Int)
+    return ccall( (:sqlite3_bind_text, sqlite3_lib),
+        Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
+        stmt,col,ptr,len,C_NULL)
+end
 # SQLITE_API int sqlite3_bind_text16(sqlite3_stmt*, int, const void*, int, void(*)(void*));
 function sqlite3_bind_text16(stmt::Ptr{Void},col::Int,value::UTF16String)
     @NULLCHECK stmt

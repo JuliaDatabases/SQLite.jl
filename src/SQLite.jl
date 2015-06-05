@@ -1,14 +1,20 @@
 module SQLite
 
-using Compat, CSV, Mmap
+using Compat
+reload("/Users/jacobquinn/.julia/v0.4/CSV/src/CSV.jl")
+import CSV
 
-export NULL, SQLiteDB, SQLiteStmt, ResultSet,
-       execute, query, tables, indices, columns, drop, dropindex,
-       create, createindex, append, deleteduplicates
+export NULL, ResultSet,
+       execute!, query, tables, indices, columns, drop!, dropindex!,
+       create, createindex, append!, deleteduplicates!
 
 type SQLiteException <: Exception
     msg::AbstractString
 end
+
+# export SQLiteStmt, SQLiteDB
+# @deprecate SQLiteStmt SQLite.Stmt
+# @deprecate SQLiteDB SQLite.DB
 
 include("consts.jl")
 include("api.jl")
@@ -32,96 +38,78 @@ end
 include("show.jl")
 Base.convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
 
-type SQLiteDB{T<:AbstractString}
-    file::T
+#TODO: Support sqlite3_open_v2
+# Normal constructor from filename
+sqliteopen(file::UTF8String,handle) = sqlite3_open(file,handle)
+# sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
+sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
+sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
+
+type DB
+    file::UTF8String
     handle::Ptr{Void}
     changes::Int
+
+    function DB(f::UTF8String)
+        handle = [C_NULL]
+        f = isempty(f) ? f : expanduser(f)
+        if @OK sqliteopen(f,handle)
+            db = new(f,handle[1],0)
+            register(db, regexp, nargs=2)
+            finalizer(db, x->sqlite3_close(handle[1]))
+            return db
+        else # error
+            sqlite3_close(handle[1])
+            sqliteerror()
+        end
+    end
 end
-SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
+DB(f::AbstractString) = DB(utf8(f))
+DB() = DB(":memory:")
 
-include("UDF.jl")
-export @sr_str, @register, register
+Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
 
-function changes(db::SQLiteDB)
+function changes(db::DB)
     new_tot = sqlite3_total_changes(db.handle)
     diff = new_tot - db.changes
     db.changes = new_tot
     return ResultSet(["Rows Affected"],Any[Any[diff]])
 end
 
-#TODO: Support sqlite3_open_v2
-# Normal constructor from filename
-sqliteopen(file,handle) = sqlite3_open(file,handle)
-sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
-sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
-sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
+type Stmt
+    db::DB
+    handle::Ptr{Void}
 
-function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
-    handle = [C_NULL]
-    utf = UTF16 ? utf16 : utf8
-    file = isempty(file) ? file : expanduser(file)
-    if @OK sqliteopen(utf(file),handle)
-        db = SQLiteDB(utf(file),handle[1])
-        register(db, regexp, nargs=2)
-        finalizer(db,close)
-        return db
-    else # error
-        sqlite3_close(handle[1])
-        sqliteerror()
+    function Stmt(db::DB,sql::AbstractString)
+        handle = [C_NULL]
+        sqliteprepare(db,sql,handle,[C_NULL])
+        stmt = new(db,handle[1])
+        finalizer(stmt, x->sqlite3_finalize(handle[1]))
+        return stmt
     end
 end
-SQLiteDB() = SQLiteDB(":memory:")
 
-function Base.close{T}(db::SQLiteDB{T})
-    db.handle == C_NULL && return
-    # ensure SQLiteStmts are finalised
-    gc()
-    @CHECK db sqlite3_close(db.handle)
-    db.handle = C_NULL
-    return
-end
-
-type SQLiteStmt{T}
-    db::SQLiteDB{T}
-    handle::Ptr{Void}
-    sql::T
-end
+sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
+# sqliteprepare(db::DB{UTF16String},sql,stmt,null) = @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 type Table
-    db::SQLiteDB
+    db::DB
     name::AbstractString
 end
 
-sqliteprepare(db,sql,stmt,null) = 
-    @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
-    @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
-
-function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
-    handle = [C_NULL]
-    sqliteprepare(db,sql,handle,[C_NULL])
-    stmt = SQLiteStmt(db,handle[1],convert(T,sql))
-    finalizer(stmt, close)
-    return stmt
-end
-
-function Base.close(stmt::SQLiteStmt)
-    stmt.handle == C_NULL && return
-    @CHECK stmt.db sqlite3_finalize(stmt.handle)
-    stmt.handle = C_NULL
-    return
-end
+include("UDF.jl")
+export @sr_str, @register, register
 
 # bind a row to nameless parameters
-function Base.bind(stmt::SQLiteStmt, values::Vector)
+function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
-        @inbounds bind(stmt, i, values[i])
+        @inbounds bind!(stmt, i, values[i])
     end
 end
 # bind a row to named parameters
-function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
+function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
@@ -129,26 +117,26 @@ function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
-        bind(stmt, i, values[symbol(name)])
+        bind!(stmt, i, values[symbol(name)])
     end
 end
 # Binding parameters to SQL statements
-function Base.bind(stmt::SQLiteStmt,name::AbstractString,val)
+function bind!(stmt::Stmt,name::AbstractString,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
-    return bind(stmt,i,val)
+    return bind!(stmt,i,val)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,Float64(val))
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
-Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,Float64(val))
+bind!(stmt::Stmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
+bind!(stmt::Stmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
-Base.bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
@@ -159,25 +147,24 @@ function sqlserialize(x)
     serialize(t,s)
     return takebuf_array(t)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
+bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
 # Execute SQL statements
-function execute(stmt::SQLiteStmt)
+function execute!(stmt::Stmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)
     elseif r != SQLITE_ROW
-        close(stmt)
         sqliteerror(stmt.db)
     end
     return r
 end
-function execute(db::SQLiteDB,sql::AbstractString)
-    stmt = SQLiteStmt(db,sql)
-    execute(stmt)
+function execute!(db::DB,sql::AbstractString)
+    stmt = Stmt(db,sql)
+    execute!(stmt)
     return changes(db)
 end
 
@@ -195,15 +182,15 @@ function sqldeserialize(r)
 end
 
 type Stream <: IO
-    stmt::SQLiteStmt
+    stmt::Stmt
     cols::Int
     status::Cint
 end
 
-function Base.open(db::SQLiteDB,sql::AbstractString, values=[])
-    stmt = SQLiteStmt(db,sql)
-    bind(stmt, values)
-    status = execute(stmt)
+function Base.open(db::DB,sql::AbstractString, values=[])
+    stmt = SQLite.Stmt(db,sql)
+    bind!(stmt, values)
+    status = SQLite.execute!(stmt)
     cols = sqlite3_column_count(stmt.handle)
     return Stream(stmt,cols,status)
 end
@@ -247,24 +234,23 @@ function Base.next(s::Stream,i)
     return r, i
 end
 
-const STREAMBUF = IOBuffer(2048)
-function Base.readline(s::Stream,delim::Char=',',buf::IOBuffer=STREAMBUF)
+function Base.readline(s::Stream,delim::Char=',',buf::IOBuffer=IOBuffer())
     eof(s) && return ""
     for i = 1:s.cols
         val = sqlite3_column_text(s.stmt.handle,i-1)
-        write(buf,val == C_NULL ? "" : bytestring(val))
+        val != C_NULL && write(buf,bytestring(val))
         write(buf,ifelse(i == s.cols,'\n',delim))
     end
     s.status = sqlite3_step(s.stmt.handle)
     return takebuf_string(buf)
 end
 
-function scalarquery(db::SQLiteDB,sql)
+function scalarquery(db::DB,sql)
     stream = SQLite.open(db,sql)
     return next(stream,1)[1]
 end
 
-function query(db::SQLiteDB,sql::AbstractString, values=[])
+function query(db::DB,sql::AbstractString, values=[])
     stream = SQLite.open(db,sql,values)
     ncols = stream.cols
     (eof(stream) || ncols == 0) && return changes(db)
@@ -283,29 +269,29 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     return ResultSet(colnames, results)
 end
 
-function tables(db::SQLiteDB)
+function tables(db::DB)
     query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 end
 
-function indices(db::SQLiteDB)
+function indices(db::DB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
-columns(db::SQLiteDB,table::String) = query(db,"pragma table_info($table)")
+columns(db::DB,table::String) = query(db,"pragma table_info($table)")
 
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
     #=
-     Begin a transaction in the spedified mode, default "DEFERRED".
+     Begin a transaction in the specified mode, default "DEFERRED".
 
      If mode is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
      transaction of that (or the default) type is started. Otherwise a savepoint
      is created whose name is mode converted to AbstractString.
     =#
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
-        execute(db, "BEGIN $(mode) TRANSACTION;")
+        execute!(db, "BEGIN $(mode) TRANSACTION;")
     else
-        execute(db, "SAVEPOINT $(mode);")
+        execute!(db, "SAVEPOINT $(mode);")
     end
 end
 
@@ -315,7 +301,7 @@ function transaction(f::Function, db)
     =#
     # generate a random name for the savepoint
     name = string("SQLITE",randstring(10))
-    execute(db,"PRAGMA synchronous = OFF")
+    execute!(db,"PRAGMA synchronous = OFF")
     transaction(db, name)
     try
         f()
@@ -325,31 +311,31 @@ function transaction(f::Function, db)
     finally
         # savepoints are not released on rollback
         commit(db, name)
-        execute(db,"PRAGMA synchronous = ON")
+        execute!(db,"PRAGMA synchronous = ON")
     end
 end
 
 # commit a transaction or savepoint (if name is given)
-commit(db) = execute(db, "COMMIT TRANSACTION;")
-commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
+commit(db) = execute!(db, "COMMIT TRANSACTION;")
+commit(db, name) = execute!(db, "RELEASE SAVEPOINT $(name);")
 
 # rollback transaction or savepoint (if name is given)
-rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
-rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
+rollback(db) = execute!(db, "ROLLBACK TRANSACTION;")
+rollback(db, name) = execute!(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-function drop(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
+function drop!(db::DB,table::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop table $exists $table")
+        execute!(db,"drop table $exists $table")
     end
-    execute(db,"vacuum")
+    execute!(db,"vacuum")
     return changes(db)
 end
 
-function dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
+function dropindex!(db::DB,index::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
-        execute(db,"drop index $exists $index")
+        execute!(db,"drop index $exists $index")
     end
     return changes(db)
 end
@@ -360,13 +346,13 @@ gettype{T<:AbstractString}(::Type{T}) = " TEXT"
 gettype(::Type) = " BLOB"
 gettype(::Type{NullType}) = " NULL"
 
-function create(db::SQLiteDB,name::AbstractString,table::AbstractVector,
+function create(db::DB,name::AbstractString,table::AbstractVector,
             colnames=AbstractString[],coltypes=DataType[]
             ;temp::Bool=false,ifnotexists::Bool=false)
     table = reshape(table,(length(table),1))
     return create(db,name,table,colnames,coltypes;temp=temp,ifnotexists=ifnotexists)
 end
-function create(db::SQLiteDB,name::AbstractString,table,
+function create(db::DB,name::AbstractString,table,
             colnames=AbstractString[],
             coltypes=DataType[]
             ;temp::Bool=false,ifnotexists::Bool=false)
@@ -379,181 +365,194 @@ function create(db::SQLiteDB,name::AbstractString,table,
         # create table statement
         t = temp ? "TEMP " : ""
         exists = ifnotexists ? "if not exists" : ""
-        SQLite.execute(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
+        SQLite.execute!(db,"CREATE $(t)TABLE $exists $name ($(join(cols,',')))")
         # insert statements
         if N*M != 0
             params = chop(repeat("?,",M))
-            stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+            stmt = SQLite.Stmt(db,"insert into $name values ($params)")
             #bind, step, reset loop for inserting values
             for row = 1:N
                 for col = 1:M
                     @inbounds v = table[row,col]
-                    bind(stmt,col,v)
+                    bind!(stmt,col,v)
                 end
-                execute(stmt)
+                execute!(stmt)
             end
         end
     end
-    execute(db,"analyze $name")
+    execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-const SPACE = UInt8(' ')
-const TAB = UInt8('\t')
-const MINUS = UInt8('-')
-const PLUS = UInt8('+')
-const NEG_ONE = UInt8('0')-UInt8(1)
-const ZERO = UInt8('0')
-const TEN = UInt8('9')+UInt8(1)
+# const SPACE = UInt8(' ')
+# const TAB = UInt8('\t')
+# const MINUS = UInt8('-')
+# const PLUS = UInt8('+')
+# const NEG_ONE = UInt8('0')-UInt8(1)
+# const ZERO = UInt8('0')
+# const TEN = UInt8('9')+UInt8(1)
 
-# io = Mmap.Array, pos = current parsing position, eof = length(io) + 1
-@inline function readbind{T<:Integer}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
-    @inbounds begin
-    b = io[pos]; pos += 1
-    while pos < eof && (b == SPACE || b == TAB || b == q)
-        b = io[pos]; pos += 1
-    end
-    if pos == eof || b == d || b == n
-        bind(stmt,col,NULL)
-        return pos
-    end
-    negative = false
-    if b == MINUS
-        negative = true
-        b = io[pos]; pos += 1
-    elseif b == PLUS
-        b = io[pos]; pos += 1
-    end
-    v = zero(T)
-    while pos < eof && NEG_ONE < b < TEN
-        # process digits
-        v *= 10
-        v += b - ZERO
-        b = io[pos]; pos += 1
-    end
-    end # @inbounds
-    if b == d || b == n || pos == eof
-        bind(stmt,col,negative ? -v : v)
-        return pos
+# # io = Mmap.Array, pos = current parsing position, eof = length(io) + 1
+# @inline function readbind{T<:Integer}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
+#     @inbounds begin
+#     b = io[pos]; pos += 1
+#     while pos < eof && (b == SPACE || b == TAB || b == q)
+#         b = io[pos]; pos += 1
+#     end
+#     if pos == eof || b == d || b == n
+#         bind!(stmt,col,NULL)
+#         return pos
+#     end
+#     negative = false
+#     if b == MINUS
+#         negative = true
+#         b = io[pos]; pos += 1
+#     elseif b == PLUS
+#         b = io[pos]; pos += 1
+#     end
+#     v = zero(T)
+#     while pos < eof && NEG_ONE < b < TEN
+#         # process digits
+#         v *= 10
+#         v += b - ZERO
+#         b = io[pos]; pos += 1
+#     end
+#     end # @inbounds
+#     if b == d || b == n || pos == eof
+#         bind!(stmt,col,negative ? -v : v)
+#         return pos
+#     else
+#         throw(CSV.CSVError("error parsing $T on column $col, row $row; parsed $v before encountering $(Char(b)) character"))
+#     end
+# end
+
+# @inline function readbind{T<:AbstractString}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
+#     orig_pos = pos
+#     @inbounds while pos < eof
+#         b = io[pos]; pos += 1
+#         if b == q
+#             while pos < eof
+#                 b = io[pos]; pos += 1
+#                 if b == e
+#                     b = io[pos]; pos += 2
+#                 elseif b == q
+#                     break
+#                 end
+#             end
+#         elseif b == d || b == n
+#             break
+#         end
+#     end
+#     if orig_pos == pos-1
+#         bind!(stmt,col,NULL)
+#     else
+#         ccall( (:sqlite3_bind_text, sqlite3_lib),
+#             Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
+#             stmt.handle,col,pointer(io.array)+Uint(orig_pos-1),pos-orig_pos-1,C_NULL)
+#     end
+#     return pos
+# end
+
+function readbind!{T<:Integer}(io,::Type{T},row,col,stmt)
+    val, isnull = CSV.readfield(io,T,row,col)
+    bind!(stmt,col,ifelse(isnull,NULL,val))
+    return
+end
+function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
+    ptr, len, isnull = CSV.readfield(io,T,row,col)
+    if isnull
+        bind!(stmt,col,NULL)
     else
-        throw(CSV.CSVError("error parsing $T on column $col, row $row; parsed $v before encountering $(Char(b)) character"))
+        sqlite3_bind_text(stmt.handle,col,ptr,len)
     end
+    return
 end
 
-@inline function readbind{T<:AbstractString}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
-    orig_pos = pos
-    @inbounds while pos < eof
-        b = io[pos]; pos += 1
-        if b == q
-            while pos < eof
-                b = io[pos]; pos += 1
-                if b == e
-                    b = io[pos]; pos += 2
-                elseif b == q
-                    break
-                end
-            end
-        elseif b == d || b == n
-            break
-        end
-    end
-    if orig_pos == pos-1
-        bind(stmt,col,NULL)
-    else
-        ccall( (:sqlite3_bind_text, sqlite3_lib),
-            Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
-            stmt.handle,col,pointer(io.array)+Uint(orig_pos-1),pos-orig_pos-1,C_NULL)
-    end
-    return pos
-end
-
-function create(db::SQLiteDB,file::CSV.File,name::AbstractString=basename(file.fullpath)
+function create(db::DB,file::CSV.File,name::AbstractString=basename(file.fullpath)
                 ;temp::Bool=false,ifnotexists::Bool=false)
-    names = make_unique([identifier(i) for i in file.header])
+    names = SQLite.make_unique([SQLite.identifier(i) for i in file.header])
     sqltypes = [string(names[i]) * SQLite.gettype(file.types[i]) for i = 1:file.cols]
     N = transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
         exists = ifnotexists ? "if not exists" : ""
-        SQLite.execute(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
+        SQLite.execute!(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
         # insert statements
         params = chop(repeat("?,",file.cols))
-        stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+        stmt = SQLite.Stmt(db,"insert into $name values ($params)")
         #bind, step, reset loop for inserting values
-        io = Mmap.Array(file.fullpath)
-        pos = file.datapos
-        len = length(io)+1
-        q = file.quotechar; e = file.escapechar; d = file.delim; n = file.newline
+        io = CSV.open(file)
+        seek(io,file.datapos)
         N = 0
-        while pos < len
+        while !eof(io)
             for col = 1:file.cols
-                pos = readbind(io,pos,len,file.types[col],N,col,stmt,q,e,d,n)
+                SQLite.readbind!(io,file.types[col],N,col,stmt)
             end
-            execute(stmt)
+            SQLite.execute!(stmt)
             N += 1
         end
         return N
     end
-    execute(db,"analyze $name")
+    execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols
+function createindex(db::DB,table::AbstractString,index::AbstractString,cols
                     ;unique::Bool=true,ifnotexists::Bool=false)
     u = unique ? "unique" : ""
     exists = ifnotexists ? "if not exists" : ""
     transaction(db) do
-        execute(db,"create $u index $exists $index on $table ($cols)")
+        execute!(db,"create $u index $exists $index on $table ($cols)")
     end
-    execute(db,"analyze $index")
+    execute!(db,"analyze $index")
     return changes(db)
 end
 
-function append(db::SQLiteDB,name::AbstractString,file::CSV.File)
+function append!(db::DB,name::AbstractString,file::CSV.File)
     N = transaction(db) do
         # insert statements
         params = chop(repeat("?,",file.cols))
-        stmt = SQLite.SQLiteStmt(db,"insert into $name values ($params)")
+        stmt = SQLite.Stmt(db,"insert into $name values ($params)")
         #bind, step, reset loop for inserting values
-        io = Mmap.Stream(file.fullpath)
-        CSV.skipto!(io,file,1,file.datarow)
+        io = CSV.open(file)
+        seek(io,file.datapos)
         N = 0
         while !eof(io)
             for col = 1:file.cols
-                readbind(io,file,file.types[col],col,stmt)
+                SQLite.readbind!(io,file.types[col],N,col,stmt)
             end
-            execute(stmt)
+            execute!(stmt)
             N += 1
         end
         return N
     end
-    execute(db,"analyze $name")
+    execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
-function append(db::SQLiteDB,name::AbstractString,table)
+function append!(db::DB,name::AbstractString,table)
     N, M = size(table)
     transaction(db) do
         # insert statements
         params = chop(repeat("?,",M))
-        stmt = SQLiteStmt(db,"insert into $name values ($params)")
+        stmt = Stmt(db,"insert into $name values ($params)")
         #bind, step, reset loop for inserting values
         for row = 1:N
             for col = 1:M
                 @inbounds v = table[row,col]
-                bind(stmt,col,v)
+                bind!(stmt,col,v)
             end
-            execute(stmt)
+            execute!(stmt)
         end
     end
-    execute(db,"analyze $name")
+    execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-function deleteduplicates(db,table::AbstractString,cols::AbstractString)
+function deleteduplicates!(db,table::AbstractString,cols::AbstractString)
     transaction(db) do
-        execute(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
+        execute!(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
     end
-    execute(db,"analyze $table")
+    execute!(db,"analyze $table")
     return changes(db)
 end
 
