@@ -1,8 +1,7 @@
 module SQLite
 
 using Compat
-reload("/Users/jacobquinn/.julia/v0.4/CSV/src/CSV.jl")
-import CSV
+reload("CSV")
 
 export NULL, ResultSet,
        execute!, query, tables, indices, columns, drop!, dropindex!,
