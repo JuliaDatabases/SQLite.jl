@@ -2,6 +2,7 @@ module SQLite
 
 using Compat
 reload("CSV")
+import CSV
 
 export NULL, ResultSet,
        execute!, query, tables, indices, columns, drop!, dropindex!,
