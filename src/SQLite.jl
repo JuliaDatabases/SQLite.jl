@@ -453,7 +453,7 @@ end
 #     return pos
 # end
 
-function readbind!{T<:Integer}(io,::Type{T},row,col,stmt)
+function readbind!{T<:Union(Integer,Float64)}(io,::Type{T},row,col,stmt)
     val, isnull = CSV.readfield(io,T,row,col)
     bind!(stmt,col,ifelse(isnull,NULL,val))
     return
