@@ -458,6 +458,7 @@ function readbind!{T<:Union(Integer,Float64)}(io,::Type{T},row,col,stmt)
     bind!(stmt,col,ifelse(isnull,NULL,val))
     return
 end
+readbind!(io, ::Type{Date}, row, col, stmt) = (bind!(stmt,col,CSV.readfield(io,Date,row,col)[1]); return)
 function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
     ptr, len, isnull = CSV.readfield(io,T,row,col)
     if isnull
