@@ -384,81 +384,15 @@ function create(db::DB,name::AbstractString,table,
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-# const SPACE = UInt8(' ')
-# const TAB = UInt8('\t')
-# const MINUS = UInt8('-')
-# const PLUS = UInt8('+')
-# const NEG_ONE = UInt8('0')-UInt8(1)
-# const ZERO = UInt8('0')
-# const TEN = UInt8('9')+UInt8(1)
-
-# # io = Mmap.Array, pos = current parsing position, eof = length(io) + 1
-# @inline function readbind{T<:Integer}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
-#     @inbounds begin
-#     b = io[pos]; pos += 1
-#     while pos < eof && (b == SPACE || b == TAB || b == q)
-#         b = io[pos]; pos += 1
-#     end
-#     if pos == eof || b == d || b == n
-#         bind!(stmt,col,NULL)
-#         return pos
-#     end
-#     negative = false
-#     if b == MINUS
-#         negative = true
-#         b = io[pos]; pos += 1
-#     elseif b == PLUS
-#         b = io[pos]; pos += 1
-#     end
-#     v = zero(T)
-#     while pos < eof && NEG_ONE < b < TEN
-#         # process digits
-#         v *= 10
-#         v += b - ZERO
-#         b = io[pos]; pos += 1
-#     end
-#     end # @inbounds
-#     if b == d || b == n || pos == eof
-#         bind!(stmt,col,negative ? -v : v)
-#         return pos
-#     else
-#         throw(CSV.CSVError("error parsing $T on column $col, row $row; parsed $v before encountering $(Char(b)) character"))
-#     end
-# end
-
-# @inline function readbind{T<:AbstractString}(io,pos,eof,::Type{T}, row, col, stmt,q,e,d,n)
-#     orig_pos = pos
-#     @inbounds while pos < eof
-#         b = io[pos]; pos += 1
-#         if b == q
-#             while pos < eof
-#                 b = io[pos]; pos += 1
-#                 if b == e
-#                     b = io[pos]; pos += 2
-#                 elseif b == q
-#                     break
-#                 end
-#             end
-#         elseif b == d || b == n
-#             break
-#         end
-#     end
-#     if orig_pos == pos-1
-#         bind!(stmt,col,NULL)
-#     else
-#         ccall( (:sqlite3_bind_text, sqlite3_lib),
-#             Cint, (Ptr{Void},Cint,Ptr{Uint8},Cint,Ptr{Void}),
-#             stmt.handle,col,pointer(io.array)+Uint(orig_pos-1),pos-orig_pos-1,C_NULL)
-#     end
-#     return pos
-# end
-
 function readbind!{T<:Union(Integer,Float64)}(io,::Type{T},row,col,stmt)
     val, isnull = CSV.readfield(io,T,row,col)
     bind!(stmt,col,ifelse(isnull,NULL,val))
     return
 end
-readbind!(io, ::Type{Date}, row, col, stmt) = (bind!(stmt,col,CSV.readfield(io,Date,row,col)[1]); return)
+function readbind!(io, ::Type{Date}, row, col, stmt)
+    bind!(stmt,col,CSV.readfield(io,Date,row,col)[1])
+    return
+end
 function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
     ptr, len, isnull = CSV.readfield(io,T,row,col)
     if isnull
@@ -484,7 +418,7 @@ function create(db::DB,file::CSV.File,name::AbstractString=basename(file.fullpat
         #bind, step, reset loop for inserting values
         io = CSV.open(file)
         seek(io,file.datapos)
-        N = 0
+        N = 1
         while !eof(io)
             for col = 1:file.cols
                 SQLite.readbind!(io,file.types[col],N,col,stmt)
