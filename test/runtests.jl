@@ -1,15 +1,6 @@
-using Base.Test, SQLite
+using Base.Test, SQLite, Compat
 
-if VERSION < v"0.4.0-dev"
-    const AbstractString = String
-    const UInt8 = Uint8
-    const UInt16 = Uint16
-    const UInt32 = Uint32
-    const UInt64 = Uint64
-    const UInt128 = Uint128
-    const UInt = Uint
-    typealias AssertionError ErrorException
-end
+import Base: +, ==
 
 a = SQLiteDB()
 b = SQLiteDB(UTF16=true)
@@ -80,7 +71,7 @@ r = query(db,"select * from temp")
 @test all(r.values[1] .== 0.0)
 @test all([typeof(i) for i in r.values[1]] .== Float64)
 @test r.colnames == ["col1","col2","col3","col4","col5"]
-@test drop(db,"temp") == EMPTY_RESULTSET
+@test droptable(db,"temp") == EMPTY_RESULTSET
 
 create(db,"temp",zeros(5,5))
 r = query(db,"select * from temp")
@@ -88,7 +79,7 @@ r = query(db,"select * from temp")
 @test all(r.values[1] .== 0.0)
 @test all([typeof(i) for i in r.values[1]] .== Float64)
 @test r.colnames == ["x1","x2","x3","x4","x5"]
-@test drop(db,"temp") == EMPTY_RESULTSET
+@test droptable(db,"temp") == EMPTY_RESULTSET
 
 create(db,"temp",zeros(Int,5,5))
 r = query(db,"select * from temp")
@@ -102,7 +93,7 @@ r = query(db,"select * from temp")
 @test r.values[1] == Any[0,0,0,0,0,1,1,1,1,1]
 @test typeof(r[1,1]) == Int64
 @test r.colnames == ["x1","x2","x3","x4","x5"]
-@test drop(db,"temp") == EMPTY_RESULTSET
+@test droptable(db,"temp") == EMPTY_RESULTSET
 
 if VERSION > v"0.4.0-"
     rng = Date(2013):Date(2013,1,5)
@@ -112,7 +103,7 @@ if VERSION > v"0.4.0-"
     @test all(r[:,1] .== rng)
     @test all([typeof(i) for i in r.values[1]] .== Date)
     @test r.colnames == ["x1","x2","x3","x4","x5"]
-    @test drop(db,"temp") == EMPTY_RESULTSET
+    @test droptable(db,"temp") == EMPTY_RESULTSET
 end
 
 query(db,"CREATE TABLE temp AS SELECT * FROM Album")
@@ -123,11 +114,11 @@ r = query(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"])
 query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", [0,0,"Test Album"])
 r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
-drop(db, "temp")
+droptable(db, "temp")
 
 binddb = SQLiteDB()
 query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[NULL, int64(6), 6.4, "some text", b"bytearray"])
+query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[NULL, convert(Int64,6), 6.4, "some text", b"bytearray"])
 r = query(binddb, "SELECT * FROM temp")
 for (v, t) in zip(r.values, [SQLite.NullType, Int64, Float64, AbstractString, Vector{UInt8}])
     @test isa(v[1], t)
@@ -163,7 +154,7 @@ if VERSION > v"0.4.0-"
     query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
     r = query(db, "SELECT * FROM temp WHERE AlbumId = 0")
     @test r == ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
-    drop(db, "temp")
+    droptable(db, "temp")
 end
 
 r = query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
@@ -198,7 +189,7 @@ u = query(db, "select sin(milliseconds) from track limit 5")
 
 SQLite.register(db, hypot; nargs=2, name="hypotenuse")
 v = query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5")
-@test [int(i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
+@test [@compat round(Int,i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
 SQLite.@register db str2arr(s) = convert(Array{UInt8}, s)
 r = query(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2")
@@ -242,7 +233,7 @@ sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 register(db, Point3D(0, 0, 0), sumpoint)
 r = query(db, "SELECT sumpoint(x, y, z) FROM points")
 @test r[1][1] == Point3D(12, 15, 18)
-drop(db, "points")
+droptable(db, "points")
 
 db2 = SQLiteDB()
 query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
@@ -252,11 +243,11 @@ query(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 create(db2, "tab1", [2.1 3; 3.4 8], ifnotexists=true)
 create(db2, "tab2", [2.1 3; 3.4 8])
 
-@test_throws SQLite.SQLiteException drop(db2, "nonexistant")
+@test_throws SQLite.SQLiteException droptable(db2, "nonexistant")
 # should not throw anything
-drop(db2, "nonexistant", ifexists=true)
+droptable(db2, "nonexistant", ifexists=true)
 # should drop "tab2"
-drop(db2, "tab2", ifexists=true)
+droptable(db2, "tab2", ifexists=true)
 @test !in("tab2", tables(db2)[1])
 
 close(db2)

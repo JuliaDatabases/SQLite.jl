@@ -1,18 +1,12 @@
 module SQLite
 
+using Compat
+
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
-       execute, query, tables, indices, columns, drop, dropindex,
+       execute, query, tables, indices, columns, droptable, dropindex,
        create, createindex, append, deleteduplicates
 
-if VERSION < v"0.4.0-dev"
-    const AbstractString = String
-    const UInt8 = Uint8
-    const UInt16 = Uint16
-    const UInt32 = Uint32
-    const UInt64 = Uint64
-    const UInt128 = Uint128
-    const UInt = Uint
-end
+import Base: ==, show, convert, bind, close
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -24,7 +18,7 @@ include("api.jl")
 # Custom NULL type
 immutable NullType end
 const NULL = NullType()
-Base.show(io::IO,::NullType) = print(io,"NULL")
+show(io::IO,::NullType) = print(io,"NULL")
 
 # internal wrapper type to, in-effect, mark something which has been serialized
 immutable Serialization
@@ -37,7 +31,7 @@ type ResultSet
 end
 ==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
-Base.convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
+convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
 
 type SQLiteDB{T<:AbstractString}
     file::T
@@ -79,7 +73,7 @@ function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
     end
 end
 
-function Base.close{T}(db::SQLiteDB{T})
+function close{T}(db::SQLiteDB{T})
     db.handle == C_NULL && return
     # ensure SQLiteStmts are finalised
     gc()
@@ -107,7 +101,7 @@ function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
     return stmt
 end
 
-function Base.close(stmt::SQLiteStmt)
+function close(stmt::SQLiteStmt)
     stmt.handle == C_NULL && return
     @CHECK stmt.db sqlite3_finalize(stmt.handle)
     stmt.handle = C_NULL
@@ -115,7 +109,7 @@ function Base.close(stmt::SQLiteStmt)
 end
 
 # bind a row to nameless parameters
-function Base.bind(stmt::SQLiteStmt, values::Vector)
+function bind(stmt::SQLiteStmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
@@ -123,7 +117,7 @@ function Base.bind(stmt::SQLiteStmt, values::Vector)
     end
 end
 # bind a row to named parameters
-function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
+function bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
@@ -135,22 +129,22 @@ function Base.bind{V}(stmt::SQLiteStmt, values::Dict{Symbol, V})
     end
 end
 # Binding parameters to SQL statements
-function Base.bind(stmt::SQLiteStmt,name::AbstractString,val)
+function bind(stmt::SQLiteStmt,name::AbstractString,val)
     i = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
     return bind(stmt,i,val)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,float64(val))
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
-Base.bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
-Base.bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,@compat Float64(val))
+bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
+bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
-Base.bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
 function sqlserialize(x)
     t = IOBuffer()
@@ -161,7 +155,7 @@ function sqlserialize(x)
     serialize(t,s)
     return takebuf_array(t)
 end
-Base.bind(stmt::SQLiteStmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
+bind(stmt::SQLiteStmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
@@ -293,7 +287,7 @@ commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-function drop(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
+function droptable(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
         execute(db,"drop table $exists $table")
