@@ -54,7 +54,7 @@ A Julia interface to the SQLite library and support for operations on DataFrames
 * `execute(stmt::SQLiteStmt)`
   `execute(db::SQLiteDB, sql::String)`
 
-  Used to execute prepared `SQLiteStmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `query` below. Also consider the `create`, `drop`, and `append` methods for manipulation statements as further SQLite performance tricks are incorporated automatically.
+  Used to execute prepared `SQLiteStmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `query` below. Also consider the `create`, `droptable`, and `append` methods for manipulation statements as further SQLite performance tricks are incorporated automatically.
 
 * `query(db::SQLiteDB, sql::String, values=[])`
 
@@ -73,9 +73,9 @@ A Julia interface to the SQLite library and support for operations on DataFrames
 
   Takes the values in `table` and appends (by repeated inserts) to the SQLite table `name`. No column checking is done to ensure correct types, so care should be taken as SQLite is "typeless" in that it allows items of any type to be stored in columns. Transaction handling is automatic as well as performance enhancements.
 
-* `drop(db::SQLiteDB,table::String)`
+* `droptable(db::SQLiteDB,table::String)`
 
-  `drop` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
+  `droptable` is pretty self-explanatory. It's really just a convenience wrapper around `query` to execute a DROP TABLE command, while also calling "VACUUM" to clean out freed memory from the database.
 
 * `register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)`
 * `register(db::SQLiteDB, init, step::Function, final::Function=identity; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)`
