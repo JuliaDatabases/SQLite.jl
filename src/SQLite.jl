@@ -2,7 +2,7 @@ module SQLite
 
 using Compat, CSV, GZip
 
-import Base.Operators
+importall Base.Operators
 
 export NULL, ResultSet,
        execute!, query, tables, indices, columns, drop!, dropindex!,
