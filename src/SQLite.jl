@@ -1,8 +1,6 @@
 module SQLite
 
-using Compat
-reload("CSV")
-import CSV
+using Compat, CSV, GZip
 
 export NULL, ResultSet,
        execute!, query, tables, indices, columns, drop!, dropindex!,
@@ -172,7 +170,7 @@ const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18,length(r)))
-    
+
     if ret == 0
         v = deserialize(IOBuffer(r))
         return v.object
@@ -248,6 +246,25 @@ end
 function scalarquery(db::DB,sql)
     stream = SQLite.open(db,sql)
     return next(stream,1)[1]
+end
+
+function Base.writecsv(db,table,file;compressed::Bool=false)
+    out = compressed ? GZip.open(file,"w") : open(file,"w")
+    s = SQLite.open(SQLite.Table(db,table))
+    for i = 1:s.cols
+        write(out,bytestring(sqlite3_column_name(s.stmt.handle,i-1)))
+        write(out,ifelse(i == s.cols,'\n',','))
+    end
+    while !eof(s)
+        for i = 1:s.cols
+            val = sqlite3_column_text(s.stmt.handle,i-1)
+            val != C_NULL && write(out,bytestring(val))
+            write(out,ifelse(i == s.cols,'\n',','))
+        end
+        s.status = sqlite3_step(s.stmt.handle)
+    end
+    close(out)
+    return file
 end
 
 function query(db::DB,sql::AbstractString, values=[])
