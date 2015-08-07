@@ -413,16 +413,16 @@ function readbind!(io, ::Type{Date}, row, col, stmt)
     return
 end
 function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
-    ptr, len, isnull = CSV.readfield(io,T,row,col)
+    str, isnull = CSV.readfield(io,T,row,col)
     if isnull
         bind!(stmt,col,NULL)
     else
-        sqlite3_bind_text(stmt.handle,col,ptr,len)
+        sqlite3_bind_text(stmt.handle,col,str.ptr,str.len)
     end
     return
 end
 
-function create(db::DB,file::CSV.File,name::AbstractString=basename(file.fullpath)
+function create(db::DB,file::CSV.File,name::AbstractString=splitext(basename(file.fullpath))[1]
                 ;temp::Bool=false,ifnotexists::Bool=false)
     names = SQLite.make_unique([SQLite.identifier(i) for i in file.header])
     sqltypes = [string(names[i]) * SQLite.gettype(file.types[i]) for i = 1:file.cols]
@@ -436,16 +436,21 @@ function create(db::DB,file::CSV.File,name::AbstractString=basename(file.fullpat
         stmt = SQLite.Stmt(db,"insert into $name values ($params)")
         #bind, step, reset loop for inserting values
         io = CSV.open(file)
-        seek(io,file.datapos)
-        N = 1
+        seek(io,file.datapos+1)
+        N = file.datarow
         while !eof(io)
             for col = 1:file.cols
                 SQLite.readbind!(io,file.types[col],N,col,stmt)
             end
             SQLite.execute!(stmt)
             N += 1
+            b = CSV.peek(io)
+            empty = b == CSV.NEWLINE || b == CSV.RETURN
+            if empty
+                file.skipblankrows && CSV.skipn!(io,1,file.quotechar,file.escapechar)
+            end
         end
-        return N
+        return N - file.datarow
     end
     execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
