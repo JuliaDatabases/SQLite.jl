@@ -201,6 +201,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     results = Array(Any,ncols)
     for i = 1:ncols
         colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i-1))
+        t = sqlite3_column_type(stmt.handle,i-1) 
         if t == SQLITE_INTEGER
             results[i] = Int64[]
         elseif t == SQLITE_FLOAT
