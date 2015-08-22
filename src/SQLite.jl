@@ -88,9 +88,12 @@ type SQLiteStmt{T}
     sql::T
 end
 
-sqliteprepare(db,sql,stmt,null) = 
+include("window.jl")
+export window
+
+sqliteprepare(db,sql,stmt,null) =
     @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
+sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) =
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
@@ -180,7 +183,7 @@ const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18,length(r)))
-    
+
     if ret == 0
         v = deserialize(IOBuffer(r))
         return v.object
@@ -205,7 +208,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     end
     while status == SQLITE_ROW
         for i = 1:ncols
-            t = sqlite3_column_type(stmt.handle,i-1) 
+            t = sqlite3_column_type(stmt.handle,i-1)
             if t == SQLITE_INTEGER
                 r = sqlite3_column_int64(stmt.handle,i-1)
             elseif t == SQLITE_FLOAT
