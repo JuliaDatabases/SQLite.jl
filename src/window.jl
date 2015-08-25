@@ -28,37 +28,34 @@ function fetchrow(stmt::SQLiteStmt, ncols::Integer)
 end
 
 # TODO: wrapping this in a macro would avoid the slowness of first-class functions
-function window{S<:String}(
+function window{S<:AbstractString}(
     db::SQLiteDB, cb::Base.Callable, range::OrdinalRange,
-    table::String, columns::Vector{S}, data...,
+    table::AbstractString, columns::Vector{S}, data...,
 )
     @assert !isempty(columns) "you must specifiy at least one column"
-    # TODO: should this be robust against injection attacks? how?
     nrows = query(db, string("SELECT COUNT(*) FROM ", table))[1][1]
     stmt = SQLiteStmt(db, string("SELECT ", join(columns, ", "), " FROM ", table))
     status = execute(stmt)
-    ncols = Int64(sqlite3_column_count(stmt.handle))
-    # TODO: we alread know the size of this so do everything in place
-    # TODO: this is the table elements not the results
-    # TODO: would it be less confusing to use a Vector of Vectors rather than a Matrix
-    results = Array(Any, (0, ncols))
-    actual_results = Any[]
+    ncols = sqlite3_column_count(stmt.handle)
+    # TODO: don't keep rows that are no longer needed
+    tablerows = [Array(Any, ncols) for _ in 1:nrows]
+    results = Any[]
     latest_row = 0
     for start_row in 1:(nrows + range.start - range.stop)
-        window_results = Array(Any, (0, ncols))
+        # TODO: with work we can do this in place aswell
+        curwindow = Any[]
         # find relevent rows for window
         for row in addrange(start_row-1, range)
             # only load rows as they are needed
-            # TODO: is this really an optimisation?
             while row > latest_row && status == SQLITE_ROW
                 status, row_results = fetchrow(stmt, ncols)
-                results = vcat(results, row_results')
                 latest_row += 1
+                copy!(tablerows[latest_row], row_results)
             end
             status == SQLITE_ROW || status == SQLITE_DONE || sqliteerror(stmt.db)
-            window_results = vcat(window_results, results[row, :])
+            push!(curwindow, tablerows[row])
         end
-        push!(actual_results, cb(window_results, range, data))
+        push!(results, cb(curwindow, range, data))
     end
-    actual_results
+    results
 end
