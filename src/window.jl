@@ -27,7 +27,6 @@ function fetchrow(stmt::SQLiteStmt, ncols::Integer)
     status, row
 end
 
-# TODO: wrapping this in a macro would avoid the slowness of first-class functions
 function window{S<:AbstractString}(
     db::SQLiteDB, cb::Base.Callable, range::OrdinalRange,
     table::AbstractString, columns::Vector{S}, data...,
@@ -37,25 +36,27 @@ function window{S<:AbstractString}(
     stmt = SQLiteStmt(db, string("SELECT ", join(columns, ", "), " FROM ", table))
     status = execute(stmt)
     ncols = sqlite3_column_count(stmt.handle)
-    # TODO: don't keep rows that are no longer needed
-    tablerows = [Array(Any, ncols) for _ in 1:nrows]
+    # TODO: we can calculate how many rows we need and do this in place
+    tablerows = Array{Any,1}[]
     results = Any[]
     latest_row = 0
     for start_row in 1:(nrows + range.start - range.stop)
-        # TODO: with work we can do this in place aswell
-        curwindow = Any[]
+        # TODO: we can do this in place aswell
+        curwindow = Array{Any,1}[]
         # find relevent rows for window
-        for row in addrange(start_row-1, range)
+        for row in range
             # only load rows as they are needed
-            while row > latest_row && status == SQLITE_ROW
-                status, row_results = fetchrow(stmt, ncols)
+            while latest_row < row + start_row - 1 && status == SQLITE_ROW
+                status, row_values = fetchrow(stmt, ncols)
                 latest_row += 1
-                copy!(tablerows[latest_row], row_results)
+                push!(tablerows, row_values)
             end
             status == SQLITE_ROW || status == SQLITE_DONE || sqliteerror(stmt.db)
             push!(curwindow, tablerows[row])
         end
         push!(results, cb(curwindow, range, data))
+        # get rid of rows we no longer need
+        shift!(tablerows)
     end
     results
 end
