@@ -29,7 +29,7 @@ end
 
 function window{S<:AbstractString}(
     db::SQLiteDB, cb::Base.Callable, range::OrdinalRange,
-    table::AbstractString, columns::Vector{S}, data...,
+    table::AbstractString, columns::Vector{S}, data=nothing,
 )
     @assert !isempty(columns) "you must specifiy at least one column"
     nrows = query(db, string("SELECT COUNT(*) FROM ", table))[1][1]
