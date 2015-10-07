@@ -42,7 +42,7 @@ const SQLITE_CANTOPEN =    14   # /* Unable to open the database file */
 const SQLITE_PROTOCOL =    15   # /* Database lock protocol error */
 const SQLITE_EMPTY =       16   # /* Database is empty */
 const SQLITE_SCHEMA =      17   # /* The database schema changed */
-const SQLITE_TOOBIG =      18   # /* String or BLOB exceeds size limit */
+const SQLITE_TOOBIG =      18   # /* AbstractString or BLOB exceeds size limit */
 const SQLITE_CONSTRAINT =  19   # /* Abort due to constraint violation */
 const SQLITE_MISMATCH =    20   # /* Data type mismatch */
 const SQLITE_MISUSE =      21   # /* Library used incorrectly */
@@ -135,7 +135,7 @@ const SQLITE_CONFIG_HEAP =           8 #  /* void*, int nByte, int min */
 const SQLITE_CONFIG_MEMSTATUS =      9 #  /* boolean */
 const SQLITE_CONFIG_MUTEX =         10 #  /* sqlite3_mutex_methods* */
 const SQLITE_CONFIG_GETMUTEX =      11 #  /* sqlite3_mutex_methods* */
-#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */ 
+#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */
 const SQLITE_CONFIG_LOOKASIDE =     13 #  /* int int */
 const SQLITE_CONFIG_PCACHE =        14 #  /* no-op */
 const SQLITE_CONFIG_GETPCACHE =     15 #  /* no-op */

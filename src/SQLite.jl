@@ -1,12 +1,8 @@
 module SQLite
 
-using Compat, CSV, GZip
+using Compat, CSV, Libz, DataStreams
 
 importall Base.Operators
-
-export NULL, ResultSet,
-       execute!, query, tables, indices, columns, drop!, dropindex!,
-       create, createindex, append!, deleteduplicates!
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -23,7 +19,7 @@ include("utils.jl")
 # Custom NULL type
 immutable NullType end
 const NULL = NullType()
-Base.show(io::IO,::NullType) = print(io,"NULL")
+Base.show(io::IO,::NullType) = print(io,"#NULL")
 
 # internal wrapper type to, in-effect, mark something which has been serialized
 immutable Serialization
@@ -128,7 +124,7 @@ function bind!(stmt::Stmt,name::AbstractString,val)
     end
     return bind!(stmt,i,val)
 end
-bind!(stmt::Stmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,Float64(val))
+bind!(stmt::Stmt,i::Int,val::AbstractFloat)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,Float64(val))
 bind!(stmt::Stmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
 bind!(stmt::Stmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
 bind!(stmt::Stmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
@@ -181,25 +177,24 @@ function sqldeserialize(r)
     end
 end
 
-type Stream <: IO
+type Source <: IOSource # <: IO
+    schema::Schema
     stmt::Stmt
-    cols::Int
     status::Cint
+    function Source(db::DB,sql::AbstractString, values=[])
+        stmt = SQLite.Stmt(db,sql)
+        bind!(stmt, values)
+        status = SQLite.execute!(stmt)
+        #TODO: build Schema
+        cols = sqlite3_column_count(stmt.handle)
+        return Stream(stmt,cols,status)
+    end
 end
+# function Base.open(table::Table)
+#     return open(table.db,"select * from $(table.name)")
+# end
 
-function Base.open(db::DB,sql::AbstractString, values=[])
-    stmt = SQLite.Stmt(db,sql)
-    bind!(stmt, values)
-    status = SQLite.execute!(stmt)
-    cols = sqlite3_column_count(stmt.handle)
-    return Stream(stmt,cols,status)
-end
-
-function Base.open(table::Table)
-    return open(table.db,"select * from $(table.name)")
-end
-
-function Base.eof(s::Stream)
+function Base.eof(s::Source)
     (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
     return s.status == SQLITE_DONE
 end
@@ -296,7 +291,7 @@ function indices(db::DB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
-columns(db::DB,table::String) = query(db,"pragma table_info($table)")
+columns(db::DB,table::AbstractString) = query(db,"pragma table_info($table)")
 
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
@@ -403,7 +398,7 @@ function create(db::DB,name::AbstractString,table,
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-function readbind!{T<:Union(Integer,Float64)}(io,::Type{T},row,col,stmt)
+function readbind!{T<:Union{Integer,Float64}}(io,::Type{T},row,col,stmt)
     val, isnull = CSV.readfield(io,T,row,col)
     bind!(stmt,col,ifelse(isnull,NULL,val))
     return

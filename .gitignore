@@ -1,1 +1,9 @@
 deps/deps.jl
+
+*.sqlite
+
+*.sqlite
+
+test/Chinook_Sqlite.sqlite
+
+test/csv.csv

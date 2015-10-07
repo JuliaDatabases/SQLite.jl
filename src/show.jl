@@ -31,7 +31,7 @@ end
 #' ourstrwidth("abc")
 #' ourstrwidth(10000)
 begin
-    local io = IOBuffer(Array(Uint8, 80), true, true)
+    local io = IOBuffer(Array(UInt8, 80), true, true)
     global ourstrwidth
     function ourstrwidth(x::Any) # -> Int
         truncate(io, 0)
@@ -41,7 +41,7 @@ begin
     ourstrwidth(x::AbstractString) = strwidth(x) + 2 # -> Int
     ourstrwidth(s::Symbol) = Int(ccall(:u8_strwidth,
                                        Csize_t,
-                                       (Ptr{Uint8}, ),
+                                       (Ptr{UInt8}, ),
                                        s))
 end
 
@@ -359,7 +359,7 @@ function showrows(io::IO,
     for chunkindex in 1:nchunks
         leftcol = chunkbounds[chunkindex] + 1
         rightcol = chunkbounds[chunkindex + 1]
-        
+
         # Print column names
         @printf io "| %s" rowlabel
         padding = rowmaxwidth - ourstrwidth(rowlabel)
