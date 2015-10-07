@@ -16,8 +16,8 @@ function sqlvalue(values, i)
     elseif valuetype == SQLITE_BLOB
         nbytes = sqlite3_value_bytes(temp_val_ptr)
         blob = sqlite3_value_blob(temp_val_ptr)
-        buf = zeros(Uint8, nbytes)
-        unsafe_copy!(pointer(buf), convert(Ptr{Uint8}, blob), nbytes)
+        buf = zeros(UInt8, nbytes)
+        unsafe_copy!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
     else
         return NULL
@@ -202,7 +202,7 @@ function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractStr
 
     @CHECK db sqlite3_create_function_v2(
         db.handle, name, nargs, enc, C_NULL, cfunc, C_NULL, C_NULL, C_NULL
-    )    
+    )
 end
 
 # as above but for aggregate functions

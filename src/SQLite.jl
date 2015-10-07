@@ -1,12 +1,27 @@
 module SQLite
 
-using Compat
+using Compat, CSV, Libz, DataStreams
+
+#TODO
+ # create old_ui.jl file w/ deprecations
+   # make all function renames
+   # make new types SQLite.DB/Stmt, get code from jq/updates
+   # deprecate all old function names/types
+ # create Source.jl, Sink.jl files
+   # pull Source code from jq/updates
+   # stream!(SQLite.Source,DataStream)
+   # stream!(SQLite.Source,CSV.Sink)
+   # stream!(DataStream,SQLite.Sink)
+   # stream!(CSV.Source,SQLite.Sink)
+ # rewrite tests
+ # add new tests file for Source/Sink
+
 
 export NULL, SQLiteDB, SQLiteStmt, ResultSet,
        execute, query, tables, indices, columns, droptable, dropindex,
        create, createindex, append, deleteduplicates
 
-import Base: ==, show, convert, bind, close
+importall Base.Operators
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -88,9 +103,9 @@ type SQLiteStmt{T}
     sql::T
 end
 
-sqliteprepare(db,sql,stmt,null) = 
+sqliteprepare(db,sql,stmt,null) =
     @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
+sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) =
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
@@ -180,7 +195,7 @@ const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18,length(r)))
-    
+
     if ret == 0
         v = deserialize(IOBuffer(r))
         return v.object
@@ -205,7 +220,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     end
     while status == SQLITE_ROW
         for i = 1:ncols
-            t = sqlite3_column_type(stmt.handle,i-1) 
+            t = sqlite3_column_type(stmt.handle,i-1)
             if t == SQLITE_INTEGER
                 r = sqlite3_column_int64(stmt.handle,i-1)
             elseif t == SQLITE_FLOAT
@@ -241,7 +256,7 @@ function indices(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
-columns(db::SQLiteDB,table::String) = query(db,"pragma table_info($table)")
+columns(db::SQLiteDB,table::AbstractString) = query(db,"pragma table_info($table)")
 
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
