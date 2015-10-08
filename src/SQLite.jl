@@ -64,7 +64,7 @@ function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
     file = isempty(file) ? file : expanduser(file)
     if @OK sqliteopen(utf(file),handle)
         db = SQLiteDB(utf(file),handle[1])
-        register(db, regexp, nargs=2)
+        register(db, regexp, nargs=2, name="regexp")
         finalizer(db,close)
         return db
     else # error
@@ -88,9 +88,9 @@ type SQLiteStmt{T}
     sql::T
 end
 
-sqliteprepare(db,sql,stmt,null) = 
+sqliteprepare(db,sql,stmt,null) =
     @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) = 
+sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) =
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 function SQLiteStmt{T}(db::SQLiteDB{T},sql::AbstractString)
@@ -136,7 +136,7 @@ function bind(stmt::SQLiteStmt,name::AbstractString,val)
     end
     return bind(stmt,i,val)
 end
-bind(stmt::SQLiteStmt,i::Int,val::FloatingPoint)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,@compat Float64(val))
+bind(stmt::SQLiteStmt,i::Int,val::AbstractFloat)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,@compat Float64(val))
 bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
 bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
 bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
@@ -180,7 +180,7 @@ const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18,length(r)))
-    
+
     if ret == 0
         v = deserialize(IOBuffer(r))
         return v.object
@@ -205,7 +205,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     end
     while status == SQLITE_ROW
         for i = 1:ncols
-            t = sqlite3_column_type(stmt.handle,i-1) 
+            t = sqlite3_column_type(stmt.handle,i-1)
             if t == SQLITE_INTEGER
                 r = sqlite3_column_int64(stmt.handle,i-1)
             elseif t == SQLITE_FLOAT
@@ -241,7 +241,7 @@ function indices(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
-columns(db::SQLiteDB,table::String) = query(db,"pragma table_info($table)")
+columns(db::SQLiteDB,table::AbstractString) = query(db,"pragma table_info($table)")
 
 # Transaction-based commands
 function transaction(db, mode="DEFERRED")
