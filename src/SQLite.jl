@@ -419,33 +419,33 @@ end
 
 function create(db::DB,file::CSV.Source,name::AbstractString=splitext(basename(file.fullpath))[1]
                 ;temp::Bool=false,ifnotexists::Bool=false)
-    names = SQLite.make_unique([SQLite.identifier(i) for i in file.header])
-    sqltypes = [string(names[i]) * SQLite.gettype(file.types[i]) for i = 1:file.cols]
+    names = SQLite.make_unique([SQLite.identifier(i) for i in file.schema.header])
+    sqltypes = [string(names[i]) * SQLite.gettype(file.schema.types[i]) for i = 1:file.schema.cols]
     N = transaction(db) do
         # create table statement
         t = temp ? "TEMP " : ""
         exists = ifnotexists ? "if not exists" : ""
         SQLite.execute!(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
         # insert statements
-        params = chop(repeat("?,",file.cols))
+        params = chop(repeat("?,",file.schema.cols))
         stmt = SQLite.Stmt(db,"insert into $name values ($params)")
         #bind, step, reset loop for inserting values
-        io = CSV.open(file)
-        seek(io,file.datapos+1)
-        N = file.datarow
-        while !eof(io)
-            for col = 1:file.cols
-                SQLite.readbind!(io,file.types[col],N,col,stmt)
+        # io = CSV.open(file)
+        seek(file,file.datapos+1)
+        N = 0
+        while !eof(file)
+            for col = 1:file.schema.cols
+                SQLite.readbind!(file,file.schema.types[col],N,col,stmt)
             end
             SQLite.execute!(stmt)
             N += 1
-            b = CSV.peek(io)
+            b = CSV.peek(file)
             empty = b == CSV.NEWLINE || b == CSV.RETURN
             if empty
-                file.skipblankrows && CSV.skipn!(io,1,file.quotechar,file.escapechar)
+                file.skipblankrows && CSV.skipn!(file,1,file.quotechar,file.escapechar)
             end
         end
-        return N - file.datarow
+        return N
     end
     execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
