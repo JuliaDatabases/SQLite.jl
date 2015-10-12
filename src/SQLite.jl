@@ -187,7 +187,7 @@ type Source <: IOSource # <: IO
         status = SQLite.execute!(stmt)
         #TODO: build Schema
         cols = sqlite3_column_count(stmt.handle)
-        return Stream(stmt,cols,status)
+        return DataStream(stmt,cols,status)
     end
 end
 # function Base.open(table::Table)
@@ -199,9 +199,9 @@ function Base.eof(s::Source)
     return s.status == SQLITE_DONE
 end
 
-Base.start(s::Stream) = 1
-Base.done(s::Stream,col) = eof(s)
-function Base.next(s::Stream,i)
+Base.start(s::DataStream) = 1
+Base.done(s::DataStream,col) = eof(s)
+function Base.next(s::DataStream,i)
     t = sqlite3_column_type(s.stmt.handle,i-1)
     r::Any
     if t == SQLITE_INTEGER
@@ -229,7 +229,7 @@ function Base.next(s::Stream,i)
     return r, i
 end
 
-function Base.readline(s::Stream,delim::Char=',',buf::IOBuffer=IOBuffer())
+function Base.readline(s::DataStream,delim::Char=',',buf::IOBuffer=IOBuffer())
     eof(s) && return ""
     for i = 1:s.cols
         val = sqlite3_column_text(s.stmt.handle,i-1)
