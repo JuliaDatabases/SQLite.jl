@@ -417,7 +417,7 @@ function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
     return
 end
 
-function create(db::DB,file::CSV.File,name::AbstractString=splitext(basename(file.fullpath))[1]
+function create(db::DB,file::CSV.Source,name::AbstractString=splitext(basename(file.fullpath))[1]
                 ;temp::Bool=false,ifnotexists::Bool=false)
     names = SQLite.make_unique([SQLite.identifier(i) for i in file.header])
     sqltypes = [string(names[i]) * SQLite.gettype(file.types[i]) for i = 1:file.cols]
@@ -462,7 +462,7 @@ function createindex(db::DB,table::AbstractString,index::AbstractString,cols
     return changes(db)
 end
 
-function append!(db::DB,name::AbstractString,file::CSV.File)
+function append!(db::DB,name::AbstractString,file::CSV.Source)
     N = transaction(db) do
         # insert statements
         params = chop(repeat("?,",file.cols))
