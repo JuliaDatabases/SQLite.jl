@@ -187,7 +187,18 @@ type Source <: IOSource # <: IO
         status = SQLite.execute!(stmt)
         #TODO: build Schema
         cols = sqlite3_column_count(stmt.handle)
-        return DataStream(stmt,cols,status)
+        types = DataType[]
+        for i=1:cols
+            t = sqlite3_column_type(stmt.handle,i-1)
+            if t == SQLITE_INTEGER   push!(schema,Integer)
+            elseif t == SQLITE_FLOAT push!(schema,AbstractFloat)
+            elseif t == SQLITE_TEXT  push!(schema,AbstractString)
+            elseif t == SQLITE_BLOB  push!(schema,AbstractString) # encode blob as string
+            else                     push!(schema,Any)
+            end
+        end
+        schema = Schema(types)	
+        new(schema,stmt,status)
     end
 end
 # function Base.open(table::Table)
