@@ -53,7 +53,6 @@ type DB
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f,handlemem)
             db = new(f,handlemem[1],0)
-            register(db, regexp, nargs=2)
             finalizer(db, close)
             return db
         else # error
@@ -68,7 +67,7 @@ DB() = DB(":memory:")
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
 
 function close(db::DB)
-    @CHECK sqlite3_close(db.handle)
+    @CHECK db sqlite3_close(db.handle)
     nothing
 end
 
