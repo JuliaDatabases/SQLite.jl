@@ -66,7 +66,7 @@ DB() = DB(":memory:")
 
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
 
-function close(db::DB)
+function Base.close(db::DB)
     @CHECK db sqlite3_close(db.handle)
     nothing
 end
@@ -82,13 +82,22 @@ type Stmt
     db::DB
     handle::Ptr{Void}
 
-    function Stmt(db::DB,sql::AbstractString)
-        handle = [C_NULL]
-        sqliteprepare(db,sql,handle,[C_NULL])
-        stmt = new(db,handle[1])
-        finalizer(stmt, x->sqlite3_finalize(handle[1]))
-        return stmt
+    function Stmt(db::DB,sql::UTF8String)
+        handlemem = [C_NULL]
+        if @OK sqliteprepare(db,sql,handlemem,[C_NULL])
+            stmt = new(db,handlemem[1])
+            finalizer(stmt, close)
+            return stmt
+        else
+            sqliteerror()
+        end
     end
+end
+Stmt(db::DB, sql::AbstractString) = Stmt(db,utf8(sql))
+
+function Base.close(stmt::Stmt)
+    @CHECK stmt sqlite3_finalize(stmt.handle)
+    nothing
 end
 
 sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
