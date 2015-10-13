@@ -16,6 +16,17 @@ db = SQLite.DB(temp)
 close(db)
 @test isfile(temp)
 
+# test construction of new statement
+db = SQLite.DB()
+stmt = SQLite.Stmt(db,"SELECT 1+1;")
+finalize(stmt)
+
+stmt = SQLite.Stmt(db,"SELECT 2+2;")
+close(stmt)
+
+# test construction of statement with error
+@test_throws stmt = SQLite.Stmt(db,"SAYLEKT 3+3;")
+
 #db = SQLite.DB("/Users/jacobquinn/.julia/v0.4/SQLite/test/Chinook_Sqlite.sqlite")
 db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
 
