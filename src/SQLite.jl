@@ -97,14 +97,6 @@ function Base.close(stmt::Stmt)
     nothing
 end
 
-type Table
-    db::DB
-    name::AbstractString
-end
-
-include("UDF.jl")
-export @sr_str, @register, register
-
 # bind a row to nameless parameters
 function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
@@ -210,6 +202,15 @@ type Source <: IOSource # <: IO
         new(schema,stmt,status)
     end
 end
+
+include("UDF.jl")
+export @sr_str, @register, register
+
+type Table
+    db::DB
+    name::AbstractString
+end
+
 # function Base.open(table::Table)
 #     return open(table.db,"select * from $(table.name)")
 # end
