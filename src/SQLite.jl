@@ -41,21 +41,23 @@ sqliteopen(file::UTF8String,handle) = sqlite3_open(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
+import Base.close
+
 type DB
     file::UTF8String
     handle::Ptr{Void}
     changes::Int
 
     function DB(f::UTF8String)
-        handle = [C_NULL]
+        handlemem = Ptr{Void}[C_NULL]
         f = isempty(f) ? f : expanduser(f)
-        if @OK sqliteopen(f,handle)
-            db = new(f,handle[1],0)
+        if @OK sqliteopen(f,handlemem)
+            db = new(f,handlemem[1],0)
             register(db, regexp, nargs=2)
-            finalizer(db, x->sqlite3_close(handle[1]))
+            finalizer(db, close)
             return db
         else # error
-            sqlite3_close(handle[1])
+            sqlite3_close(handlemem[1])
             sqliteerror()
         end
     end
@@ -64,6 +66,10 @@ DB(f::AbstractString) = DB(utf8(f))
 DB() = DB(":memory:")
 
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
+
+function close(db::DB)
+    sqlite3_close(db.handle)
+end
 
 function changes(db::DB)
     new_tot = sqlite3_total_changes(db.handle)
