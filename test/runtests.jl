@@ -1,5 +1,10 @@
-using Base.Test, Compat#, SQLite
-reload("/Users/jacobquinn/.julia/v0.4/SQLite/src/SQLite.jl")
+using Base.Test
+using Compat 
+if !isdefined(:SQLite)
+    using SQLite
+else
+    reload("SQLite")
+end
 
 a = SQLite.DB()
 finalize(a)
