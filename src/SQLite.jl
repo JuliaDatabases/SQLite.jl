@@ -84,13 +84,10 @@ type Stmt
 
     function Stmt(db::DB,sql::UTF8String)
         handlemem = [C_NULL]
-        if @OK sqliteprepare(db,sql,handlemem,[C_NULL])
-            stmt = new(db,handlemem[1])
-            finalizer(stmt, close)
-            return stmt
-        else
-            sqliteerror()
-        end
+        @CHECK db sqlite3_prepare_v2(db.handle,sql,handlemem,[C_NULL])
+        stmt = new(db,handlemem[1])
+        finalizer(stmt, close)
+        return stmt
     end
 end
 Stmt(db::DB, sql::AbstractString) = Stmt(db,utf8(sql))
@@ -99,9 +96,6 @@ function Base.close(stmt::Stmt)
     @CHECK stmt sqlite3_finalize(stmt.handle)
     nothing
 end
-
-sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
-# sqliteprepare(db::DB{UTF16String},sql,stmt,null) = @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
 type Table
     db::DB
