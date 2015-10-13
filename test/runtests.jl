@@ -6,11 +6,15 @@ else
     reload("SQLite")
 end
 
-a = SQLite.DB()
+# test open memory DB and finalizer
+db = SQLite.DB()
 finalize(a)
 
+# test create new file DB and closing
 temp = tempname()
-SQLite.DB(temp)
+db = SQLite.DB(temp)
+close(db)
+@test isfile(temp)
 
 #db = SQLite.DB("/Users/jacobquinn/.julia/v0.4/SQLite/test/Chinook_Sqlite.sqlite")
 db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
