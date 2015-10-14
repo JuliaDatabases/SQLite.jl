@@ -127,8 +127,9 @@ bind!(stmt::Stmt,i::Int,val::AbstractFloat)  = @CHECK stmt.db sqlite3_bind_doubl
 bind!(stmt::Stmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
 bind!(stmt::Stmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
 bind!(stmt::Stmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
-bind!(stmt::Stmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::ASCIIString)    = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+bind!(stmt::Stmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,utf8(val))
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
 bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
