@@ -64,6 +64,7 @@ Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":me
 
 function Base.close(db::DB)
     @CHECK db sqlite3_close(db.handle)
+    db.handle = C_NULL # make sure released handle not reused
     nothing
 end
 
@@ -90,6 +91,7 @@ Stmt(db::DB, sql::AbstractString) = Stmt(db,utf8(sql))
 
 function Base.close(stmt::Stmt)
     @CHECK stmt.db sqlite3_finalize(stmt.handle)
+    stmt.handle = C_NULL # make sure released handle not reused
     nothing
 end
 
