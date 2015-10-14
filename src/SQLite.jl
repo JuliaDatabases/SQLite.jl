@@ -15,16 +15,12 @@ end
 include("consts.jl")
 include("api.jl")
 include("utils.jl")
+include("serialize.jl")
 
 # Custom NULL type
 immutable NullType end
 const NULL = NullType()
 Base.show(io::IO,::NullType) = print(io,"#NULL")
-
-# internal wrapper type to, in-effect, mark something which has been serialized
-immutable Serialization
-    object
-end
 
 type ResultSet
     colnames
@@ -135,15 +131,6 @@ bind!(stmt::Stmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text1
 # as the "official" bytes type instead of Vector{UInt8}
 bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.handle,i,val)
 # Fallback is BLOB and defaults to serializing the julia value
-function sqlserialize(x)
-    t = IOBuffer()
-    # deserialize will sometimes return a random object when called on an array
-    # which has not been previously serialized, we can use this type to check
-    # that the array has been serialized
-    s = Serialization(x)
-    serialize(t,s)
-    return takebuf_array(t)
-end
 bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
@@ -163,19 +150,6 @@ function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
     execute!(stmt)
     return changes(db)
-end
-
-const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
-function sqldeserialize(r)
-    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
-            SERIALIZATION, r, min(18,length(r)))
-
-    if ret == 0
-        v = deserialize(IOBuffer(r))
-        return v.object
-    else
-        return r
-    end
 end
 
 type Source <: IOSource # <: IO
