@@ -269,19 +269,19 @@ function Base.writecsv(db,table,file;compressed::Bool=false)
 end
 
 function query(db::DB,sql::AbstractString, values=[])
-    stream = SQLite.open(db,sql,values)
-    ncols = stream.cols
-    (eof(stream) || ncols == 0) && return changes(db)
+    source = Source(db,sql,values)
+    ncols = size(source.schema,2) 
+    (eof(source) || ncols == 0) && return changes(db)
     colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
-        colnames[i] = bytestring(sqlite3_column_name(stream.stmt.handle,i-1))
+        colnames[i] = bytestring(sqlite3_column_name(source.stmt.handle,i-1))
         results[i] = Any[]
     end
     col = 1
-    while !eof(stream)
+    while !eof(source)
         c = col
-        r, col = next(stream,col)
+        r, col = next(source,col)
         push!(results[c],r)
     end
     return ResultSet(colnames, results)
