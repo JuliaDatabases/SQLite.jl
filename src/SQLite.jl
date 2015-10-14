@@ -168,16 +168,22 @@ type Source <: IOSource # <: IO
         types = DataType[]
         for i=1:cols
             t = sqlite3_column_type(stmt.handle,i-1)
-            if t == SQLITE_INTEGER   push!(schema,Integer)
-            elseif t == SQLITE_FLOAT push!(schema,AbstractFloat)
-            elseif t == SQLITE_TEXT  push!(schema,AbstractString)
-            elseif t == SQLITE_BLOB  push!(schema,AbstractString) # encode blob as string
-            else                     push!(schema,Any)
+            if t == SQLITE_INTEGER   push!(types,Integer)
+            elseif t == SQLITE_FLOAT push!(types,AbstractFloat)
+            elseif t == SQLITE_TEXT  push!(types,AbstractString)
+            elseif t == SQLITE_BLOB  push!(types,Any)
+            else                     push!(types,Any)
             end
         end
         schema = Schema(types)	
         new(schema,stmt,status)
+        # source = new(schema,stmt,status)
+        # finalizer(source, close)    # do we need a finalizer here?
     end
+end
+
+function Base.close(s::Source)
+    close(s.stmt)
 end
 
 include("UDF.jl")
@@ -197,9 +203,9 @@ function Base.eof(s::Source)
     return s.status == SQLITE_DONE
 end
 
-Base.start(s::DataStream) = 1
-Base.done(s::DataStream,col) = eof(s)
-function Base.next(s::DataStream,i)
+Base.start(s::Source) = 1
+Base.done(s::Source,col) = eof(s)
+function Base.next(s::Source,i)
     t = sqlite3_column_type(s.stmt.handle,i-1)
     r::Any
     if t == SQLITE_INTEGER
@@ -218,7 +224,7 @@ function Base.next(s::DataStream,i)
     else
         r = NULL
     end
-    if i == s.cols
+    if i == size(s.schema,2)
         s.status = sqlite3_step(s.stmt.handle)
         i = 1
     else
@@ -227,9 +233,9 @@ function Base.next(s::DataStream,i)
     return r, i
 end
 
-function Base.readline(s::DataStream,delim::Char=',',buf::IOBuffer=IOBuffer())
+function Base.readline(s::Source,delim::Char=',',buf::IOBuffer=IOBuffer())
     eof(s) && return ""
-    for i = 1:s.cols
+    for i = 1:size(s.schema,2)
         val = sqlite3_column_text(s.stmt.handle,i-1)
         val != C_NULL && write(buf,bytestring(val))
         write(buf,ifelse(i == s.cols,'\n',delim))
