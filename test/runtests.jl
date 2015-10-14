@@ -163,14 +163,15 @@ if VERSION > v"0.4.0-"
     SQLite.query(db,"CREATE TABLE temp AS SELECT * FROM Album")
     r = SQLite.query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
     @test size(r) == (3,3)
-    r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+    r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(symbol("@word") => "%time%"))
     @test r.values[1] == [76, 111, 187]
-    SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+    SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, symbol("@lid") => 0, :title => "Test Album"))
     r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
     @test r == SQLite.ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
     SQLite.drop!(db, "temp")
 end
 
+SQLite.register(db,SQLite.regexp,nargs=2,name="REGEXP")
 r = SQLite.query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
