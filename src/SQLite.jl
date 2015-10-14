@@ -93,7 +93,7 @@ end
 Stmt(db::DB, sql::AbstractString) = Stmt(db,utf8(sql))
 
 function Base.close(stmt::Stmt)
-    @CHECK stmt sqlite3_finalize(stmt.handle)
+    @CHECK stmt.db sqlite3_finalize(stmt.handle)
     nothing
 end
 
