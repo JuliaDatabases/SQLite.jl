@@ -284,6 +284,7 @@ function query(db::DB,sql::AbstractString, values=[])
         r, col = next(source,col)
         push!(results[c],r)
     end
+    close(source)
     return ResultSet(colnames, results)
 end
 
