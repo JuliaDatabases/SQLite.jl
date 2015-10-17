@@ -1,6 +1,9 @@
 module SQLite
 
-using Compat, CSV, Libz, DataStreams
+using Compat
+# using CSV
+using Libz
+using DataStreams
 
 importall Base.Operators
 
@@ -408,93 +411,93 @@ function create(db::DB,name::AbstractString,table,
     return ResultSet(["Rows Loaded"],Any[Any[N]])
 end
 
-function readbind!{T<:Union{Integer,Float64}}(io,::Type{T},row,col,stmt)
-    val, isnull = CSV.readfield(io,T,row,col)
-    bind!(stmt,col,ifelse(isnull,NULL,val))
-    return
-end
-function readbind!(io, ::Type{Date}, row, col, stmt)
-    bind!(stmt,col,CSV.readfield(io,Date,row,col)[1])
-    return
-end
-function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
-    str, isnull = CSV.readfield(io,T,row,col)
-    if isnull
-        bind!(stmt,col,NULL)
-    else
-        sqlite3_bind_text(stmt.handle,col,str.ptr,str.len)
-    end
-    return
-end
-
-function create(db::DB,file::CSV.Source,name::AbstractString=splitext(basename(file.fullpath))[1]
-                ;temp::Bool=false,ifnotexists::Bool=false)
-    names = SQLite.make_unique([SQLite.identifier(i) for i in file.schema.header])
-    sqltypes = [string(names[i]) * SQLite.gettype(file.schema.types[i]) for i = 1:file.schema.cols]
-    N = transaction(db) do
-        # create table statement
-        t = temp ? "TEMP " : ""
-        exists = ifnotexists ? "if not exists" : ""
-        SQLite.execute!(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
-        # insert statements
-        params = chop(repeat("?,",file.schema.cols))
-        stmt = SQLite.Stmt(db,"insert into $name values ($params)")
-        #bind, step, reset loop for inserting values
-        # io = CSV.open(file)
-        seek(file,file.datapos+1)
-        N = 0
-        while !eof(file)
-            for col = 1:file.schema.cols
-                SQLite.readbind!(file,file.schema.types[col],N,col,stmt)
-            end
-            SQLite.execute!(stmt)
-            N += 1
-            b = CSV.peek(file)
-            empty = b == CSV.NEWLINE || b == CSV.RETURN
-            if empty
-                file.skipblankrows && CSV.skipn!(file,1,file.quotechar,file.escapechar)
-            end
-        end
-        close(stmt)
-        return N
-    end
-    execute!(db,"analyze $name")
-    return ResultSet(["Rows Loaded"],Any[Any[N]])
-end
-
-function createindex(db::DB,table::AbstractString,index::AbstractString,cols
-                    ;unique::Bool=true,ifnotexists::Bool=false)
-    u = unique ? "unique" : ""
-    exists = ifnotexists ? "if not exists" : ""
-    transaction(db) do
-        execute!(db,"create $u index $exists $index on $table ($cols)")
-    end
-    execute!(db,"analyze $index")
-    return changes(db)
-end
-
-function append!(db::DB,name::AbstractString,file::CSV.Source)
-    N = transaction(db) do
-        # insert statements
-        params = chop(repeat("?,",file.cols))
-        stmt = SQLite.Stmt(db,"insert into $name values ($params)")
-        #bind, step, reset loop for inserting values
-        io = CSV.open(file)
-        seek(io,file.datapos)
-        N = 0
-        while !eof(io)
-            for col = 1:file.cols
-                SQLite.readbind!(io,file.types[col],N,col,stmt)
-            end
-            execute!(stmt)
-            N += 1
-        end
-        close(stmt)
-        return N
-    end
-    execute!(db,"analyze $name")
-    return ResultSet(["Rows Loaded"],Any[Any[N]])
-end
+# function readbind!{T<:Union{Integer,Float64}}(io,::Type{T},row,col,stmt)
+#     val, isnull = CSV.readfield(io,T,row,col)
+#     bind!(stmt,col,ifelse(isnull,NULL,val))
+#     return
+# end
+# function readbind!(io, ::Type{Date}, row, col, stmt)
+#     bind!(stmt,col,CSV.readfield(io,Date,row,col)[1])
+#     return
+# end
+# function readbind!{T<:AbstractString}(io,::Type{T},row,col,stmt)
+#     str, isnull = CSV.readfield(io,T,row,col)
+#     if isnull
+#         bind!(stmt,col,NULL)
+#     else
+#         sqlite3_bind_text(stmt.handle,col,str.ptr,str.len)
+#     end
+#     return
+# end
+# 
+# function create(db::DB,file::CSV.Source,name::AbstractString=splitext(basename(file.fullpath))[1]
+#                 ;temp::Bool=false,ifnotexists::Bool=false)
+#     names = SQLite.make_unique([SQLite.identifier(i) for i in file.schema.header])
+#     sqltypes = [string(names[i]) * SQLite.gettype(file.schema.types[i]) for i = 1:file.schema.cols]
+#     N = transaction(db) do
+#         # create table statement
+#         t = temp ? "TEMP " : ""
+#         exists = ifnotexists ? "if not exists" : ""
+#         SQLite.execute!(db,"CREATE $(t)TABLE $exists $name ($(join(sqltypes,',')))")
+#         # insert statements
+#         params = chop(repeat("?,",file.schema.cols))
+#         stmt = SQLite.Stmt(db,"insert into $name values ($params)")
+#         #bind, step, reset loop for inserting values
+#         # io = CSV.open(file)
+#         seek(file,file.datapos+1)
+#         N = 0
+#         while !eof(file)
+#             for col = 1:file.schema.cols
+#                 SQLite.readbind!(file,file.schema.types[col],N,col,stmt)
+#             end
+#             SQLite.execute!(stmt)
+#             N += 1
+#             b = CSV.peek(file)
+#             empty = b == CSV.NEWLINE || b == CSV.RETURN
+#             if empty
+#                 file.skipblankrows && CSV.skipn!(file,1,file.quotechar,file.escapechar)
+#             end
+#         end
+#         close(stmt)
+#         return N
+#     end
+#     execute!(db,"analyze $name")
+#     return ResultSet(["Rows Loaded"],Any[Any[N]])
+# end
+# 
+# function createindex(db::DB,table::AbstractString,index::AbstractString,cols
+#                     ;unique::Bool=true,ifnotexists::Bool=false)
+#     u = unique ? "unique" : ""
+#     exists = ifnotexists ? "if not exists" : ""
+#     transaction(db) do
+#         execute!(db,"create $u index $exists $index on $table ($cols)")
+#     end
+#     execute!(db,"analyze $index")
+#     return changes(db)
+# end
+# 
+# function append!(db::DB,name::AbstractString,file::CSV.Source)
+#     N = transaction(db) do
+#         # insert statements
+#         params = chop(repeat("?,",file.cols))
+#         stmt = SQLite.Stmt(db,"insert into $name values ($params)")
+#         #bind, step, reset loop for inserting values
+#         io = CSV.open(file)
+#         seek(io,file.datapos)
+#         N = 0
+#         while !eof(io)
+#             for col = 1:file.cols
+#                 SQLite.readbind!(io,file.types[col],N,col,stmt)
+#             end
+#             execute!(stmt)
+#             N += 1
+#         end
+#         close(stmt)
+#         return N
+#     end
+#     execute!(db,"analyze $name")
+#     return ResultSet(["Rows Loaded"],Any[Any[N]])
+# end
 function append!(db::DB,name::AbstractString,table)
     N, M = size(table)
     transaction(db) do
