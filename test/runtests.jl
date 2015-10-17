@@ -28,6 +28,7 @@ close(stmt)
 
 # test construction of statement with error
 @test_throws SQLite.SQLiteException stmt = SQLite.Stmt(binddb,"SAYLEKT 3+3;")
+close(stmt)
 
 # test execute!(DB,AbstractString)
 res = SQLite.execute!(binddb,"CREATE TABLE t2 (i INT, f REAL, s TEXT, a BLOB)")
@@ -43,6 +44,7 @@ SQLite.execute!(stmt)
 SQLite.bind!(stmt,[0,1.0,"missing",2//1])
 SQLite.bind!(stmt,[3,Inf,"world",2//3])
 SQLite.execute!(stmt)
+close(stmt)
 
 # test binding using dictionary
 stmt = SQLite.Stmt(binddb,"INSERT INTO t2 VALUES (:p1, \$param::two, @p3, :p4)")
@@ -67,6 +69,7 @@ src = SQLite.Source(binddb,"SELECT * FROM t2 WHERE s='world' ;")
 v = collect(src)
 @test length(v)==8
 @test map(typeof,v)==DataType[ Int64, Float64, ASCIIString, Complex{Float64}, Int64, Float64, ASCIIString, Rational{Int64} ]
+close(src)
 
 # test execute!(Stmt)
 stmt = SQLite.Stmt(binddb,"DROP TABLE t2")
@@ -80,6 +83,7 @@ results = SQLite.query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 @test length(results.colnames) == 1
 @test results.colnames[1] == "name"
 @test size(results) == (11,1)
+close(binddb)
 
 results1 = SQLite.tables(db)
 @test results.colnames == results1.colnames
@@ -202,7 +206,7 @@ end
 for (v1, v2) in zip(r.values[2], Any[b"b", BigInt(2), p1, p2])
     @test v1 == v2
 end
-finalize(binddb)
+close(binddb)
 
 # I can't be arsed to create a new one using old dictionary syntax
 if VERSION > v"0.4.0-"
@@ -311,7 +315,7 @@ SQLite.drop!(db2, "nonexistant", ifexists=true)
 SQLite.drop!(db2, "tab2", ifexists=true)
 @test !in("tab2", SQLite.tables(db2)[1])
 
-finalize(db2)
+close(db2)
 
 @test size(SQLite.tables(db)) == (11,1)
 
