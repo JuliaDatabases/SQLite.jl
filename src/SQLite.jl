@@ -1,7 +1,7 @@
 module SQLite
 
 using Compat
-# using CSV
+using CSV
 using Libz
 using DataStreams
 
@@ -159,8 +159,8 @@ function execute!(db::DB,sql::AbstractString)
     return changes(db)
 end
 
-type Source <: IOSource # <: IO
-    schema::Schema
+type Source <: Data.Source # <: IO
+    schema::Data.Schema
     stmt::Stmt
     status::Cint
     function Source(db::DB,sql::AbstractString, values=[])
@@ -179,7 +179,7 @@ type Source <: IOSource # <: IO
             else                     push!(types,Any)
             end
         end
-        schema = Schema(types)	
+        schema = Data.Schema(types)
         new(schema,stmt,status)
         # source = new(schema,stmt,status)
         # finalizer(source, close)    # do we need a finalizer here?

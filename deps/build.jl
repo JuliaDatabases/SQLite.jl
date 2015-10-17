@@ -19,3 +19,6 @@ end
 end
 
 @BinDeps.install [:sqlite3_lib => :sqlite3_lib ]
+
+haskey(Pkg.installed(),"DataStreams") || Pkg.clone("https://github.com/quinnj/DataStreams.jl")
+# haskey(Pkg.installed(),"CSV") || Pkg.clone("https://github.com/quinnj/CSV.jl")
