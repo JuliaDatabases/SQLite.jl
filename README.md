@@ -3,8 +3,8 @@ SQLite.jl
 
 [![SQLite](http://pkg.julialang.org/badges/SQLite_0.3.svg)](http://pkg.julialang.org/?pkg=SQLite)
 [![SQLite](http://pkg.julialang.org/badges/SQLite_0.4.svg)](http://pkg.julialang.org/?pkg=SQLite)
-[![Build Status](https://travis-ci.org/quinnj/SQLite.jl.svg?branch=master)](https://travis-ci.org/quinnj/SQLite.jl)
-[![Coverage Status](https://coveralls.io/repos/quinnj/SQLite.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/quinnj/SQLite.jl?branch=master)
+[![Build Status](https://travis-ci.org/JuliaDB/SQLite.jl.svg?branch=master)](https://travis-ci.org/JuliaDB/SQLite.jl)
+[![Coverage Status](https://coveralls.io/repos/JuliaDB/SQLite.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/JuliaDB/SQLite.jl?branch=master)
 
 A Julia interface to the SQLite library and support for operations on DataFrames
 
