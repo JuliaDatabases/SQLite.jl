@@ -152,6 +152,7 @@ end
 function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
     execute!(stmt)
+    close(stmt)
     return changes(db)
 end
 
@@ -271,7 +272,10 @@ end
 function query(db::DB,sql::AbstractString, values=[])
     source = Source(db,sql,values)
     ncols = size(source.schema,2) 
-    (eof(source) || ncols == 0) && return changes(db)
+    if (eof(source) || ncols == 0)
+        close(source)
+        return changes(db)
+    end
     colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
@@ -397,6 +401,7 @@ function create(db::DB,name::AbstractString,table,
                 end
                 execute!(stmt)
             end
+            close(stmt)
         end
     end
     execute!(db,"analyze $name")
@@ -450,6 +455,7 @@ function create(db::DB,file::CSV.Source,name::AbstractString=splitext(basename(f
                 file.skipblankrows && CSV.skipn!(file,1,file.quotechar,file.escapechar)
             end
         end
+        close(stmt)
         return N
     end
     execute!(db,"analyze $name")
@@ -483,6 +489,7 @@ function append!(db::DB,name::AbstractString,file::CSV.Source)
             execute!(stmt)
             N += 1
         end
+        close(stmt)
         return N
     end
     execute!(db,"analyze $name")
@@ -502,6 +509,7 @@ function append!(db::DB,name::AbstractString,table)
             end
             execute!(stmt)
         end
+        close(stmt)
     end
     execute!(db,"analyze $name")
     return ResultSet(["Rows Loaded"],Any[Any[N]])
