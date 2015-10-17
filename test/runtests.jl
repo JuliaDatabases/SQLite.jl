@@ -1,19 +1,89 @@
-using Base.Test, Compat#, SQLite
-reload("/Users/jacobquinn/.julia/v0.4/SQLite/src/SQLite.jl")
+using Base.Test
+using Compat 
+if !isdefined(:SQLite)
+    using SQLite
+else
+    reload("SQLite")
+end
 
-a = SQLite.DB()
-finalize(a)
+# test open memory DB and finalizer
+binddb = SQLite.DB()
+finalize(binddb)
 
+# test create new file DB and closing
 temp = tempname()
-SQLite.DB(temp)
+binddb = SQLite.DB(temp)
+close(binddb)
+@test isfile(temp)
 
-#db = SQLite.DB("/Users/jacobquinn/.julia/v0.4/SQLite/test/Chinook_Sqlite.sqlite")
 db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
 
+# test construction of new statement
+binddb = SQLite.DB()
+stmt = SQLite.Stmt(binddb,"SELECT 1+1;")
+finalize(stmt)
+
+stmt = SQLite.Stmt(binddb,"SELECT 2+2;")
+close(stmt)
+
+# test construction of statement with error
+@test_throws SQLite.SQLiteException stmt = SQLite.Stmt(binddb,"SAYLEKT 3+3;")
+close(stmt)
+
+# test execute!(DB,AbstractString)
+res = SQLite.execute!(binddb,"CREATE TABLE t2 (i INT, f REAL, s TEXT, a BLOB)")
+@test isa(res,SQLite.ResultSet)
+
+# test parametrized statement
+stmt = SQLite.Stmt(binddb,"INSERT INTO t2 VALUES (?1, ?2, ?3, ?4)")
+SQLite.bind!(stmt,[1,2.0,"hello",Dict("a"=>"b")])
+SQLite.execute!(stmt)
+SQLite.bind!(stmt,[2,-3.2e3,"world",1.0+2.0im])
+SQLite.execute!(stmt)
+# test double binding
+SQLite.bind!(stmt,[0,1.0,"missing",2//1])
+SQLite.bind!(stmt,[3,Inf,"world",2//3])
+SQLite.execute!(stmt)
+close(stmt)
+
+# test binding using dictionary
+stmt = SQLite.Stmt(binddb,"INSERT INTO t2 VALUES (:p1, \$param::two, @p3, :p4)")
+SQLite.bind!(stmt,Dict(:p1=>4,symbol("param::two")=>11.12,symbol("@p3")=>"julia",:p4=>nothing))
+SQLite.execute!(stmt)
+close(stmt) # finalizer may be run in a long while
+
+stmt = SQLite.Stmt(binddb,"INSERT INTO t2 VALUES (?5, ?1, ?2, ?3)")
+SQLite.bind!(stmt,5,5)
+SQLite.bind!(stmt,1,1.2)
+SQLite.bind!(stmt,2,"αβ")
+SQLite.execute!(stmt)
+close(stmt)
+
+stmt = SQLite.Stmt(binddb,"SELECT * FROM t2 WHERE s=? ;")
+SQLite.bind!(stmt,1,"world")
+SQLite.execute!(stmt)
+close(stmt)
+
+# test Source as output of SELECT
+src = SQLite.Source(binddb,"SELECT * FROM t2 WHERE s='world' ;")
+v = collect(src)
+@test length(v)==8
+@test map(typeof,v)==DataType[ Int64, Float64, ASCIIString, Complex{Float64}, Int64, Float64, ASCIIString, Rational{Int64} ]
+close(src)
+
+# test execute!(Stmt)
+stmt = SQLite.Stmt(binddb,"DROP TABLE t2")
+SQLite.execute!(stmt)
+close(stmt)
+
+SQLite.query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
+SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[SQLite.NULL, Int64(6), 6.4, "some text", b"bytearray"])
+r = SQLite.query(binddb, "SELECT * FROM temp")
 results = SQLite.query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 @test length(results.colnames) == 1
 @test results.colnames[1] == "name"
 @test size(results) == (11,1)
+close(binddb)
 
 results1 = SQLite.tables(db)
 @test results.colnames == results1.colnames
@@ -136,21 +206,22 @@ end
 for (v1, v2) in zip(r.values[2], Any[b"b", BigInt(2), p1, p2])
     @test v1 == v2
 end
-finalize(binddb)
+close(binddb)
 
 # I can't be arsed to create a new one using old dictionary syntax
 if VERSION > v"0.4.0-"
     SQLite.query(db,"CREATE TABLE temp AS SELECT * FROM Album")
     r = SQLite.query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
     @test size(r) == (3,3)
-    r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+    r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(symbol("@word") => "%time%"))
     @test r.values[1] == [76, 111, 187]
-    SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+    SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, symbol("@lid") => 0, :title => "Test Album"))
     r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
     @test r == SQLite.ResultSet(Any["AlbumId", "Title", "ArtistId"], Any[Any[0], Any["Test Album"], Any[0]])
     SQLite.drop!(db, "temp")
 end
 
+SQLite.register(db,SQLite.regexp,nargs=2,name="REGEXP")
 r = SQLite.query(db, sr"SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\d{4}-08'")
 @test r.values[1][1] == "Peacock"
 
@@ -244,7 +315,7 @@ SQLite.drop!(db2, "nonexistant", ifexists=true)
 SQLite.drop!(db2, "tab2", ifexists=true)
 @test !in("tab2", SQLite.tables(db2)[1])
 
-finalize(db2)
+close(db2)
 
 @test size(SQLite.tables(db)) == (11,1)
 
