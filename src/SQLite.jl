@@ -1,7 +1,7 @@
 module SQLite
 
 using Compat
-using CSV
+# using CSV
 using Libz
 using DataStreams
 
