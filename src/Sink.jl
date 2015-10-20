@@ -1,6 +1,7 @@
 sqlitetype{T<:Integer}(::Type{T}) = "INT"
 sqlitetype{T<:AbstractFloat}(::Type{T}) = "REAL"
 sqlitetype{T<:AbstractString}(::Type{T}) = "TEXT"
+sqlitetype(::Type{NullType}) = "NULL"
 sqlitetype(x) = "BLOB"
 "SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
 type Sink <: Data.Sink # <: IO

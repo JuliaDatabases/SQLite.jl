@@ -230,7 +230,7 @@ rollback(db) = execute!(db, "ROLLBACK TRANSACTION;")
 "rollback transaction or named savepoint"
 rollback(db, name) = execute!(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-"drop the SQLite table `table` from the database `db`; `ifexists=true` will not return an error if `table` doesn't exist"
+"drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist"
 function drop!(db::DB,table::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
