@@ -2,21 +2,26 @@ sqlitetype{T<:Integer}(::Type{T}) = "INT"
 sqlitetype{T<:AbstractFloat}(::Type{T}) = "REAL"
 sqlitetype{T<:AbstractString}(::Type{T}) = "TEXT"
 sqlitetype(x) = "BLOB"
-
+"SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
 type Sink <: Data.Sink # <: IO
     schema::Data.Schema
     db::DB
     tablename::UTF8String
     stmt::Stmt
 end
-
-function Source(sink::SQLite.Sink)
-    stmt = SQLite.Stmt(sink.db,"select * from $(sink.tablename)")
+"constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from the underlying Sink table by default"
+function Source(sink::SQLite.Sink,sql::AbstractString="select * from $(sink.tablename)")
+    stmt = SQLite.Stmt(sink.db,sql)
     status = SQLite.execute!(stmt)
     return SQLite.Source(sink.schema, stmt, status)
 end
 
-# independent Sink constructor for new or existing SQLite tables
+"""
+independent SQLite.Sink constructor to create a new or wrap an existing SQLite table with name `tablename`.
+can optionally provide a `Data.Schema` through the `schema` argument.
+`temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
+`ifnotexists=false` will throw an error if `tablename` already exists in `db`
+"""
 function Sink(db::DB,tablename::AbstractString="julia_"*randstring(),schema::Data.Schema=Data.EMPTYSCHEMA;temp::Bool=false,ifnotexists::Bool=true)
     rows, cols = size(schema)
     temp = temp ? "TEMP" : ""
@@ -27,59 +32,71 @@ function Sink(db::DB,tablename::AbstractString="julia_"*randstring(),schema::Dat
     stmt = SQLite.Stmt(db,"insert into $tablename values ($params)")
     return Sink(schema,db,utf8(tablename),stmt)
 end
+"constructs a new SQLite.Sink from the given `Data.Source`; uses `source` schema to create the SQLite table"
+function Sink(source::Data.Source, db::DB, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
+    sink = Sink(db, tablename, source.schema; temp=temp, ifnotexists=ifnotexists)
+    return Data.stream!(source,sink)
+end
 
 # create a new SQLite table
 # Data.Table
 function getbind!{T}(dt::NullableVector{T},row,col,stmt)
-    @inbounds SQLite.bind!(stmt,col,ifelse(dt.isnull[row], NULL, dt.values[row]::T))
+    @inbounds val, isnull = dt.values[row]::T, dt.isnull[row]
+    if isnull
+        SQLite.bind!(stmt,col,NULL)
+    else
+        SQLite.bind!(stmt,col,val)
+    end
     return
 end
-
+"stream the data in `dt` into the SQLite table represented by `sink`"
 function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
     rows, cols = size(dt)
     types = Data.types(dt)
+    handle = sink.stmt.handle
     transaction(sink.db) do
         if rows*cols != 0
             for row = 1:rows
                 for col = 1:cols
                     @inbounds SQLite.getbind!(Data.column(dt,col,types[col]),row,col,sink.stmt)
                 end
-                SQLite.execute!(sink.stmt)
+                SQLite.sqlite3_step(handle)
+                SQLite.sqlite3_reset(handle)
             end
         end
     end
     SQLite.execute!(sink.db,"analyze $(sink.tablename)")
     return sink
 end
-function Sink(dt::Data.Table,db::DB,tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=false)
-    sink = Sink(db,tablename,dt.schema;temp=temp,ifnotexists=ifnotexists)
-    return Data.stream!(dt,sink)
-end
 # CSV.Source
 function getbind!{T}(io,::Type{T},opts,row,col,stmt)
     val, isnull = CSV.getfield(io,T,opts,row,col)
-    SQLite.bind!(stmt,col,ifelse(isnull,NULL,val))
+    if isnull
+        SQLite.bind!(stmt,col,NULL)
+    else
+        SQLite.bind!(stmt,col,val)
+    end
     return
 end
+"stream the data in `source` CSV file to the SQLite table represented by `sink`"
 function Data.stream!(source::CSV.Source,sink::SQLite.Sink)
     rows, cols = size(source)
     types = Data.types(source)
     io = source.data
     opts = source.options
+    stmt = sink.stmt
+    handle = stmt.handle
     transaction(sink.db) do
         if rows*cols != 0
             for row = 1:rows
                 for col = 1:cols
-                    @inbounds SQLite.getbind!(io, types[col], opts, row, col, sink.stmt)
+                    @inbounds SQLite.getbind!(io, types[col], opts, row, col, stmt)
                 end
-                SQLite.execute!(sink.stmt)
+                SQLite.sqlite3_step(handle)
+                SQLite.sqlite3_reset(handle)
             end
         end
     end
     SQLite.execute!(sink.db,"analyze $(sink.tablename)")
     return sink
-end
-function Sink(csv::CSV.Source,db::DB,tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=false)
-    sink = Sink(db,tablename,csv.schema;temp=temp,ifnotexists=ifnotexists)
-    return Data.stream!(csv,sink)
 end

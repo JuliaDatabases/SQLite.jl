@@ -6,7 +6,7 @@ SQLite.jl
 [![Build Status](https://travis-ci.org/quinnj/SQLite.jl.png)](https://travis-ci.org/quinnj/SQLite.jl)
 [![Coverage Status](https://img.shields.io/coveralls/quinnj/SQLite.jl.svg)](https://coveralls.io/r/quinnj/SQLite.jl)
 
-A Julia interface to the SQLite library and support for operations on DataFrames
+A Julia interface to the SQLite library and support for the `DataStreams` data processing framework.
 
 **Installation**: `julia> Pkg.add("SQLite")`
 

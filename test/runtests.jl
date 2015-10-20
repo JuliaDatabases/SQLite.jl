@@ -8,8 +8,8 @@ a = SQLite.DB()
 temp = tempname()
 SQLite.DB(temp)
 
-db = SQLite.DB("/Users/jacobquinn/.julia/v0.4/SQLite/test/Chinook_Sqlite.sqlite")
-# db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
+# db = SQLite.DB("/Users/jacobquinn/.julia/v0.4/SQLite/test/Chinook_Sqlite.sqlite")
+db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
 
 so = SQLite.Source(db,"SELECT name FROM sqlite_master WHERE type='table';")
 ds = Data.Table(so)
