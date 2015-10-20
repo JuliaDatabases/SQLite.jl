@@ -52,70 +52,65 @@ end
 
 # SQLITE_API int sqlite3_bind_paramter_count(sqlite3_stmt*)
 function sqlite3_bind_parameter_count(stmt::Ptr{Void})
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_parameter_count, sqlite3_lib),
         Cint, (Ptr{Void},),
         stmt)
 end
 #SQLITE_API const char* sqlite3_bind_parameter_name(sqlite3_stmt*, int)
 function sqlite3_bind_parameter_name(stmt::Ptr{Void}, col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_parameter_name, sqlite3_lib),
         Ptr{UInt8}, (Ptr{Void}, Cint),
         stmt, col)
 end
 # SQLITE_API int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *zName);
 function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::AbstractString)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_parameter_index, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{UInt8}),
         stmt,utf8(value))
 end
 # SQLITE_API int sqlite3_bind_double(sqlite3_stmt*, int, double);
 function sqlite3_bind_double(stmt::Ptr{Void},col::Int,value::Float64)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_double, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Float64),
         stmt,col,value)
 end
 # SQLITE_API int sqlite3_bind_int(sqlite3_stmt*, int, int);
 function sqlite3_bind_int(stmt::Ptr{Void},col::Int,value::Int32)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_int, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Int32),
         stmt,col,value)
 end
 # SQLITE_API int sqlite3_bind_int64(sqlite3_stmt*, int, sqlite3_int64);
 function sqlite3_bind_int64(stmt::Ptr{Void},col::Int,value::Int64)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_int64, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Int64),
         stmt,col,value)
 end
 # SQLITE_API int sqlite3_bind_null(sqlite3_stmt*, int);
 function sqlite3_bind_null(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_null, sqlite3_lib),
         Cint, (Ptr{Void},Cint),
         stmt,col)
 end
 # SQLITE_API int sqlite3_bind_text(sqlite3_stmt*, int, const char*, int n, void(*)(void*));
 function sqlite3_bind_text(stmt::Ptr{Void},col::Int,value::AbstractString)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_text, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Ptr{UInt8},Cint,Ptr{Void}),
         stmt,col,value,sizeof(value),C_NULL)
 end
+function sqlite3_bind_text(stmt::Ptr{Void},col::Int,ptr::Ptr,len::Int)
+    return ccall( (:sqlite3_bind_text, sqlite3_lib),
+        Cint, (Ptr{Void},Cint,Ptr{UInt8},Cint,Ptr{Void}),
+        stmt,col,ptr,len,C_NULL)
+end
 # SQLITE_API int sqlite3_bind_text16(sqlite3_stmt*, int, const void*, int, void(*)(void*));
 function sqlite3_bind_text16(stmt::Ptr{Void},col::Int,value::UTF16String)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_text, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Ptr{UInt16},Cint,Ptr{Void}),
         stmt,col,value,sizeof(value),C_NULL)
 end
 # SQLITE_API int sqlite3_bind_blob(sqlite3_stmt*, int, const void*, int n, void(*)(void*));
 function sqlite3_bind_blob(stmt::Ptr{Void},col::Int,value)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_bind_blob, sqlite3_lib),
         Cint, (Ptr{Void},Cint,Ptr{UInt8},Cint,Ptr{Void}),
         stmt,col,value,sizeof(value),SQLITE_STATIC)
@@ -126,67 +121,56 @@ end
 # SQLITE_API int sqlite3_clear_bindings(sqlite3_stmt*);
 
 function sqlite3_step(stmt::Ptr{Void})
-    @NULLCHECK stmt
     return ccall( (:sqlite3_step, sqlite3_lib),
         Cint, (Ptr{Void},),
         stmt)
 end
 function sqlite3_column_count(stmt::Ptr{Void})
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_count, sqlite3_lib),
         Cint, (Ptr{Void},),
         stmt)
 end
 function sqlite3_column_type(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_type, sqlite3_lib),
         Cint, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_blob(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_blob, sqlite3_lib),
         Ptr{Void}, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_bytes(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_bytes, sqlite3_lib),
         Cint, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_bytes16(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_bytes16, sqlite3_lib),
         Cint, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_double(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_double, sqlite3_lib),
         Cdouble, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_int(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_int, sqlite3_lib),
         Cint, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_int64(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_int64, sqlite3_lib),
         Clonglong, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_text(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_text, sqlite3_lib),
         Ptr{UInt8}, (Ptr{Void},Cint),
         stmt,col)
 end
 function sqlite3_column_text16(stmt::Ptr{Void},col::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_text16, sqlite3_lib),
         Ptr{Void}, (Ptr{Void},Cint),
         stmt,col)
@@ -206,13 +190,11 @@ end
 
 # SQLITE_API const char *sqlite3_column_name(sqlite3_stmt*, int N);
 function sqlite3_column_name(stmt::Ptr{Void},n::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_name, sqlite3_lib),
         Ptr{UInt8}, (Ptr{Void},Cint),
         stmt,n)
 end
 function sqlite3_column_name16(stmt::Ptr{Void},n::Int)
-    @NULLCHECK stmt
     return ccall( (:sqlite3_column_name16, sqlite3_lib),
         Ptr{UInt8}, (Ptr{Void},Cint),
         stmt,n)
