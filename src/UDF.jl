@@ -187,7 +187,7 @@ macro register(db, func)
 end
 
 # User-facing method for registering a Julia function to be used within SQLite
-function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
+function register(db, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
@@ -195,7 +195,7 @@ function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractStr
 
     f = eval(scalarfunc(func,symbol(name)))
 
-    cfunc = cfunction(f, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cfunc = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     # TODO: allow the other encodings
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
@@ -207,7 +207,7 @@ end
 
 # as above but for aggregate functions
 function register(
-    db::SQLiteDB, init, step::Function, final::Function=identity;
+    db, init, step::Function, final::Function=identity;
     nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
@@ -215,9 +215,9 @@ function register(
     @assert sizeof(name) <= 255 "size of function name must be <= 255 chars"
 
     s = eval(stepfunc(init, step, Base.function_name(step)))
-    cs = cfunction(s, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cs = cfunction(s, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     f = eval(finalfunc(init, final, Base.function_name(final)))
-    cf = cfunction(f, Nothing, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cf = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
 
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
