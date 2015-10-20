@@ -1,9 +1,17 @@
+"""
+`SQLite.Source` implementes the `DataStreams` framework for interacting with SQLite databases
+"""
 type Source <: Data.Source # <: IO
     schema::Data.Schema
     stmt::Stmt
     status::Cint
 end
-
+"""
+Independently constructs an `SQLite.Source` in `db` with the SQL statement `sql`.
+Will bind `values` to any parameters in `sql`.
+`rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
+`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vectot{Any}`
+"""
 function Source(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::Bool=true)
     stmt = SQLite.Stmt(db,sql)
     bind!(stmt, values)
@@ -24,7 +32,7 @@ function Base.eof(s::Source)
     (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
     return s.status == SQLITE_DONE
 end
-
+"returns a single row as a string from an SQLite.Source"
 function Base.readline(s::Source,delim::Char=',',buf::IOBuffer=IOBuffer())
     eof(s) && return ""
     cols = s.schema.cols
@@ -36,7 +44,7 @@ function Base.readline(s::Source,delim::Char=',',buf::IOBuffer=IOBuffer())
     s.status = sqlite3_step(s.stmt.handle)
     return takebuf_string(buf)
 end
-
+"returns a single row split by field from an SQLite.Source"
 function readsplitline(s::Source)
     eof(s) && return UTF8String[]
     cols = s.schema.cols
@@ -48,8 +56,8 @@ function readsplitline(s::Source)
     s.status = sqlite3_step(s.stmt.handle)
     return vals
 end
-
-reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
+"resets an SQLite.Source"
+Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
 
 sqlitetypecode{T<:Integer}(::Type{T}) = SQLITE_INTEGER
 sqlitetypecode{T<:AbstractFloat}(::Type{T}) = SQLITE_FLOAT
@@ -108,7 +116,7 @@ function pushfield!{T}(source::SQLite.Source, dest::NullableVector{T}, ::Type{T}
     push!(dest, SQLite.getfield(source, T, row, col))
     return
 end
-
+"streams data from the SQLite.Source to a Data.Table"
 function Data.stream!(source::SQLite.Source,sink::Data.Table)
     rows, cols = size(source)
     types = Data.types(source)
@@ -131,12 +139,12 @@ function Data.stream!(source::SQLite.Source,sink::Data.Table)
     sink.schema = source.schema
     return sink
 end
-# creates a new DataTable according to `source` schema and streams `Source` data into it
+"creates a new Data.Table according to `source` schema and streams `Source` data into it"
 function Data.Table(source::SQLite.Source)
     sink = Data.Table(source.schema)
     return Data.stream!(source,sink)
 end
-
+"streams data from an SQLite.Source to a CSV.Sink file; `header=false` will not write the column names to the file"
 function Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)
     header && CSV.writeheaders(source,sink)
     rows, cols = size(source)
@@ -154,12 +162,14 @@ function Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)
     close(sink)
     return sink
 end
-
+"convenience method for executing an SQL statement and streaming the results back in a Data.Table"
 function query(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::Bool=true)
     so = Source(db,sql,values;rows=rows,stricttypes=stricttypes)
     return Data.Table(so)
 end
-
+"returns a list of tables in `db`"
 tables(db::DB) = query(db,"SELECT name FROM sqlite_master WHERE type='table';")
+"returns a list of indices in `db`"
 indices(db::DB) = query(db,"SELECT name FROM sqlite_master WHERE type='index';")
+"returns a list of columns in `table`"
 columns(db::DB,table::AbstractString) = query(db,"pragma table_info($table)")

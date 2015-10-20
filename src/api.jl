@@ -182,7 +182,6 @@ end
 # end
 # SQLITE_API sqlite3_value *sqlite3_column_value(sqlite3_stmt*, int iCol);
 function sqlite3_reset(stmt::Ptr{Void})
-    @NULLCHECK stmt
     return ccall( (:sqlite3_reset, sqlite3_lib),
         Cint, (Ptr{Void},),
         stmt)
