@@ -1,10 +1,10 @@
 SQLite.jl
 =========
 
-[![SQLite on Julia release](http://pkg.julialang.org/badges/SQLite_release.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=release)
-[![SQLite on Julia nightly](http://pkg.julialang.org/badges/SQLite_nightly.svg)](http://pkg.julialang.org/?pkg=SQLite&ver=nightly)
-[![Build Status](https://travis-ci.org/quinnj/SQLite.jl.png)](https://travis-ci.org/quinnj/SQLite.jl)
-[![Coverage Status](https://img.shields.io/coveralls/quinnj/SQLite.jl.svg)](https://coveralls.io/r/quinnj/SQLite.jl)
+[![SQLite](http://pkg.julialang.org/badges/SQLite_0.3.svg)](http://pkg.julialang.org/?pkg=SQLite)
+[![SQLite](http://pkg.julialang.org/badges/SQLite_0.4.svg)](http://pkg.julialang.org/?pkg=SQLite)
+[![Build Status](https://travis-ci.org/JuliaDB/SQLite.jl.svg?branch=master)](https://travis-ci.org/JuliaDB/SQLite.jl)
+[![Coverage Status](https://coveralls.io/repos/JuliaDB/SQLite.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/JuliaDB/SQLite.jl?branch=master)
 
 A Julia interface to the SQLite library and support for the `DataStreams` data processing framework.
 

@@ -34,6 +34,7 @@ sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
+<<<<<<< HEAD
 type DB
     file::UTF8String
     handle::Ptr{Void}
@@ -51,6 +52,20 @@ type DB
             sqlite3_close(handle[1])
             sqliteerror()
         end
+=======
+function SQLiteDB(file::AbstractString="";UTF16::Bool=false)
+    handle = [C_NULL]
+    utf = UTF16 ? utf16 : utf8
+    file = isempty(file) ? file : expanduser(file)
+    if @OK sqliteopen(utf(file),handle)
+        db = SQLiteDB(utf(file),handle[1])
+        register(db, regexp, nargs=2, name="regexp")
+        finalizer(db,close)
+        return db
+    else # error
+        sqlite3_close(handle[1])
+        sqliteerror()
+>>>>>>> d86fcf628105a178ae6fc0128740e4ec2df8b2e7
     end
 end
 "`SQLite.DB(file::AbstractString)` opens or creates an SQLite database with `file`"
@@ -66,12 +81,19 @@ end
 
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
 
+<<<<<<< HEAD
 """
 `SQLite.Stmt(db::DB, sql::AbstractString)` creates and prepares an SQLite statement
 """
 type Stmt
     db::DB
     handle::Ptr{Void}
+=======
+sqliteprepare(db,sql,stmt,null) =
+    @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
+sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) =
+    @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
+>>>>>>> d86fcf628105a178ae6fc0128740e4ec2df8b2e7
 
     function Stmt(db::DB,sql::AbstractString)
         handle = [C_NULL]
@@ -131,6 +153,7 @@ function bind!(stmt::Stmt,name::AbstractString,val)
     end
     return bind!(stmt,i,val)
 end
+<<<<<<< HEAD
 bind!(stmt::Stmt,i::Int,val::AbstractFloat)  = (sqlite3_bind_double(stmt.handle,i,Float64(val)); return nothing)
 bind!(stmt::Stmt,i::Int,val::Int32)          = (sqlite3_bind_int(stmt.handle,i,val); return nothing)
 bind!(stmt::Stmt,i::Int,val::Int64)          = (sqlite3_bind_int64(stmt.handle,i,val); return nothing)
@@ -138,6 +161,14 @@ bind!(stmt::Stmt,i::Int,val::NullType)       = (sqlite3_bind_null(stmt.handle,i)
 bind!(stmt::Stmt,i::Int,val::AbstractString) = (sqlite3_bind_text(stmt.handle,i,val); return nothing)
 bind!(stmt::Stmt,i::Int,val::PointerString)  = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
+=======
+bind(stmt::SQLiteStmt,i::Int,val::AbstractFloat)  = @CHECK stmt.db sqlite3_bind_double(stmt.handle,i,@compat Float64(val))
+bind(stmt::SQLiteStmt,i::Int,val::Int32)          = @CHECK stmt.db sqlite3_bind_int(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::Int64)          = @CHECK stmt.db sqlite3_bind_int64(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::NullType)       = @CHECK stmt.db sqlite3_bind_null(stmt.handle,i)
+bind(stmt::SQLiteStmt,i::Int,val::AbstractString) = @CHECK stmt.db sqlite3_bind_text(stmt.handle,i,val)
+bind(stmt::SQLiteStmt,i::Int,val::UTF16String)    = @CHECK stmt.db sqlite3_bind_text16(stmt.handle,i,val)
+>>>>>>> d86fcf628105a178ae6fc0128740e4ec2df8b2e7
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
 bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle,i,val); return nothing)
@@ -186,6 +217,63 @@ function sqldeserialize(r)
     end
 end
 
+<<<<<<< HEAD
+=======
+function query(db::SQLiteDB,sql::AbstractString, values=[])
+    stmt = SQLiteStmt(db,sql)
+    bind(stmt, values)
+    status = execute(stmt)
+    ncols = sqlite3_column_count(stmt.handle)
+    if status == SQLITE_DONE || ncols == 0
+        return changes(db)
+    end
+    colnames = Array(AbstractString,ncols)
+    results = Array(Any,ncols)
+    for i = 1:ncols
+        colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i-1))
+        results[i] = Any[]
+    end
+    while status == SQLITE_ROW
+        for i = 1:ncols
+            t = sqlite3_column_type(stmt.handle,i-1)
+            if t == SQLITE_INTEGER
+                r = sqlite3_column_int64(stmt.handle,i-1)
+            elseif t == SQLITE_FLOAT
+                r = sqlite3_column_double(stmt.handle,i-1)
+            elseif t == SQLITE_TEXT
+                #TODO: have a way to return text16?
+                r = bytestring( sqlite3_column_text(stmt.handle,i-1) )
+            elseif t == SQLITE_BLOB
+                blob = sqlite3_column_blob(stmt.handle,i-1)
+                b = sqlite3_column_bytes(stmt.handle,i-1)
+                buf = zeros(UInt8,b)
+                unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
+                r = sqldeserialize(buf)
+            else
+                r = NULL
+            end
+            push!(results[i],r)
+        end
+        status = sqlite3_step(stmt.handle)
+    end
+    if status == SQLITE_DONE
+        return ResultSet(colnames, results)
+    else
+        sqliteerror(stmt.db)
+    end
+end
+
+function tables(db::SQLiteDB)
+    query(db,"SELECT name FROM sqlite_master WHERE type='table';")
+end
+
+function indices(db::SQLiteDB)
+    query(db,"SELECT name FROM sqlite_master WHERE type='index';")
+end
+
+columns(db::SQLiteDB,table::AbstractString) = query(db,"pragma table_info($table)")
+
+>>>>>>> d86fcf628105a178ae6fc0128740e4ec2df8b2e7
 # Transaction-based commands
 """
 Begin a transaction in the spedified `mode`, default = "DEFERRED".
