@@ -1,18 +1,20 @@
-"""
-`SQLite.Source` implementes the `DataStreams` framework for interacting with SQLite databases
-"""
-type Source <: Data.Source # <: IO
-    schema::Data.Schema
-    stmt::Stmt
-    status::Cint
+"indicates whether the `SQLite.Source` has finished returning results"
+function Data.isdone(s::Source)
+    (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
+    return s.status == SQLITE_DONE
 end
+"resets an SQLite.Source, ready to read data from at the start of the resultset"
+Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
+
 """
 Independently constructs an `SQLite.Source` in `db` with the SQL statement `sql`.
 Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
-`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vectot{Any}`
+`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
+
+Note that no results are returned; `sql` is executed, and results are ready to be returned (i.e. streamed to an appropriate `Data.Sink` type)
 """
-function Source(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::Bool=true)
+function Source(db::DB, sql::AbstractString, values=[]; rows::Int=0, stricttypes::Bool=true)
     stmt = SQLite.Stmt(db,sql)
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
@@ -20,53 +22,18 @@ function Source(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::B
     header = Array(UTF8String,cols)
     types = Array(DataType,cols)
     for i = 1:cols
-        header[i] = bytestring(SQLite.sqlite3_column_name(stmt.handle,i-1))
+        header[i] = bytestring(SQLite.sqlite3_column_name(stmt.handle,i))
         # do better column type inference; query what the column was created for?
         types[i] = stricttypes ? SQLite.juliatype(stmt.handle,i) : Any
     end
-    # rows == -1 && count(*)?
     return SQLite.Source(Data.Schema(header,types,rows),stmt,status)
 end
 
-function Base.eof(s::Source)
-    (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
-    return s.status == SQLITE_DONE
-end
-"returns a single row as a string from an SQLite.Source"
-function Base.readline(s::Source,delim::Char=',',buf::IOBuffer=IOBuffer())
-    eof(s) && return ""
-    cols = s.schema.cols
-    for i = 1:cols
-        val = sqlite3_column_text(s.stmt.handle,i-1)
-        val != C_NULL && write(buf,bytestring(val))
-        write(buf,ifelse(i == cols,'\n',delim))
-    end
-    s.status = sqlite3_step(s.stmt.handle)
-    return takebuf_string(buf)
-end
-"returns a single row split by field from an SQLite.Source"
-function readsplitline(s::Source)
-    eof(s) && return UTF8String[]
-    cols = s.schema.cols
-    vals = Array(UTF8String, cols)
-    for i = 1:cols
-        val = sqlite3_column_text(s.stmt.handle,i-1)
-        valsl[i] = val == C_NULL ? "" : bytestring(val)
-    end
-    s.status = sqlite3_step(s.stmt.handle)
-    return vals
-end
-"resets an SQLite.Source"
-Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
+"constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from the underlying Sink table by default"
+Source(sink::SQLite.Sink,sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
 
-sqlitetypecode{T<:Integer}(::Type{T}) = SQLITE_INTEGER
-sqlitetypecode{T<:AbstractFloat}(::Type{T}) = SQLITE_FLOAT
-sqlitetypecode{T<:AbstractString}(::Type{T}) = SQLITE_TEXT
-sqlitetypecode(::Type{BigInt}) = SQLITE_BLOB
-sqlitetypecode(::Type{BigFloat}) = SQLITE_BLOB
-sqlitetypecode(x) = SQLITE_BLOB
 function juliatype(handle,col)
-    x = SQLite.sqlite3_column_type(handle,col-1)
+    x = SQLite.sqlite3_column_type(handle,col)
     if x == SQLITE_BLOB
         val = sqlitevalue(Any,handle,col)
         return typeof(val)
@@ -76,33 +43,31 @@ function juliatype(handle,col)
 end
 juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? UTF8String : Any
 
-sqlitevalue{T<:Integer}(::Type{T},handle,col) = sqlite3_column_int64(handle,col-1)
-sqlitevalue{T<:AbstractFloat}(::Type{T},handle,col) = sqlite3_column_double(handle,col-1)
+sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T},handle,col) = convert(T, sqlite3_column_int64(handle,col))
+const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
+sqlitevalue{T<:FLOAT_TYPES}(::Type{T},handle,col) = convert(T, sqlite3_column_double(handle,col))
 #TODO: test returning a PointerString instead of calling `bytestring`
-sqlitevalue{T<:AbstractString}(::Type{T},handle,col) = convert(T,bytestring(sqlite3_column_text(handle,col-1)))
-sqlitevalue(::Type{PointerString},handle,col) = bytestring(sqlite3_column_text(handle,col-1))
-sqlitevalue(::Type{BigInt},handle,col) = sqlitevalue(Any,handle,col)
-sqlitevalue(::Type{BigFloat},handle,col) = sqlitevalue(Any,handle,col)
+sqlitevalue{T<:AbstractString}(::Type{T},handle,col) = convert(T,bytestring(sqlite3_column_text(handle,col)))
 function sqlitevalue{T}(::Type{T},handle,col)
-    blob = convert(Ptr{UInt8},SQLite.sqlite3_column_blob(handle,col-1))
-    b = SQLite.sqlite3_column_bytes(handle,col-1)
+    blob = convert(Ptr{UInt8},SQLite.sqlite3_column_blob(handle,col))
+    b = SQLite.sqlite3_column_bytes(handle,col)
     buf = zeros(UInt8,b) # global const?
     unsafe_copy!(pointer(buf), blob, b)
     r = SQLite.sqldeserialize(buf)::T
     return r
 end
 
+# `T` might be Int, Float64, String, PointerString, any Julia type, Any, NullType
+# `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
+"`SQLite.getfield` returns the next `Nullable{T}` value from the `SQLite.Source`"
 function getfield{T}(source::SQLite.Source, ::Type{T}, row, col)
     handle = source.stmt.handle
-    t = sqlite3_column_type(handle,col-1)
+    t = SQLite.sqlite3_column_type(handle,col)
     if t == SQLite.SQLITE_NULL
         val = Nullable{T}()
-    elseif t == SQLite.sqlitetypecode(T)
-        val = Nullable(sqlitevalue(T,handle,col))
-    elseif T === Any
-        val = Nullable(sqlitevalue(juliatype(t),handle,col))
     else
-        throw(SQLiteException("strict type error trying to retrieve type `$T` on row: $(row+1), col: $col; SQLite reports a type of $(sqlitetypecode(T))"))
+        TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
+        val = Nullable{T}(sqlitevalue(ifelse(TT===Any&&!isbits(T),T,TT),handle,col))
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val
@@ -122,10 +87,10 @@ function Data.stream!(source::SQLite.Source,sink::Data.Table)
     types = Data.types(source)
     if rows == 0
         row = 0
-        while !eof(source)
+        while !Data.isdone(source)
             for col = 1:cols
                 @inbounds T = types[col]
-                SQLite.pushfield!(source, Data.unsafe_column(sink,col,T), T, row, col) # row + datarow
+                SQLite.pushfield!(source, Data.unsafe_column(sink,col,T), T, row, col)
             end
             row += 1
         end
@@ -133,14 +98,14 @@ function Data.stream!(source::SQLite.Source,sink::Data.Table)
     else
         for row = 1:rows, col = 1:cols
             @inbounds T = types[col]
-            SQLite.getfield!(source, Data.unsafe_column(sink,col,T), T, row, col) # row + datarow
+            SQLite.getfield!(source, Data.unsafe_column(sink,col,T), T, row, col)
         end
     end
     sink.schema = source.schema
     return sink
 end
 "creates a new Data.Table according to `source` schema and streams `Source` data into it"
-function Data.Table(source::SQLite.Source)
+function Data.stream!(source::SQLite.Source,::Type{Data.Table})
     sink = Data.Table(source.schema)
     return Data.stream!(source,sink)
 end
@@ -150,7 +115,7 @@ function Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)
     rows, cols = size(source)
     types = Data.types(source)
     row = 0
-    while !eof(source)
+    while !Data.isdone(source)
         for col = 1:cols
             val = SQLite.getfield(source, types[col], row, col)
             CSV.writefield(sink, isnull(val) ? sink.null : get(val), col, cols)
@@ -165,7 +130,7 @@ end
 "convenience method for executing an SQL statement and streaming the results back in a Data.Table"
 function query(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::Bool=true)
     so = Source(db,sql,values;rows=rows,stricttypes=stricttypes)
-    return Data.Table(so)
+    return Data.stream!(so,Data.Table)
 end
 "returns a list of tables in `db`"
 tables(db::DB) = query(db,"SELECT name FROM sqlite_master WHERE type='table';")

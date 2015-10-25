@@ -1,14 +1,9 @@
+using DataStreams
 module SQLite
 
 using Compat, NullableArrays, CSV, Libz, DataStreams
-import CSV.PointerString
-
-# Deprecated exports
-export NULL, SQLiteDB, SQLiteStmt, ResultSet,
-       execute, query, tables, indices, columns, droptable, dropindex,
-       create, createindex, append, deleteduplicates
-
-import Base: ==, show, convert, bind, close
+const PointerString = Data.PointerString
+const NULLSTRING = Data.NULLSTRING
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -17,15 +12,10 @@ end
 include("consts.jl")
 include("api.jl")
 
-# Custom NULL type
 immutable NullType end
+"custom NULL value for interacting with the SQLite database"
 const NULL = NullType()
 show(io::IO,::NullType) = print(io,"#NULL")
-
-"internal wrapper type to, in-effect, mark something which has been serialized"
-immutable Serialization
-    object
-end
 
 #TODO: Support sqlite3_open_v2
 # Normal constructor from filename
@@ -34,21 +24,22 @@ sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
+"represents an SQLite database, either backed by an on-disk file or in-memory"
 type DB
     file::UTF8String
     handle::Ptr{Void}
     changes::Int
 
     function DB(f::UTF8String)
-        handle = [C_NULL]
+        handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f,handle)
-            db = new(f,handle[1],0)
+            db = new(f,handle[],0)
             register(db, regexp, nargs=2, name="regexp")
             finalizer(db, _close)
             return db
         else # error
-            sqlite3_close(handle[1])
+            sqlite3_close(handle[])
             sqliteerror()
         end
     end
@@ -74,9 +65,9 @@ type Stmt
     handle::Ptr{Void}
 
     function Stmt(db::DB,sql::AbstractString)
-        handle = [C_NULL]
-        sqliteprepare(db,sql,handle,[C_NULL])
-        stmt = new(db,handle[1])
+        handle = Ref{Ptr{Void}}()
+        sqliteprepare(db,sql,handle,Ref{Ptr{Void}}())
+        stmt = new(db,handle[])
         finalizer(stmt, _close)
         return stmt
     end
@@ -88,8 +79,7 @@ function _close(stmt::Stmt)
     return
 end
 
-sqliteprepare(db,sql,stmt,null) =
-    @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
+sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
 
 # TO DEPRECATE
 type SQLiteDB{T<:AbstractString}
@@ -140,8 +130,14 @@ bind!(stmt::Stmt,i::Int,val::PointerString)  = (sqlite3_bind_text(stmt.handle,i,
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
+"bind a byte vector as an SQLite BLOB"
 bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle,i,val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
+"internal wrapper type to, in-effect, mark something which has been serialized"
+immutable Serialization
+    object
+end
+
 function sqlserialize(x)
     t = IOBuffer()
     # deserialize will sometimes return a random object when called on an array
@@ -151,8 +147,21 @@ function sqlserialize(x)
     serialize(t,s)
     return takebuf_array(t)
 end
-"bind `val` to the parameter at index `i`"
+"fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)"
 bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
+
+# magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
+const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
+function sqldeserialize(r)
+    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
+            SERIALIZATION, r, min(18,length(r)))
+    if ret == 0
+        v = deserialize(IOBuffer(r))
+        return v.object
+    else
+        return r
+    end
+end
 #TODO:
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
@@ -171,19 +180,6 @@ end
 function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
     return execute!(stmt)
-end
-
-const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
-function sqldeserialize(r)
-    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
-            SERIALIZATION, r, min(18,length(r)))
-
-    if ret == 0
-        v = deserialize(IOBuffer(r))
-        return v.object
-    else
-        return r
-    end
 end
 
 # Transaction-based commands
@@ -269,6 +265,23 @@ function removeduplicates!(db,table::AbstractString,cols::AbstractString)
     end
     execute!(db,"analyze $table")
     return
+end
+
+"""
+`SQLite.Source` implementes the `DataStreams` framework for interacting with SQLite databases
+"""
+type Source <: Data.Source
+    schema::Data.Schema
+    stmt::Stmt
+    status::Cint
+end
+
+"SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
+type Sink <: Data.Sink # <: IO
+    schema::Data.Schema
+    db::DB
+    tablename::UTF8String
+    stmt::Stmt
 end
 
 include("Source.jl")

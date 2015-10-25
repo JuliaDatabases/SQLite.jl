@@ -12,7 +12,7 @@ SQLite.DB(temp)
 db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
 
 so = SQLite.Source(db,"SELECT name FROM sqlite_master WHERE type='table';")
-ds = Data.Table(so)
+ds = Data.stream!(so,Data.Table)
 @test length(ds.data) == 1
 @test Data.header(ds)[1] == "name"
 @test size(ds) == (11,1)
@@ -58,6 +58,7 @@ r = SQLite.query(db,"select * from temp limit 10")
 
 dt = Data.Table(Data.Schema([Float64,Float64,Float64,Float64,Float64],5))
 sink = SQLite.Sink(dt,db)
+Data.stream!(dt,sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
 @test size(r) == (5,5)
 @test all(map(isnull,r.data))
@@ -67,6 +68,7 @@ SQLite.drop!(db,"$(sink.tablename)")
 
 dt = Data.Table(zeros(5,5))
 sink = SQLite.Sink(dt,db)
+Data.stream!(dt,sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
 @test size(r) == (5,5)
 @test all([get(i) for i in r.data[1]] .== 0.0)
@@ -75,6 +77,7 @@ SQLite.drop!(db,"$(sink.tablename)")
 
 dt = Data.Table(zeros(Int,5,5))
 sink = SQLite.Sink(dt,db)
+Data.stream!(dt,sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
 @test size(r) == (5,5)
 @test all([get(i) for i in r.data[1]] .== 0)
@@ -91,6 +94,7 @@ SQLite.drop!(db,"$(sink.tablename)")
 rng = Date(2013):Date(2013,1,5)
 dt = Data.Table([i for i = rng, j = rng])
 sink = SQLite.Sink(dt,db)
+Data.stream!(dt,sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
 @test size(r) == (5,5)
 @test all([get(i) for i in r.data[1]] .== rng)
@@ -246,7 +250,7 @@ source = SQLite.Source(db,"select * from album")
 temp = tempname()
 sink = CSV.Sink(temp)
 Data.stream!(source,sink)
-dt = Data.Table(CSV.Source(sink))
+dt = Data.stream!(CSV.Source(sink),Data.Table)
 @test get(dt[1,1]) == 1
 @test get(dt[1,2]) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1
@@ -256,16 +260,17 @@ db = nothing; gc(); gc();
 db = SQLite.DB()
 source = CSV.Source(temp)
 sink = SQLite.Sink(source,db,"temp")
+Data.stream!(source,sink)
 source2 = SQLite.Source(sink)
-dt = Data.Table(source2)
+dt = Data.stream!(source2,Data.Table)
 @test get(dt[1,1]) == 1
 @test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1
 
-sink = SQLite.Sink(db, "temp2", Data.schema(dt))
+sink = SQLite.Sink(Data.schema(dt), db, "temp2")
 Data.stream!(dt,sink)
 source3 = SQLite.Source(sink)
-dt = Data.Table(source3)
+dt = Data.stream!(source3,Data.Table)
 @test get(dt[1,1]) == 1
 @test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1

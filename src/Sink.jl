@@ -3,27 +3,15 @@ sqlitetype{T<:AbstractFloat}(::Type{T}) = "REAL"
 sqlitetype{T<:AbstractString}(::Type{T}) = "TEXT"
 sqlitetype(::Type{NullType}) = "NULL"
 sqlitetype(x) = "BLOB"
-"SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
-type Sink <: Data.Sink # <: IO
-    schema::Data.Schema
-    db::DB
-    tablename::UTF8String
-    stmt::Stmt
-end
-"constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from the underlying Sink table by default"
-function Source(sink::SQLite.Sink,sql::AbstractString="select * from $(sink.tablename)")
-    stmt = SQLite.Stmt(sink.db,sql)
-    status = SQLite.execute!(stmt)
-    return SQLite.Source(sink.schema, stmt, status)
-end
 
 """
 independent SQLite.Sink constructor to create a new or wrap an existing SQLite table with name `tablename`.
-can optionally provide a `Data.Schema` through the `schema` argument.
+must provide a `Data.Schema` through the `schema` argument
+can optionally provide an existing SQLite table name or new name that a created SQLite table will be called through the `tablename` argument
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
 """
-function Sink(db::DB,tablename::AbstractString="julia_"*randstring(),schema::Data.Schema=Data.EMPTYSCHEMA;temp::Bool=false,ifnotexists::Bool=true)
+function Sink(schema::Data.Schema,db::DB,tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
     rows, cols = size(schema)
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "if not exists" : ""
@@ -33,10 +21,14 @@ function Sink(db::DB,tablename::AbstractString="julia_"*randstring(),schema::Dat
     stmt = SQLite.Stmt(db,"insert into $tablename values ($params)")
     return Sink(schema,db,utf8(tablename),stmt)
 end
+
+"constructs a new SQLite.Sink from the given `SQLite.Source`; uses `source` schema to create the SQLite table"
+function Sink(source::SQLite.Source, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
+    return Sink(source.schema, source.db, tablename; temp=temp, ifnotexists=ifnotexists)
+end
 "constructs a new SQLite.Sink from the given `Data.Source`; uses `source` schema to create the SQLite table"
 function Sink(source::Data.Source, db::DB, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
-    sink = Sink(db, tablename, source.schema; temp=temp, ifnotexists=ifnotexists)
-    return Data.stream!(source,sink)
+    return Sink(source.schema, db, tablename; temp=temp, ifnotexists=ifnotexists)
 end
 
 # create a new SQLite table
@@ -59,7 +51,7 @@ function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
         if rows*cols != 0
             for row = 1:rows
                 for col = 1:cols
-                    @inbounds SQLite.getbind!(Data.column(dt,col,types[col]),row,col,sink.stmt)
+                    @inbounds SQLite.getbind!(Data.unsafe_column(dt,col,types[col]),row,col,sink.stmt)
                 end
                 SQLite.sqlite3_step(handle)
                 SQLite.sqlite3_reset(handle)

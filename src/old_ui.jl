@@ -12,6 +12,7 @@ type ResultSet
    colnames
    values::Vector{Any}
 end
+import Base.==
 ==(a::ResultSet,b::ResultSet) = a.colnames == b.colnames && a.values == b.values
 include("show.jl")
 Base.convert(::Type{Matrix},a::ResultSet) = [a[i,j] for i=1:size(a,1), j=1:size(a,2)]
@@ -38,7 +39,6 @@ function changes(db::SQLiteDB)
     db.changes = new_tot
     return ResultSet(["Rows Affected"],Any[Any[diff]])
 end
-
 
 function Base.close{T}(db::SQLiteDB{T})
     db.handle == C_NULL && return
@@ -143,22 +143,22 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
-        colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i-1))
+        colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i))
         results[i] = Any[]
     end
     while status == SQLITE_ROW
         for i = 1:ncols
-            t = sqlite3_column_type(stmt.handle,i-1)
+            t = sqlite3_column_type(stmt.handle,i)
             if t == SQLITE_INTEGER
-                r = sqlite3_column_int64(stmt.handle,i-1)
+                r = sqlite3_column_int64(stmt.handle,i)
             elseif t == SQLITE_FLOAT
-                r = sqlite3_column_double(stmt.handle,i-1)
+                r = sqlite3_column_double(stmt.handle,i)
             elseif t == SQLITE_TEXT
                 #TODO: have a way to return text16?
-                r = bytestring( sqlite3_column_text(stmt.handle,i-1) )
+                r = bytestring( sqlite3_column_text(stmt.handle,i) )
             elseif t == SQLITE_BLOB
-                blob = sqlite3_column_blob(stmt.handle,i-1)
-                b = sqlite3_column_bytes(stmt.handle,i-1)
+                blob = sqlite3_column_blob(stmt.handle,i)
+                b = sqlite3_column_bytes(stmt.handle,i)
                 buf = zeros(UInt8,b)
                 unsafe_copy!(pointer(buf), convert(Ptr{UInt8},blob), b)
                 r = sqldeserialize(buf)
@@ -271,9 +271,4 @@ function deleteduplicates(db,table::AbstractString,cols::AbstractString)
     return changes(db)
 end
 
-@deprecate bind SQLite.bind!
-@deprecate execute SQLite.execute!
-@deprecate droptable SQLite.drop!
-@deprecate dropindex SQLite.dropindex!
-@deprecate createindex SQLite.createindex!
-@deprecate deleteduplicates SQLite.deleteduplicates!
+execute!(db::SQLiteDB, sql) = execute(db, sql)
