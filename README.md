@@ -8,6 +8,8 @@ SQLite.jl
 
 A Julia interface to the SQLite library and support for the `DataStreams` data processing framework.
 
+**Note: the package has recently undergone major UI changes: for 0.3 compatible code, please see the old [README](https://github.com/JuliaDB/SQLite.jl/blob/master/OLD_README.md)
+
 **Installation**: `julia> Pkg.add("SQLite")`
 
 ## Package Documentation
