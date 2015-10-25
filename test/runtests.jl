@@ -24,7 +24,7 @@ results1 = SQLite.tables(db)
 results = SQLite.query(db,"SELECT * FROM Employee;")
 @test length(results.data) == 15
 @test size(results) == (8,15)
-@test typeof(results[1,1]) == Nullable{Int64}
+@test typeof(results[1,1]) == Nullable{Int}
 @test typeof(results[1,2]) == Nullable{UTF8String}
 @test isnull(results[1,5])
 
