@@ -4,6 +4,5 @@ Compat
 DataStreams
 NullableArrays
 CSV
-Libz
 @osx Homebrew
 @windows WinRPM

@@ -1,7 +1,7 @@
 using DataStreams
 module SQLite
 
-using Compat, NullableArrays, CSV, Libz, DataStreams
+using Compat, NullableArrays, DataStreams, CSV
 const PointerString = Data.PointerString
 const NULLSTRING = Data.NULLSTRING
 
