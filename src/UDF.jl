@@ -187,7 +187,7 @@ macro register(db, func)
 end
 
 # User-facing method for registering a Julia function to be used within SQLite
-function register(db::SQLiteDB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
+function register(db, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
@@ -207,7 +207,7 @@ end
 
 # as above but for aggregate functions
 function register(
-    db::SQLiteDB, init, step::Function, final::Function=identity;
+    db, init, step::Function, final::Function=identity;
     nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"

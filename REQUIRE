@@ -1,5 +1,9 @@
-julia 0.3
+julia 0.4
 BinDeps
 Compat
+DataStreams
+NullableArrays
+CSV
+Libz
 @osx Homebrew
 @windows WinRPM
