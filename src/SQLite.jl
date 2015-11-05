@@ -126,8 +126,13 @@ bind!(stmt::Stmt,i::Int,val::Int32)          = (sqlite3_bind_int(stmt.handle,i,v
 bind!(stmt::Stmt,i::Int,val::Int64)          = (sqlite3_bind_int64(stmt.handle,i,val); return nothing)
 bind!(stmt::Stmt,i::Int,val::NullType)       = (sqlite3_bind_null(stmt.handle,i); return nothing)
 bind!(stmt::Stmt,i::Int,val::AbstractString) = (sqlite3_bind_text(stmt.handle,i,val); return nothing)
-bind!(stmt::Stmt,i::Int,val::PointerString)  = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
+bind!(stmt::Stmt,i::Int,val::PointerString{UInt8})   = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
+bind!(stmt::Stmt,i::Int,val::PointerString{UInt16})  = (sqlite3_bind_text16(stmt.handle,i,val.ptr,val.len*2); return nothing)
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
+function bind!(stmt::Stmt,i::Int,val::PointerString{UInt32})
+    A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
+    return bind!(stmt, i, convert(UTF8String,A))
+end
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
 "bind a byte vector as an SQLite BLOB"
