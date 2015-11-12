@@ -14,8 +14,8 @@ end
   provides(Homebrew.HB, "sqlite", sqlite3_lib, os = :Darwin)
 end
 @unix_only begin
-  provides(Yum, {"sqlite3-devel" => sqlite3_lib})
-  provides(AptGet, {"sqlite3" => sqlite3_lib})
+  provides(Yum, Dict("sqlite3-devel" => sqlite3_lib))
+  provides(AptGet, Dict("sqlite3" => sqlite3_lib))
 end
 
-@BinDeps.install [:sqlite3_lib => :sqlite3_lib ]
+@BinDeps.install Dict(:sqlite3_lib => :sqlite3_lib)
