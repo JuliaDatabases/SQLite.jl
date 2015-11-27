@@ -146,9 +146,9 @@ end
 SQLite.query(db,"CREATE TABLE temp AS SELECT * FROM Album")
 r = SQLite.query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
 @test size(r) == (3,3)
-r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(symbol("@word") => "%time%"))
 @test [get(i) for i in r.data[1]] == [76, 111, 187]
-SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, symbol("@lid") => 0, :title => "Test Album"))
 r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1,1] === Nullable(0)
 @test get(r[1,2]) == "Test Album"
