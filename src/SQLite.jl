@@ -184,7 +184,9 @@ end
 "Prepare and execute an SQLite statement"
 function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
-    return execute!(stmt)
+    res = execute!(stmt)
+    _close(stmt)
+    res
 end
 
 # Transaction-based commands
