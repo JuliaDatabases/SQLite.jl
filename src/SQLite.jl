@@ -108,7 +108,7 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
         name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
-        name = name[2:end]
+        name = name[1]=='@' ? name : name[2:end]
         bind!(stmt, i, values[symbol(name)])
     end
 end
