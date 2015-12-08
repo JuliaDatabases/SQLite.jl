@@ -187,6 +187,14 @@ function execute!(db::DB,sql::AbstractString)
     return execute!(stmt)
 end
 
+"Escape SQLite identifiers (e.g. column, table or index names). Can be either a string, or a vector of strings (note does not check for null characters)."
+esc_id(x::AbstractString) = "\""*replace(x,"\"","\"\"")*"\""
+esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
+
+"Escape SQLite string constants (note does not check for null characters)."
+esc_str(x::AbstractString) = "'"*replace(x,"'","''")*"'"
+
+
 # Transaction-based commands
 """
 Begin a transaction in the spedified `mode`, default = "DEFERRED".
@@ -232,43 +240,46 @@ rollback(db) = execute!(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute!(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
 "drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist"
-function drop!(db::DB,table::AbstractString;ifexists::Bool=false)
-    exists = ifexists ? "if exists" : ""
+function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
+    exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db,"drop table $exists $table")
+        execute!(db,"DROP TABLE $exists $(esc_id(table))")
     end
-    execute!(db,"vacuum")
+    execute!(db,"VACUUM")
     return
 end
+
 "drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist"
 function dropindex!(db::DB,index::AbstractString;ifexists::Bool=false)
-    exists = ifexists ? "if exists" : ""
+    exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db,"drop index $exists $index")
+        execute!(db,"DROP INDEX $exists $(esc_id(index))")
     end
     return
 end
+
 """
-create the SQLite index `index` on the table `table` using `cols`, which may be a single column or comma-delimited list of columns.
+create the SQLite index `index` on the table `table` using `cols`, which may be a single column or vector of columns.
 `unique` specifies whether the index will be unique or not.
 `ifnotexists=true` will not throw an error if the index already exists
 """
-function createindex!(db::DB,table::AbstractString,index::AbstractString,cols
-                    ;unique::Bool=true,ifnotexists::Bool=false)
-    u = unique ? "unique" : ""
-    exists = ifnotexists ? "if not exists" : ""
+function createindex!{S<:AbstractString}(db::DB,table::AbstractString,index::AbstractString,cols::Union{S,AbstractVector{S}}
+                      ;unique::Bool=true,ifnotexists::Bool=false)
+    u = unique ? "UNIQUE" : ""
+    exists = ifnotexists ? "IF NOT EXISTS" : ""
     transaction(db) do
-        execute!(db,"create $u index $exists $index on $table ($cols)")
+        execute!(db,"CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols))")
     end
-    execute!(db,"analyze $index")
+    execute!(db,"ANALYZE $index")
     return
 end
+
 "removes duplicate rows from `table` based on the values in `cols` which may be a single column or comma-delimited list of columns"
 function removeduplicates!(db,table::AbstractString,cols::AbstractString)
     transaction(db) do
-        execute!(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
+        execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(esc_id(cols)));")
     end
-    execute!(db,"analyze $table")
+    execute!(db,"ANALYZE $table")
     return
 end
 

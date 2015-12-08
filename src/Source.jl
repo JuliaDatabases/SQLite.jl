@@ -132,9 +132,10 @@ function query(db::DB,sql::AbstractString, values=[];rows::Int=0,stricttypes::Bo
     so = Source(db,sql,values;rows=rows,stricttypes=stricttypes)
     return Data.stream!(so,Data.Table)
 end
+
 "returns a list of tables in `db`"
 tables(db::DB) = query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 "returns a list of indices in `db`"
 indices(db::DB) = query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 "returns a list of columns in `table`"
-columns(db::DB,table::AbstractString) = query(db,"pragma table_info($table)")
+columns(db::DB,table::AbstractString) = query(db,"PRAGMA table_info($(esc_id(table)))")
