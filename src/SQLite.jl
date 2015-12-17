@@ -187,12 +187,11 @@ function execute!(db::DB,sql::AbstractString)
     return execute!(stmt)
 end
 
-"Escape SQLite identifiers (e.g. column, table or index names). Can be either a string, or a vector of strings (note does not check for null characters)."
+"Escape SQLite identifiers (e.g. column, table or index names). Can be either
+a string, or a vector of strings (note does not check for null characters).
+A vector of identifiers will be separated by commas."
 esc_id(x::AbstractString) = "\""*replace(x,"\"","\"\"")*"\""
 esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
-
-"Escape SQLite string constants (note does not check for null characters)."
-esc_str(x::AbstractString) = "'"*replace(x,"'","''")*"'"
 
 
 # Transaction-based commands
