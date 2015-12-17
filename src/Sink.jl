@@ -14,11 +14,11 @@ can optionally provide an existing SQLite table name or new name that a created 
 function Sink(schema::Data.Schema,db::DB,tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
     rows, cols = size(schema)
     temp = temp ? "TEMP" : ""
-    ifnotexists = ifnotexists ? "if not exists" : ""
-    columns = [string(schema.header[i],' ',sqlitetype(schema.types[i])) for i = 1:cols]
-    SQLite.execute!(db,"CREATE $temp TABLE $ifnotexists $tablename ($(join(columns,',')))")
+    ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
+    columns = [string(esc_id(schema.header[i]),' ',sqlitetype(schema.types[i])) for i = 1:cols]
+    SQLite.execute!(db,"CREATE $temp TABLE $ifnotexists $(esc_id(tablename)) ($(join(columns,',')))")
     params = chop(repeat("?,",cols))
-    stmt = SQLite.Stmt(db,"insert into $tablename values ($params)")
+    stmt = SQLite.Stmt(db,"INSERT INTO $(esc_id(tablename)) VALUES ($params)")
     return Sink(schema,db,utf8(tablename),stmt)
 end
 
@@ -58,7 +58,7 @@ function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
             end
         end
     end
-    SQLite.execute!(sink.db,"analyze $(sink.tablename)")
+    SQLite.execute!(sink.db,"ANALYZE $(esc_id(sink.tablename))")
     return sink
 end
 # CSV.Source
@@ -90,6 +90,6 @@ function Data.stream!(source::CSV.Source,sink::SQLite.Sink)
             end
         end
     end
-    SQLite.execute!(sink.db,"analyze $(sink.tablename)")
+    SQLite.execute!(sink.db,"ANALYZE $(esc_id(sink.tablename))")
     return sink
 end
