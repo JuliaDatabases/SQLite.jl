@@ -34,10 +34,11 @@ end
 # create a new SQLite table
 # Data.Table
 function getbind!{T}(dt::NullableVector{T},row,col,stmt)
-    @inbounds val, isnull = dt.values[row]::T, dt.isnull[row]
+    @inbounds isnull = dt.isnull[row]
     if isnull
         SQLite.bind!(stmt,col,NULL)
     else
+        @inbounds val = dt.values[row]::T
         SQLite.bind!(stmt,col,val)
     end
     return

@@ -274,3 +274,19 @@ dt = Data.stream!(source3,Data.Table)
 @test get(dt[1,1]) == 1
 @test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1
+
+#Make sure we handle undefined values
+db = SQLite.DB() #In case the order of tests is changed
+arr = Array(UTF8String,2) 
+arr[1] = "1" #Now an array with the second value undefined
+nv = NullableArrays.NullableArray(arr, [false, true])
+schema = DataStreams.Data.Schema(["nv"], [UTF8String],2)
+d = NullableArrays.NullableVector[nv]
+dt = DataStreams.Data.Table(schema, d,0)
+SQLite.drop!(db, "temp", ifexists=true)
+sink = SQLite.Sink(dt, db, "temp")
+Data.stream!(dt, sink)
+dt2 = SQLite.query(db, "Select * from temp")
+#There might be a better way to check this
+@test dt.data[1][1].value==dt2.data[1][1].value
+@test dt.data[1][2].isnull==dt2.data[1][2].isnull
