@@ -273,14 +273,29 @@ function createindex!{S<:AbstractString}(db::DB,table::AbstractString,index::Abs
     return
 end
 
-"removes duplicate rows from `table` based on the values in `cols` which may be a single column or comma-delimited list of columns"
+"removes duplicate rows from `table` based on the values in `cols` which is an array of column names"
+function removeduplicates!{T <: AbstractString}(db,table::AbstractString,cols::AbstractArray{T})
+    colsstr = ""
+    for c in cols
+       colsstr = colsstr*esc_id(c)*","
+    end
+    colsstr = chop(colsstr)
+    transaction(db) do
+        execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
+    end   
+    execute!(db,"ANALYZE $table")
+    return
+ end
+
 function removeduplicates!(db,table::AbstractString,cols::AbstractString)
+    warn("This method is deprecated, please provide the column names as an array of column names rather than a single string.")
     transaction(db) do
         execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(esc_id(cols)));")
     end
     execute!(db,"ANALYZE $table")
     return
 end
+
 
 """
 `SQLite.Source` implementes the `DataStreams` framework for interacting with SQLite databases
