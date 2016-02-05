@@ -290,3 +290,24 @@ dt2 = SQLite.query(db, "Select * from temp")
 #There might be a better way to check this
 @test dt.data[1][1].value==dt2.data[1][1].value
 @test dt.data[1][2].isnull==dt2.data[1][2].isnull
+
+#Test removeduplicates!
+db = SQLite.DB() #In case the order of tests is changed
+ints = Int64[1,1,2,2,3]
+strs = UTF8String["A", "A", "B", "C", "C"]
+nvInts = NullableArrays.NullableArray(ints)
+nvStrs = NullableArrays.NullableArray(strs)
+schema = DataStreams.Data.Schema(["ints", "strs"], [Int64, UTF8String],5)
+d = NullableArrays.NullableVector[nvInts, nvStrs]
+dt = DataStreams.Data.Table(schema, d,0)
+SQLite.drop!(db, "temp", ifexists=true)
+sink = SQLite.Sink(dt, db, "temp")
+Data.stream!(dt, sink)
+SQLite.removeduplicates!(db, "temp", ["ints","strs"]) #New format
+dt3 = SQLite.query(db, "Select * from temp")
+@test get(dt3[1,1]) == 1
+@test get(dt3[1,2]) == "A"
+@test get(dt3[2,1]) == 2
+@test get(dt3[2,2]) == "B"
+@test get(dt3[3,1]) == 2
+@test get(dt3[3,2]) == "C"
