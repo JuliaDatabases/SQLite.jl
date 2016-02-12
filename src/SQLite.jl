@@ -171,7 +171,19 @@ end
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
-"Execute a prepared SQLite statement"
+## "Execute a prepared SQLite statement"
+"""
+```
+execute!(stmt::Stmt)
+```
+Executes the query based on the Stmt object
+
+### Args
+* stmt: The statement object
+
+### Returns
+Returns the status as an integer
+"""
 function execute!(stmt::Stmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
@@ -181,7 +193,21 @@ function execute!(stmt::Stmt)
     end
     return r
 end
-"Prepare and execute an SQLite statement"
+
+## "Prepare and execute an SQLite statement"
+"""
+```
+execute!(db::DB,sql::AbstractString)
+```
+Executes the query based on the query string
+
+### Args
+* db: The DB object
+* sql: The query string
+
+### Returns
+Returns the status as an integer
+"""
 function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
     return execute!(stmt)
