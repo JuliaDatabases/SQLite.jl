@@ -267,7 +267,7 @@ function createindex!{S<:AbstractString}(db::DB,table::AbstractString,index::Abs
     u = unique ? "UNIQUE" : ""
     exists = ifnotexists ? "IF NOT EXISTS" : ""
     transaction(db) do
-        execute!(db,"CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols))")
+        execute!(db,"CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))")
     end
     execute!(db,"ANALYZE $index")
     return
@@ -282,7 +282,7 @@ function removeduplicates!{T <: AbstractString}(db,table::AbstractString,cols::A
     colsstr = chop(colsstr)
     transaction(db) do
         execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
-    end   
+    end
     execute!(db,"ANALYZE $table")
     return
  end
