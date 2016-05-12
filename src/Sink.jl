@@ -64,7 +64,7 @@ function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
 end
 # CSV.Source
 function getbind!{T}(io,::Type{T},opts,row,col,stmt)
-    val, isnull = CSV.getfield(io,T,opts,row,col)
+    val, isnull = CSV.parsefield(io,T,opts,row,col)
     if isnull
         SQLite.bind!(stmt,col,NULL)
     else
