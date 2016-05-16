@@ -55,8 +55,8 @@ type SQLiteStmt{T}
     sql::T
 end
 
-sqliteprepare(db,sql,stmt,null) =
-    @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
+# sqliteprepare(db,sql,stmt,null) =
+#     @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
 sqliteprepare(db::SQLiteDB{UTF16String},sql,stmt,null) =
     @CHECK db sqlite3_prepare16_v2(db.handle,utf16(sql),stmt,null)
 
