@@ -109,7 +109,7 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
-        bind!(stmt, i, values[symbol(name)])
+        bind!(stmt, i, values[@compat(Symbol)(name)])
     end
 end
 # Binding parameters to SQL statements

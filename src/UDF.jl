@@ -48,6 +48,7 @@ function scalarfunc(func,fsym=symbol(string(func)))
             SQLite.sqlreturn(context, ret)
             nothing
         end
+        return $(nm)
     end
 end
 function scalarfunc(expr::Expr)
@@ -138,6 +139,7 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
             end
             nothing
         end
+        return $(nm)
     end
 end
 
@@ -177,6 +179,7 @@ function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
             end
             nothing
         end
+        return $(nm)
     end
 end
 
@@ -193,7 +196,7 @@ function register(db, func::Function; nargs::Int=-1, name::AbstractString=string
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
 
-    f = eval(scalarfunc(func,symbol(name)))
+    f = eval(scalarfunc(func,@compat(Symbol)(name)))
 
     cfunc = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     # TODO: allow the other encodings

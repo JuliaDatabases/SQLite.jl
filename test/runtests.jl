@@ -25,7 +25,7 @@ results = SQLite.query(db,"SELECT * FROM Employee;")
 @test length(results.data) == 15
 @test size(results) == (8,15)
 @test typeof(results[1,1]) == Nullable{Int}
-@test typeof(results[1,2]) == Nullable{UTF8String}
+@test typeof(results[1,2]) == Nullable{@compat(String)}
 @test isnull(results[1,5])
 
 SQLite.query(db,"SELECT * FROM Album;")
@@ -277,10 +277,10 @@ dt = Data.stream!(source3,Data.Table)
 
 #Make sure we handle undefined values
 db = SQLite.DB() #In case the order of tests is changed
-arr = Array(UTF8String,2) 
+arr = Array(@compat(String),2) 
 arr[1] = "1" #Now an array with the second value undefined
 nv = NullableArrays.NullableArray(arr, [false, true])
-schema = DataStreams.Data.Schema(["nv"], [UTF8String],2)
+schema = DataStreams.Data.Schema(["nv"], [@compat(String)],2)
 d = NullableArrays.NullableVector[nv]
 dt = DataStreams.Data.Table(schema, d,0)
 SQLite.drop!(db, "temp", ifexists=true)
@@ -294,10 +294,10 @@ dt2 = SQLite.query(db, "Select * from temp")
 #Test removeduplicates!
 db = SQLite.DB() #In case the order of tests is changed
 ints = Int64[1,1,2,2,3]
-strs = UTF8String["A", "A", "B", "C", "C"]
+strs = @compat(String)["A", "A", "B", "C", "C"]
 nvInts = NullableArrays.NullableArray(ints)
 nvStrs = NullableArrays.NullableArray(strs)
-schema = DataStreams.Data.Schema(["ints", "strs"], [Int64, UTF8String],5)
+schema = DataStreams.Data.Schema(["ints", "strs"], [Int64, @compat(String)],5)
 d = NullableArrays.NullableVector[nvInts, nvStrs]
 dt = DataStreams.Data.Table(schema, d,0)
 SQLite.drop!(db, "temp", ifexists=true)
