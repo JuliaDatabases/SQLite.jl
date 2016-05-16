@@ -66,7 +66,7 @@ end
 function sqlite3_bind_parameter_index(stmt::Ptr{Void},value::AbstractString)
     return ccall( (:sqlite3_bind_parameter_index, sqlite3_lib),
         Cint, (Ptr{Void},Ptr{UInt8}),
-        stmt,utf8(value))
+        stmt,value)
 end
 # SQLITE_API int sqlite3_bind_double(sqlite3_stmt*, int, double);
 function sqlite3_bind_double(stmt::Ptr{Void},col::Int,value::Float64)

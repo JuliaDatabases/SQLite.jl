@@ -19,7 +19,7 @@ function Sink(schema::Data.Schema,db::DB,tablename::AbstractString="julia_"*rand
     SQLite.execute!(db,"CREATE $temp TABLE $ifnotexists $(esc_id(tablename)) ($(join(columns,',')))")
     params = chop(repeat("?,",cols))
     stmt = SQLite.Stmt(db,"INSERT INTO $(esc_id(tablename)) VALUES ($params)")
-    return Sink(schema,db,utf8(tablename),stmt)
+    return Sink(schema,db,tablename,stmt)
 end
 
 "constructs a new SQLite.Sink from the given `SQLite.Source`; uses `source` schema to create the SQLite table"

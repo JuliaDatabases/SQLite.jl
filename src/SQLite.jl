@@ -26,11 +26,11 @@ sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
 
 "represents an SQLite database, either backed by an on-disk file or in-memory"
 type DB
-    file::UTF8String
+    file::@compat(String)
     handle::Ptr{Void}
     changes::Int
 
-    function DB(f::UTF8String)
+    function DB(f::@compat(String))
         handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f,handle)
@@ -45,7 +45,7 @@ type DB
     end
 end
 "`SQLite.DB(file::AbstractString)` opens or creates an SQLite database with `file`"
-DB(f::AbstractString) = DB(utf8(f))
+DB(f::AbstractString) = DB(f)
 "`SQLite.DB()` creates an in-memory SQLite database"
 DB() = DB(":memory:")
 
@@ -79,7 +79,7 @@ function _close(stmt::Stmt)
     return
 end
 
-sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,utf8(sql),stmt,null)
+sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,sql,stmt,null)
 
 # TO DEPRECATE
 type SQLiteDB{T<:AbstractString}
@@ -131,7 +131,7 @@ bind!(stmt::Stmt,i::Int,val::PointerString{UInt16})  = (sqlite3_bind_text16(stmt
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
 function bind!(stmt::Stmt,i::Int,val::PointerString{UInt32})
     A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
-    return bind!(stmt, i, convert(UTF8String,A))
+    return bind!(stmt, i, convert(@compat(String),A))
 end
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
@@ -310,7 +310,7 @@ end
 type Sink <: Data.Sink # <: IO
     schema::Data.Schema
     db::DB
-    tablename::UTF8String
+    tablename::@compat(String)
     stmt::Stmt
 end
 

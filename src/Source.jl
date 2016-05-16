@@ -19,7 +19,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Int=0, stricttypes
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
     cols = SQLite.sqlite3_column_count(stmt.handle)
-    header = Array(UTF8String,cols)
+    header = Array(@compat(String),cols)
     types = Array(DataType,cols)
     for i = 1:cols
         header[i] = bytestring(SQLite.sqlite3_column_name(stmt.handle,i))
@@ -41,7 +41,7 @@ function juliatype(handle,col)
         return juliatype(x)
     end
 end
-juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? UTF8String : Any
+juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? @compat(String) : Any
 
 sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T},handle,col) = convert(T, sqlite3_column_int64(handle,col))
 const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
