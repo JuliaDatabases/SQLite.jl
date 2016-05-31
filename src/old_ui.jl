@@ -89,7 +89,7 @@ function bind{V}(stmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
-        name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
+        name = Compat.bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
@@ -143,7 +143,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     colnames = Array(AbstractString,ncols)
     results = Array(Any,ncols)
     for i = 1:ncols
-        colnames[i] = bytestring(sqlite3_column_name(stmt.handle,i))
+        colnames[i] = Compat.bytestring(sqlite3_column_name(stmt.handle,i))
         results[i] = Any[]
     end
     while status == SQLITE_ROW
@@ -155,7 +155,7 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
                 r = sqlite3_column_double(stmt.handle,i)
             elseif t == SQLITE_TEXT
                 #TODO: have a way to return text16?
-                r = bytestring( sqlite3_column_text(stmt.handle,i) )
+                r = Compat.bytestring( sqlite3_column_text(stmt.handle,i) )
             elseif t == SQLITE_BLOB
                 blob = sqlite3_column_blob(stmt.handle,i)
                 b = sqlite3_column_bytes(stmt.handle,i)

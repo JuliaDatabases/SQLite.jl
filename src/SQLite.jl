@@ -21,16 +21,16 @@ show(io::IO,::NullType) = print(io,"#NULL")
 # Normal constructor from filename
 sqliteopen(file,handle) = sqlite3_open(file,handle)
 sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
-sqliteerror() = throw(SQLiteException(bytestring(sqlite3_errmsg())))
-sqliteerror(db) = throw(SQLiteException(bytestring(sqlite3_errmsg(db.handle))))
+sqliteerror() = throw(SQLiteException(Compat.bytestring(sqlite3_errmsg())))
+sqliteerror(db) = throw(SQLiteException(Compat.bytestring(sqlite3_errmsg(db.handle))))
 
 "represents an SQLite database, either backed by an on-disk file or in-memory"
 type DB
-    file::@compat(String)
+    file::Compat.UTF8String
     handle::Ptr{Void}
     changes::Int
 
-    function DB(f::@compat(String))
+    function DB(f::Compat.UTF8String)
         handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f,handle)
@@ -45,9 +45,9 @@ type DB
     end
 end
 "`SQLite.DB(file::AbstractString)` opens or creates an SQLite database with `file`"
-DB(f::AbstractString) = DB(f)
+DB(f::AbstractString) = DB(Compat.UTF8String(f))
 "`SQLite.DB()` creates an in-memory SQLite database"
-DB() = DB(":memory:")
+DB() = DB(Compat.UTF8String(":memory:"))
 
 function _close(db::DB)
     sqlite3_close_v2(db.handle)
@@ -105,7 +105,7 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
-        name = bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
+        name = Compat.bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
@@ -131,7 +131,7 @@ bind!(stmt::Stmt,i::Int,val::PointerString{UInt16})  = (sqlite3_bind_text16(stmt
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
 function bind!(stmt::Stmt,i::Int,val::PointerString{UInt32})
     A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
-    return bind!(stmt, i, convert(@compat(String),A))
+    return bind!(stmt, i, convert(Compat.UTF8String,A))
 end
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
@@ -310,7 +310,7 @@ end
 type Sink <: Data.Sink # <: IO
     schema::Data.Schema
     db::DB
-    tablename::@compat(String)
+    tablename::Compat.UTF8String
     stmt::Stmt
 end
 
