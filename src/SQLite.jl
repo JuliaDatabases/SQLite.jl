@@ -115,7 +115,7 @@ end
 # Binding parameters to SQL statements
 "bind `val` to the named parameter `name`"
 function bind!(stmt::Stmt,name::AbstractString,val)
-    i = sqlite3_bind_parameter_index(stmt.handle,name)
+    i::Int = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end

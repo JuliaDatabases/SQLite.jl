@@ -311,3 +311,9 @@ dt3 = SQLite.query(db, "Select * from temp")
 @test get(dt3[2,2]) == "B"
 @test get(dt3[3,1]) == 2
 @test get(dt3[3,2]) == "C"
+
+# issue #104
+db = SQLite.DB() #In case the order of tests is changed
+SQLite.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
+stmt = SQLite.Stmt(db, "INSERT INTO tbl (a) VALUES (@a);")
+SQLite.bind!(stmt, "@a", 1)
