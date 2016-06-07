@@ -3,7 +3,7 @@ function sqlvalue(values, i)
     valuetype = sqlite3_value_type(temp_val_ptr)
 
     if valuetype == SQLITE_INTEGER
-        if WORD_SIZE == 64
+        if Sys.WORD_SIZE == 64
             return sqlite3_value_int64(temp_val_ptr)
         else
             return sqlite3_value_int(temp_val_ptr)
@@ -12,7 +12,7 @@ function sqlvalue(values, i)
         return sqlite3_value_double(temp_val_ptr)
     elseif valuetype == SQLITE_TEXT
         # TODO: have a way to return UTF16
-        return bytestring(sqlite3_value_text(temp_val_ptr))
+        return Compat.bytestring(sqlite3_value_text(temp_val_ptr))
     elseif valuetype == SQLITE_BLOB
         nbytes = sqlite3_value_bytes(temp_val_ptr)
         blob = sqlite3_value_blob(temp_val_ptr)

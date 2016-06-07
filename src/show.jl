@@ -14,7 +14,7 @@
 #' summary(DataFrame(A = 1:10))
 function Base.summary(adf::ResultSet) # -> UTF8String
     nrows, ncols = size(adf)
-    return utf8(@sprintf "%dx%d %s" nrows ncols typeof(adf))
+    return Compat.utf8(@sprintf "%dx%d %s" nrows ncols typeof(adf))
 end
 
 #' @description

@@ -19,10 +19,10 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Int=0, stricttypes
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
     cols = SQLite.sqlite3_column_count(stmt.handle)
-    header = Array(@compat(String),cols)
+    header = Array(Compat.UTF8String,cols)
     types = Array(DataType,cols)
     for i = 1:cols
-        header[i] = bytestring(SQLite.sqlite3_column_name(stmt.handle,i))
+        header[i] = Compat.bytestring(SQLite.sqlite3_column_name(stmt.handle,i))
         # do better column type inference; query what the column was created for?
         types[i] = stricttypes ? SQLite.juliatype(stmt.handle,i) : Any
     end
@@ -41,13 +41,13 @@ function juliatype(handle,col)
         return juliatype(x)
     end
 end
-juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? @compat(String) : Any
+juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? Compat.UTF8String : Any
 
 sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T},handle,col) = convert(T, sqlite3_column_int64(handle,col))
 const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
 sqlitevalue{T<:FLOAT_TYPES}(::Type{T},handle,col) = convert(T, sqlite3_column_double(handle,col))
 #TODO: test returning a PointerString instead of calling `bytestring`
-sqlitevalue{T<:AbstractString}(::Type{T},handle,col) = convert(T,bytestring(sqlite3_column_text(handle,col)))
+sqlitevalue{T<:AbstractString}(::Type{T},handle,col) = convert(T,Compat.bytestring(sqlite3_column_text(handle,col)))
 function sqlitevalue{T}(::Type{T},handle,col)
     blob = convert(Ptr{UInt8},SQLite.sqlite3_column_blob(handle,col))
     b = SQLite.sqlite3_column_bytes(handle,col)
