@@ -116,6 +116,18 @@ bind(stmt,i::Int,val::Vector{UInt8})  = @CHECK stmt.db sqlite3_bind_blob(stmt.ha
 bind(stmt,i::Int,val) = bind(stmt,i,sqlserialize(val))
 
 # Execute SQL statements
+"""
+```
+execute(stmt)
+```
+Executes the query based on the Stmt object
+
+### Args
+* stmt: The statement object
+
+### Returns
+Returns the status as an integer
+"""
 function execute(stmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
@@ -125,6 +137,20 @@ function execute(stmt)
     end
     return r
 end
+
+"""
+```
+execute(db::SQLiteDB,sql::AbstractString)
+```
+Executes the query based on the query string
+
+### Args
+* db: The SQLiteDB object
+* sql: The query string
+
+### Returns
+Returns the status as an integer
+"""
 function execute(db::SQLiteDB,sql::AbstractString)
     stmt = SQLiteStmt(db,sql)
     execute(stmt)
@@ -132,6 +158,21 @@ function execute(db::SQLiteDB,sql::AbstractString)
 end
 
 
+"""
+```
+query(db::SQLiteDB,sql::AbstractString, values=[])
+```
+Prepares and executes the query to return a ResultSet. The parameters to the query are passed through values parameter
+
+### Args
+* db: The database object
+* sql: The query
+* values: The values that need to be passed to the prepare statement
+
+### Returns
+The ResultSet object containing the results of the execution
+
+"""
 function query(db::SQLiteDB,sql::AbstractString, values=[])
     stmt = SQLiteStmt(db,sql)
     bind(stmt, values)
@@ -176,16 +217,67 @@ function query(db::SQLiteDB,sql::AbstractString, values=[])
     end
 end
 
+"""
+```
+tables(db::SQLiteDB)
+```
+Returns the tables in the given database
+
+### Args
+* db: The SQLiteDB object
+
+### Returns
+The result set containing the tables in the database
+"""
 function tables(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='table';")
 end
 
+"""
+```
+indices(db::SQLiteDB)
+```
+Returns the indices defined in the given database
+
+### Args
+* db: The SQLiteDB object
+
+### Returns
+The result set containing the indices defined in the database
+"""
 function indices(db::SQLiteDB)
     query(db,"SELECT name FROM sqlite_master WHERE type='index';")
 end
 
+"""
+```
+columns(db::SQLiteDB,table::AbstractString)
+```
+Returns the columns defined in the given table
+
+### Args
+* db: The SQLiteDB object
+* table: The table name
+
+### Returns
+The result set containing the column information defined in the given table
+"""
 columns(db::SQLiteDB,table::AbstractString) = query(db,"pragma table_info($table)")
 
+"""
+```
+droptable(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
+```
+Drops the specified table from the database
+
+### Args
+* db: The SQLiteDB object
+* table: The table name
+* ifexists: whether table exists or not
+
+### Returns
+Drops the table if it exists
+"""
 function droptable(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
@@ -195,6 +287,20 @@ function droptable(db::SQLiteDB,table::AbstractString;ifexists::Bool=false)
     return changes(db)
 end
 
+"""
+```
+dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
+```
+Drops the specified index from the database
+
+### Args
+* db: The SQLiteDB object
+* index: The index name
+* ifexists: whether table exists or not
+
+### Returns
+Drops the index if it exists
+"""
 function dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "if exists" : ""
     transaction(db) do
@@ -203,6 +309,24 @@ function dropindex(db::SQLiteDB,index::AbstractString;ifexists::Bool=false)
     return changes(db)
 end
 
+"""
+```
+create(db::SQLiteDB,name::AbstractString,table, colnames=AbstractString[], coltypes=DataType[]
+            ;temp::Bool=false,ifnotexists::Bool=false)
+```
+Create the table based on the column names and types or create a duplicate temp table based on an existing table
+
+### Args
+* db: The SQLiteDB object
+* name: The name of the table
+* table: The existing table
+* colnames: The names of the columns
+* coltypes: The data types of the columns
+* ifexists: whether table exists or not
+
+### Returns
+Returns the ResultSet object containing the results
+"""
 function create(db::SQLiteDB,name::AbstractString,table,
             colnames=AbstractString[],
             coltypes=DataType[]
@@ -233,6 +357,24 @@ function create(db::SQLiteDB,name::AbstractString,table,
     return changes(db)
 end
 
+"""
+```
+createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols ;unique::Bool=true,ifnotexists::Bool=false)
+```
+Creates an index on a given table
+
+### Args
+* db: The database
+* table: Name of the table
+* index: Index name
+* cols: The columns on which to apply index
+* unique: Flag to indicate if unique. Default is true (unique)
+* ifnotexists: whether already exists or not
+
+### Returns
+The ResultSet object
+
+"""
 function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,cols
                     ;unique::Bool=true,ifnotexists::Bool=false)
     u = unique ? "unique" : ""
@@ -244,6 +386,20 @@ function createindex(db::SQLiteDB,table::AbstractString,index::AbstractString,co
     return changes(db)
 end
 
+"""
+```
+append(db::SQLiteDB,name::AbstractString,table)
+```
+Appends a table to the existing table identified by table name
+
+### Args
+* db: The SQLite DB object
+* name: The table name
+* table: The table to be appended
+
+### Returns
+Returns the ResultSet object
+"""
 function append(db::SQLiteDB,name::AbstractString,table)
     N, M = size(table)
     transaction(db) do
@@ -263,6 +419,20 @@ function append(db::SQLiteDB,name::AbstractString,table)
     return return changes(db)
 end
 
+"""
+```
+deleteduplicates(db,table::AbstractString,cols::AbstractString)
+```
+Removes duplicates by retaining the ones added last
+
+### Args
+* db: The database object
+* table: The table name
+* cols: The column name
+
+### Returns
+Returns the ResultSet object
+"""
 function deleteduplicates(db,table::AbstractString,cols::AbstractString)
     transaction(db) do
         execute(db,"delete from $table where rowid not in (select max(rowid) from $table group by $cols);")
@@ -271,4 +441,17 @@ function deleteduplicates(db,table::AbstractString,cols::AbstractString)
     return changes(db)
 end
 
+"""
+```
+execute!(db::SQLiteDB, sql)
+```
+Executes the query based on the sql query
+
+### Args
+* db: The SQLiteDB object
+* sql: The query
+
+### Returns
+Returns the ResultSet object
+"""
 execute!(db::SQLiteDB, sql) = execute(db, sql)
