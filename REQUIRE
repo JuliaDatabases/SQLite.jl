@@ -1,8 +1,9 @@
 julia 0.4.1
 BinDeps
-Compat
-DataStreams
-NullableArrays
 CSV
+DataStreams
+DataFrames
+NullableArrays
+WeakRefStrings
 @osx Homebrew
 @windows WinRPM
