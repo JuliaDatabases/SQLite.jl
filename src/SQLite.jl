@@ -1,9 +1,20 @@
-using DataStreams
+VERSION >= v"0.4.0-dev+6521" && __precompile__(true)
 module SQLite
 
-using Compat, NullableArrays, DataStreams, CSV
-const PointerString = Data.PointerString
-const NULLSTRING = Data.NULLSTRING
+using CSV, DataStreams, DataFrames, NullableArrays, WeakRefStrings
+
+export Data
+
+if !isdefined(Core, :String)
+    typealias String UTF8String
+    unsafe_string(ptr, len) = bytestring(ptr, len)
+end
+
+if Base.VERSION < v"0.5.0-dev+4631"
+    unsafe_wrap{A<:Array}(::Type{A}, ptr, len) = pointer_to_array(ptr, len)
+    unsafe_string(ptr, len) = utf8(ptr, len)
+    unsafe_wrap(::Type{String}, ptr, len) = unsafe_string(ptr, len)
+end
 
 type SQLiteException <: Exception
     msg::AbstractString
@@ -21,16 +32,16 @@ show(io::IO,::NullType) = print(io,"#NULL")
 # Normal constructor from filename
 sqliteopen(file,handle) = sqlite3_open(file,handle)
 sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
-sqliteerror() = throw(SQLiteException(Compat.bytestring(sqlite3_errmsg())))
-sqliteerror(db) = throw(SQLiteException(Compat.bytestring(sqlite3_errmsg(db.handle))))
+sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
+sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
 "represents an SQLite database, either backed by an on-disk file or in-memory"
 type DB
-    file::Compat.UTF8String
+    file::String
     handle::Ptr{Void}
     changes::Int
 
-    function DB(f::Compat.UTF8String)
+    function DB(f::AbstractString)
         handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f,handle)
@@ -44,10 +55,8 @@ type DB
         end
     end
 end
-"`SQLite.DB(file::AbstractString)` opens or creates an SQLite database with `file`"
-DB(f::AbstractString) = DB(Compat.UTF8String(f))
 "`SQLite.DB()` creates an in-memory SQLite database"
-DB() = DB(Compat.UTF8String(":memory:"))
+DB() = DB(":memory:")
 
 function _close(db::DB)
     sqlite3_close_v2(db.handle)
@@ -81,15 +90,7 @@ end
 
 sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,sql,stmt,null)
 
-# TO DEPRECATE
-type SQLiteDB{T<:AbstractString}
-   file::T
-   handle::Ptr{Void}
-   changes::Int
-end
-SQLiteDB(file,handle) = SQLiteDB(file,handle,0)
 include("UDF.jl")
-include("old_ui.jl")
 export @sr_str, @register, register
 
 "bind a row (`values`) to nameless parameters by index"
@@ -105,11 +106,11 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
-        name = Compat.bytestring(sqlite3_bind_parameter_name(stmt.handle, i))
+        name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
-        bind!(stmt, i, values[@compat(Symbol)(name)])
+        bind!(stmt, i, values[Symbol(name)])
     end
 end
 # Binding parameters to SQL statements
@@ -126,12 +127,12 @@ bind!(stmt::Stmt,i::Int,val::Int32)          = (sqlite3_bind_int(stmt.handle,i,v
 bind!(stmt::Stmt,i::Int,val::Int64)          = (sqlite3_bind_int64(stmt.handle,i,val); return nothing)
 bind!(stmt::Stmt,i::Int,val::NullType)       = (sqlite3_bind_null(stmt.handle,i); return nothing)
 bind!(stmt::Stmt,i::Int,val::AbstractString) = (sqlite3_bind_text(stmt.handle,i,val); return nothing)
-bind!(stmt::Stmt,i::Int,val::PointerString{UInt8})   = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
-bind!(stmt::Stmt,i::Int,val::PointerString{UInt16})  = (sqlite3_bind_text16(stmt.handle,i,val.ptr,val.len*2); return nothing)
+bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
+bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle,i,val.ptr,val.len*2); return nothing)
 bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
-function bind!(stmt::Stmt,i::Int,val::PointerString{UInt32})
+function bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt32})
     A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
-    return bind!(stmt, i, convert(Compat.UTF8String,A))
+    return bind!(stmt, i, convert(String,A))
 end
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
@@ -310,7 +311,7 @@ end
 type Sink <: Data.Sink # <: IO
     schema::Data.Schema
     db::DB
-    tablename::Compat.UTF8String
+    tablename::String
     stmt::Stmt
 end
 

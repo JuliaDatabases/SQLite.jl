@@ -12,7 +12,7 @@ function sqlvalue(values, i)
         return sqlite3_value_double(temp_val_ptr)
     elseif valuetype == SQLITE_TEXT
         # TODO: have a way to return UTF16
-        return Compat.bytestring(sqlite3_value_text(temp_val_ptr))
+        return unsafe_string(sqlite3_value_text(temp_val_ptr))
     elseif valuetype == SQLITE_BLOB
         nbytes = sqlite3_value_bytes(temp_val_ptr)
         blob = sqlite3_value_blob(temp_val_ptr)
@@ -32,7 +32,7 @@ sqlreturn(context, val::UTF16String)    = sqlite3_result_text16(context, val)
 sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
 sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, val)
 
-sqlreturn(context, val::Bool) = sqlreturn(context, @compat Int(val))
+sqlreturn(context, val::Bool) = sqlreturn(context, Int(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
 # Internal method for generating an SQLite scalar function from
@@ -196,7 +196,7 @@ function register(db, func::Function; nargs::Int=-1, name::AbstractString=string
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
 
-    f = eval(scalarfunc(func,@compat(Symbol)(name)))
+    f = eval(scalarfunc(func,Symbol(name)))
 
     cfunc = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
     # TODO: allow the other encodings

@@ -11,7 +11,7 @@ can optionally provide an existing SQLite table name or new name that a created 
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
 """
-function Sink(schema::Data.Schema,db::DB,tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
+function Sink(db::DB, schema::Data.Schema, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
     rows, cols = size(schema)
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
@@ -27,12 +27,12 @@ function Sink(source::SQLite.Source, tablename::AbstractString="julia_"*randstri
     return Sink(source.schema, source.db, tablename; temp=temp, ifnotexists=ifnotexists)
 end
 "constructs a new SQLite.Sink from the given `Data.Source`; uses `source` schema to create the SQLite table"
-function Sink(source::Data.Source, db::DB, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
-    return Sink(source.schema, db, tablename; temp=temp, ifnotexists=ifnotexists)
+function Sink(db::DB, source, tablename::AbstractString="julia_"*randstring();temp::Bool=false,ifnotexists::Bool=true)
+    return Sink(db, Data.schema(source), tablename; temp=temp, ifnotexists=ifnotexists)
 end
 
 # create a new SQLite table
-# Data.Table
+# DataFrame
 function getbind!{T}(dt::NullableVector{T},row,col,stmt)
     @inbounds isnull = dt.isnull[row]
     if isnull
@@ -43,8 +43,13 @@ function getbind!{T}(dt::NullableVector{T},row,col,stmt)
     end
     return
 end
+function getbind!{T}(dt::Vector{T}, row, col, stmt)
+    @inbounds val = dt[row]::T
+    SQLite.bind!(stmt, col, val)
+    return
+end
 "stream the data in `dt` into the SQLite table represented by `sink`"
-function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
+function Data.stream!(dt::DataFrame, sink::SQLite.Sink)
     rows, cols = size(dt)
     types = Data.types(dt)
     handle = sink.stmt.handle
@@ -52,7 +57,7 @@ function Data.stream!(dt::Data.Table,sink::SQLite.Sink)
         if rows*cols != 0
             for row = 1:rows
                 for col = 1:cols
-                    @inbounds SQLite.getbind!(Data.unsafe_column(dt,col,types[col]),row,col,sink.stmt)
+                    @inbounds SQLite.getbind!(dt.columns[col],row,col,sink.stmt)
                 end
                 SQLite.sqlite3_step(handle)
                 SQLite.sqlite3_reset(handle)
