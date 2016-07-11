@@ -1,9 +1,9 @@
 VERSION >= v"0.4.0-dev+6521" && __precompile__(true)
 module SQLite
 
-using CSV, DataStreams, DataFrames, NullableArrays, WeakRefStrings
+using DataStreams, DataFrames, WeakRefStrings
 
-export Data
+export Data, DataFrame
 
 if !isdefined(Core, :String)
     typealias String UTF8String
@@ -23,7 +23,7 @@ include("consts.jl")
 include("api.jl")
 
 immutable NullType end
-"custom NULL value for interacting with the SQLite database"
+# custom NULL value for interacting with the SQLite database
 const NULL = NullType()
 show(io::IO,::NullType) = print(io,"#NULL")
 
@@ -34,7 +34,14 @@ sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
 sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
-"represents an SQLite database, either backed by an on-disk file or in-memory"
+"""
+represents an SQLite database, either backed by an on-disk file or in-memory
+
+Constructors:
+
+* `SQLite.DB()` => in-memory SQLite database
+* `SQLite.DB(file)` => file-based SQLite database
+"""
 type DB
     file::String
     handle::Ptr{Void}
@@ -54,7 +61,6 @@ type DB
         end
     end
 end
-"`SQLite.DB()` creates an in-memory SQLite database"
 DB() = DB(":memory:")
 
 function _close(db::DB)
@@ -92,7 +98,21 @@ sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,sql,stm
 include("UDF.jl")
 export @sr_str, @register, register
 
-"bind a row (`values`) to nameless parameters by index"
+"""
+`SQLite.bind!(stmt::SQLite.Stmt, values)`
+
+bind `values` to parameters in a prepared SQL statement. Values can be:
+
+* `Vector`; where each element will be bound to an SQL parameter by index order
+* `Dict`; where dict values will be bound to named SQL parameters by the dict key
+
+Additional methods exist for working individual SQL parameters:
+
+* `SQLite.bind!(stmt, name, val)`: bind a single value to a named SQL parameter
+* `SQLite.bind!(stmt, index, val)`: bind a single value to a SQL parameter by index number
+"""
+function bind! end
+
 function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
@@ -100,7 +120,6 @@ function bind!(stmt::Stmt, values::Vector)
         @inbounds bind!(stmt, i, values[i])
     end
 end
-"bind a row (`Dict(:key => value)`) to named parameters"
 function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
@@ -113,7 +132,6 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     end
 end
 # Binding parameters to SQL statements
-"bind `val` to the named parameter `name`"
 function bind!(stmt::Stmt,name::AbstractString,val)
     i::Int = sqlite3_bind_parameter_index(stmt.handle,name)
     if i == 0
@@ -135,10 +153,10 @@ function bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt32})
 end
 # We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
 # as the "official" bytes type instead of Vector{UInt8}
-"bind a byte vector as an SQLite BLOB"
 bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle,i,val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
-"internal wrapper type to, in-effect, mark something which has been serialized"
+
+# internal wrapper type to, in-effect, mark something which has been serialized
 immutable Serialization
     object
 end
@@ -152,7 +170,7 @@ function sqlserialize(x)
     serialize(t,s)
     return takebuf_array(t)
 end
-"fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)"
+# fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
 bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
 
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
@@ -171,7 +189,14 @@ end
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
-"Execute a prepared SQLite statement"
+"""
+`SQLite.execute!(stmt::SQLite.Stmt)` => `Void`
+`SQLite.execute!(db::DB, sql::String)` => `Void`
+
+Execute a prepared SQLite statement, not checking for or returning any results.
+"""
+function execute! end
+
 function execute!(stmt::Stmt)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
@@ -181,27 +206,39 @@ function execute!(stmt::Stmt)
     end
     return r
 end
-"Prepare and execute an SQLite statement"
 function execute!(db::DB,sql::AbstractString)
     stmt = Stmt(db,sql)
     return execute!(stmt)
 end
 
-"Escape SQLite identifiers (e.g. column, table or index names). Can be either
+"""
+`SQLite.esc_id(x::Union{String,Vector{String}})`
+
+Escape SQLite identifiers (e.g. column, table or index names). Can be either
 a string, or a vector of strings (note does not check for null characters).
-A vector of identifiers will be separated by commas."
+A vector of identifiers will be separated by commas.
+"""
+function esc_id end
+
 esc_id(x::AbstractString) = "\""*replace(x,"\"","\"\"")*"\""
 esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
 
 
 # Transaction-based commands
 """
-Begin a transaction in the spedified `mode`, default = "DEFERRED".
+`SQLite.transaction(db, mode="DEFERRED")`
+`SQLite.transaction(func, db)`
+
+Begin a transaction in the specified `mode`, default = "DEFERRED".
 
 If `mode` is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
 transaction of that (or the default) type is started. Otherwise a savepoint
 is created whose name is `mode` converted to AbstractString.
+
+In the second method, `func` is executed within a transaction (the transaction being committed upon successful execution)
 """
+function transaction end
+
 function transaction(db, mode="DEFERRED")
     execute!(db,"PRAGMA temp_store=MEMORY;")
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
@@ -210,7 +247,6 @@ function transaction(db, mode="DEFERRED")
         execute!(db, "SAVEPOINT $(mode);")
     end
 end
-"Execute the function `f` within a transaction."
 function transaction(f::Function, db)
     # generate a random name for the savepoint
     name = string("SQLITE",randstring(10))
@@ -228,17 +264,33 @@ function transaction(f::Function, db)
     end
 end
 
-"commit a transaction or named savepoint"
+"""
+`SQLite.commit(db)`
+`SQLite.commit(db, name)`
+
+commit a transaction or named savepoint
+"""
+function commit end
+
 commit(db) = execute!(db, "COMMIT TRANSACTION;")
-"commit a transaction or named savepoint"
 commit(db, name) = execute!(db, "RELEASE SAVEPOINT $(name);")
 
-"rollback transaction or named savepoint"
+"""
+`SQLite.rollback(db)`
+`SQLite.rollback(db, name)`
+
+rollback transaction or named savepoint
+"""
+function rollback end
+
 rollback(db) = execute!(db, "ROLLBACK TRANSACTION;")
-"rollback transaction or named savepoint"
 rollback(db, name) = execute!(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
-"drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist"
+"""
+`SQLite.drop!(db, table; ifexists::Bool=true)`
+
+drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist
+"""
 function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
@@ -248,7 +300,11 @@ function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
     return
 end
 
-"drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist"
+"""
+`SQLite.dropindex!(db, index; ifexists::Bool=true)`
+
+drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist
+"""
 function dropindex!(db::DB,index::AbstractString;ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
@@ -258,6 +314,8 @@ function dropindex!(db::DB,index::AbstractString;ifexists::Bool=false)
 end
 
 """
+`SQLite.createindex!(db, table, index, cols; unique::Bool=true, ifnotexists::Bool=false)`
+
 create the SQLite index `index` on the table `table` using `cols`, which may be a single column or vector of columns.
 `unique` specifies whether the index will be unique or not.
 `ifnotexists=true` will not throw an error if the index already exists
@@ -273,11 +331,15 @@ function createindex!{S<:AbstractString}(db::DB,table::AbstractString,index::Abs
     return
 end
 
-"removes duplicate rows from `table` based on the values in `cols` which is an array of column names"
+"""
+`SQLite.removeduplicates!(db, table, cols::Vector)`
+
+removes duplicate rows from `table` based on the values in `cols` which is an array of column names
+"""
 function removeduplicates!{T <: AbstractString}(db,table::AbstractString,cols::AbstractArray{T})
     colsstr = ""
     for c in cols
-       colsstr = colsstr*esc_id(c)*","
+       colsstr = colsstr * esc_id(c) * ","
     end
     colsstr = chop(colsstr)
     transaction(db) do
@@ -287,19 +349,7 @@ function removeduplicates!{T <: AbstractString}(db,table::AbstractString,cols::A
     return
  end
 
-function removeduplicates!(db,table::AbstractString,cols::AbstractString)
-    warn("This method is deprecated, please provide the column names as an array of column names rather than a single string.")
-    transaction(db) do
-        execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(esc_id(cols)));")
-    end
-    execute!(db,"ANALYZE $table")
-    return
-end
-
-
-"""
-`SQLite.Source` implementes the `DataStreams` framework for interacting with SQLite databases
-"""
+"`SQLite.Source` implements the `Source` interface in the `DataStreams` framework"
 type Source <: Data.Source
     schema::Data.Schema
     stmt::Stmt

@@ -1,5 +1,5 @@
 using SQLite
-using Base.Test, DataStreams, DataFrames, NullableArrays
+using Base.Test, CSV, DataStreams, DataFrames, NullableArrays
 
 import Base: +, ==
 
@@ -103,11 +103,11 @@ r = SQLite.query(db,"select * from $(sink.tablename)")
 SQLite.drop!(db,"$(sink.tablename)")
 
 SQLite.query(db,"CREATE TABLE temp AS SELECT * FROM Album")
-r = SQLite.query(db, "SELECT * FROM temp LIMIT ?", [3])
+r = SQLite.query(db, "SELECT * FROM temp LIMIT ?"; values=[3])
 @test size(r) == (3,3)
-r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"])
+r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE ?"; values=["%time%"])
 @test [get(i) for i in r.columns[1]] == [76, 111, 187]
-SQLite.query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", [0,0,"Test Album"])
+SQLite.query(db, "INSERT INTO temp VALUES (?1, ?3, ?2)"; values=[0,0,"Test Album"])
 r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1,1] === Nullable(0)
 @test get(r[1,2]) == "Test Album"
@@ -116,7 +116,7 @@ SQLite.drop!(db, "temp")
 
 binddb = SQLite.DB()
 SQLite.query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", Any[SQLite.NULL, convert(Int64,6), 6.4, "some text", b"bytearray"])
+SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[SQLite.NULL, convert(Int64,6), 6.4, "some text", b"bytearray"])
 r = SQLite.query(binddb, "SELECT * FROM temp")
 @test isa(get(r.columns[1][1],SQLite.NULL),SQLite.NullType)
 @test isa(get(r.columns[2][1]),Int)
@@ -124,8 +124,8 @@ r = SQLite.query(binddb, "SELECT * FROM temp")
 @test isa(get(r.columns[4][1]),AbstractString)
 @test isa(get(r.columns[5][1]),Vector{UInt8})
 SQLite.query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", b"b"])
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", BigInt(2)])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])
 type Point{T}
     x::T
     y::T
@@ -133,8 +133,8 @@ end
 ==(a::Point, b::Point) = a.x == b.x && a.y == b.y
 p1 = Point(1, 2)
 p2 = Point(1.3, 2.4)
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p1])
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)", Any[b"a", p2])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p1])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p2])
 r = SQLite.query(binddb, "SELECT * FROM blobtest";stricttypes=false)
 for v in r.columns[1]
     @test get(v) == b"a"
@@ -145,11 +145,11 @@ end
 ############################################
 
 SQLite.query(db,"CREATE TABLE temp AS SELECT * FROM Album")
-r = SQLite.query(db, "SELECT * FROM temp LIMIT :a", Dict(:a => 3))
+r = SQLite.query(db, "SELECT * FROM temp LIMIT :a"; values=Dict(:a => 3))
 @test size(r) == (3,3)
-r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word", Dict(:word => "%time%"))
+r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word"; values=Dict(:word => "%time%"))
 @test [get(i) for i in r.columns[1]] == [76, 111, 187]
-SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", Dict(:rid => 0, :lid => 0, :title => "Test Album"))
+SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)"; values=Dict(:rid => 0, :lid => 0, :title => "Test Album"))
 r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1,1] === Nullable(0)
 @test get(r[1,2]) == "Test Album"
@@ -218,9 +218,9 @@ s = SQLite.query(db, "SELECT TrackId FROM PlaylistTrack")
 @test get(r[1,1]) == big(sum(convert(Vector{Int},s.columns[1])))
 
 SQLite.query(db, "CREATE TABLE points (x INT, y INT, z INT)")
-SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)", [1, 2, 3])
-SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)", [4, 5, 6])
-SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)", [7, 8, 9])
+SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[1, 2, 3])
+SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[4, 5, 6])
+SQLite.query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[7, 8, 9])
 type Point3D{T<:Number}
     x::T
     y::T
@@ -260,7 +260,7 @@ db = nothing; gc(); gc();
 
 db = SQLite.DB()
 source = CSV.Source(temp)
-sink = SQLite.Sink(db,source,"temp")
+sink = SQLite.Sink(db,source; name="temp")
 Data.stream!(source,sink)
 source2 = SQLite.Source(sink)
 dt = Data.stream!(source2,DataFrame)
@@ -268,7 +268,7 @@ dt = Data.stream!(source2,DataFrame)
 @test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1
 
-sink = SQLite.Sink(db, Data.schema(dt), "temp2")
+sink = SQLite.Sink(db, Data.schema(dt); name="temp2")
 Data.stream!(dt,sink)
 source3 = SQLite.Source(sink)
 dt = Data.stream!(source3,DataFrame)
@@ -285,7 +285,7 @@ schema = DataStreams.Data.Schema(["nv"], [String],2)
 d = Any[nv]
 dt = DataFrame(d)
 SQLite.drop!(db, "temp", ifexists=true)
-sink = SQLite.Sink(db, dt, "temp")
+sink = SQLite.Sink(db, dt; name="temp")
 Data.stream!(dt, sink)
 dt2 = SQLite.query(db, "Select * from temp")
 #There might be a better way to check this
@@ -302,7 +302,7 @@ schema = Data.Schema(["ints", "strs"], [Int64, String],5)
 d = Any[nvInts, nvStrs]
 dt = DataFrame(d,[:ints,:strs])
 SQLite.drop!(db, "temp", ifexists=true)
-sink = SQLite.Sink(db, dt, "temp")
+sink = SQLite.Sink(db, dt; name="temp")
 Data.stream!(dt, sink)
 SQLite.removeduplicates!(db, "temp", ["ints","strs"]) #New format
 dt3 = SQLite.query(db, "Select * from temp")
