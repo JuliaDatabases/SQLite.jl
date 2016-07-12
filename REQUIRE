@@ -5,5 +5,6 @@ DataStreams
 DataFrames
 NullableArrays
 WeakRefStrings
+LegacyStrings
 @osx Homebrew
 @windows WinRPM

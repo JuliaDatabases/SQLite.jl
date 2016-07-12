@@ -61,18 +61,19 @@ end
 # stream the data in `dt` into the SQLite table represented by `sink`
 function Data.stream!(source, ::Type{Data.Field}, sink::SQLite.Sink)
     rows, cols = size(source)
+    Data.isdone(source, 1, 1) && return sink
     types = Data.types(source)
     handle = sink.stmt.handle
     transaction(sink.db) do
-        row = 0
-        while !Data.isdone(source, row, cols)
-            row += 1
+        row = 1
+        while !Data.isdone(source, row, cols+1)
             for col = 1:cols
                 @inbounds T = types[col]
                 @inbounds getfield!(source, T, sink.stmt, row, col)
             end
             SQLite.sqlite3_step(handle)
             SQLite.sqlite3_reset(handle)
+            row += 1
         end
         Data.setrows!(source, rows)
     end

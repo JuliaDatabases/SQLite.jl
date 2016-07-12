@@ -1,7 +1,7 @@
 VERSION >= v"0.4.0-dev+6521" && __precompile__(true)
 module SQLite
 
-using DataStreams, DataFrames, WeakRefStrings
+using DataStreams, DataFrames, WeakRefStrings, LegacyStrings
 
 export Data, DataFrame
 
