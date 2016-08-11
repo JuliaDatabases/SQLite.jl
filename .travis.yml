@@ -1,13 +1,18 @@
 language: julia
+
 os:
-    - osx
-    - linux
+  - linux
+  - osx
+
 julia:
-    - release
-    - nightly
+  - 0.4
+  - 0.5
+  - nightly
+
 notifications:
-    email: false
-script:
-    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-    - julia -e 'Pkg.clone(pwd()); Pkg.build("SQLite"); Pkg.test("SQLite"; coverage=true)';
-    - julia -e 'cd(Pkg.dir("SQLite")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())';
+  email: false
+
+after_success:
+  - julia -e 'cd(Pkg.dir("SQLite")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+  - julia -e 'Pkg.add("Documenter")'
+  - julia -e 'cd(Pkg.dir("SQLite")); include(joinpath("docs", "make.jl"))'

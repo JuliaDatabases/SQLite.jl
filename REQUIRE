@@ -1,10 +1,5 @@
 julia 0.4.1
 BinDeps
-CSV
-DataStreams
-DataFrames
-NullableArrays
-WeakRefStrings
-LegacyStrings
 @osx Homebrew
 @windows WinRPM
+DataStreams
