@@ -3,3 +3,5 @@ BinDeps
 @osx Homebrew
 @windows WinRPM
 DataStreams
+Compat
+LegacyStrings
