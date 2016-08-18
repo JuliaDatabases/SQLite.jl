@@ -1,13 +1,3 @@
-# indicates whether the `SQLite.Source` has finished returning results
-function Data.isdone(s::Source, row, col)
-    (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
-    return s.status == SQLITE_DONE
-end
-# resets an SQLite.Source, ready to read data from at the start of the resultset
-Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
-
-Data.streamtype{T<:SQLite.Source}(::Type{T}, ::Type{Data.Field}) = true
-
 """
 `SQLite.Source(db, sql, values=[]; rows::Int=0, stricttypes::Bool=true)`
 
@@ -65,6 +55,15 @@ function sqlitevalue{T}(::Type{T},handle,col)
     return r
 end
 
+# DataStreams interface
+function Data.isdone(s::Source, row, col)
+    (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
+    return s.status == SQLITE_DONE
+end
+# resets an SQLite.Source, ready to read data from at the start of the resultset
+Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
+Data.streamtype{T<:SQLite.Source}(::Type{T}, ::Type{Data.Field}) = true
+
 # `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, NullType
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
 # `SQLite.getfield` returns the next `Nullable{T}` value from the `SQLite.Source`
@@ -75,60 +74,11 @@ function Data.getfield{T}(source::SQLite.Source, ::Type{T}, row, col)
         val = Nullable{T}()
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val = Nullable{T}(sqlitevalue(ifelse(TT===Any&&!isbits(T),T,TT),handle,col))
+        val = Nullable{T}(sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT),handle,col))
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val
 end
-
-# function getfield!{T}(source::SQLite.Source, dest::NullableVector{T}, row, col)
-#     @inbounds dest[row] = SQLite.getfield(source, T, row, col)
-#     return
-# end
-# function pushfield!{T}(source::SQLite.Source, dest::NullableVector{T}, row, col)
-#     push!(dest, SQLite.getfield(source, T, row, col))
-#     return
-# end
-# "streams data from the SQLite.Source to a DataFrame"
-# function Data.stream!(source::SQLite.Source,sink::DataFrame)
-#     rows, cols = size(source)
-#     types = Data.types(source)
-#     if rows == 0
-#         row = 0
-#         while !Data.isdone(source)
-#             for col = 1:cols
-#                 @inbounds T = types[col]
-#                 SQLite.pushfield!(source, sink.columns[col], row, col)
-#             end
-#             row += 1
-#         end
-#         source.schema.rows = row
-#     else
-#         for row = 1:rows, col = 1:cols
-#             @inbounds T = types[col]
-#             SQLite.getfield!(source, sink.columns[col], row, col)
-#         end
-#     end
-#     return sink
-# end
-# "streams data from an SQLite.Source to a CSV.Sink file; `header=false` will not write the column names to the file"
-# function Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)
-#     header && CSV.writeheaders(source,sink)
-#     rows, cols = size(source)
-#     types = Data.types(source)
-#     row = 0
-#     while !Data.isdone(source)
-#         for col = 1:cols
-#             val = SQLite.getfield(source, types[col], row, col)
-#             CSV.writefield(sink, isnull(val) ? sink.null : get(val), col, cols)
-#         end
-#         row += 1
-#     end
-#     source.schema.rows = row
-#     sink.schema = source.schema
-#     close(sink)
-#     return sink
-# end
 
 """
 `SQLite.query(db, sql::String, sink=DataFrame, values=[]; rows::Int=0, stricttypes::Bool=true)`
@@ -139,10 +89,17 @@ Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=DataFrame; values=[], rows::Int=-1, stricttypes::Bool=true)
+function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes)
-    return Data.stream!(source, sink)
+    return Data.stream!(source, sink, append, args...)
 end
+
+function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true)
+    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes)
+    return Data.stream!(source, sink, append)
+end
+query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false) = Data.stream!(source, sink, append, args...)
+query{T}(source::SQLite.Source, sink::T; append::Bool=false) = Data.stream!(source, sink, append)
 
 """
 `SQLite.tables(db, sink=DataFrame)`

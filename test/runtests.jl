@@ -12,8 +12,112 @@ a = SQLite.DB()
 temp = tempname()
 SQLite.DB(temp)
 
-db = SQLite.DB(joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite"))
+dbfile = joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite")
+dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
+# dbfile = joinpath("/Users/jacobquinn/.julia/v0.5/SQLite/test","Chinook_Sqlite.sqlite")
+# dbfile2 = joinpath("/Users/jacobquinn/.julia/v0.5/SQLite/test","test.sqlite")
+cp(dbfile, dbfile2; remove_destination=true)
+db = SQLite.DB(dbfile2)
 
+# DataStreams interface tests
+source_table = "employee"
+sink_table = "employee2"
+sink_file = "employee2.csv"
+selall(x) = "select * from " * x
+
+# SQLite.Source ==> DataFrame
+ds = SQLite.query(db, selall(source_table))
+@test size(ds) == (8,15)
+# SQLite.Source ==> SQLite.Sink
+SQLite.query(db, selall(source_table), SQLite.Sink, db, sink_table)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (8,15)
+@test Data.types(ds) == Data.types(ds2) && Data.header(ds) == Data.header(ds2)
+# SQLite.Source ==> CSV.Sink
+SQLite.query(db, selall(source_table), CSV.Sink, sink_file)
+ds4 = CSV.read(sink_file; dateformat="yyyy-mm-dd HH:MM:SS")
+@test size(ds4) == (8,15)
+@test Data.header(ds) == Data.header(ds4)
+
+SQLite.query(db, selall(source_table), SQLite.Sink, db, sink_table; append=true)
+ds5 = SQLite.query(db, selall(sink_table))
+@test size(ds5) == (16,15)
+@test Data.types(ds) == Data.types(ds2) && Data.header(ds) == Data.header(ds2)
+
+# constructed SQLite.Sink
+sink = SQLite.Sink(db, Data.schema(ds5); name=sink_table)
+SQLite.query(db, selall(source_table), sink)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (8,15)
+@test Data.types(ds) == Data.types(ds2) && Data.header(ds) == Data.header(ds2)
+SQLite.query(db, selall(source_table), sink; append=true)
+ds3 = SQLite.query(db, selall(sink_table))
+@test size(ds3) == (16,15)
+
+# constructed SQLite.Source
+source = SQLite.Source(db, selall(source_table))
+ds = SQLite.query(source)
+@test size(ds) == (8,15)
+source = SQLite.Source(db, selall(source_table))
+SQLite.query(source, SQLite.Sink, db, sink_table)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (8,15)
+source = SQLite.Source(db, selall(source_table))
+SQLite.query(source, SQLite.Sink, db, sink_table; append=true)
+ds3 = SQLite.query(db, selall(sink_table))
+@test size(ds3) == (16,15)
+
+sink = SQLite.Sink(db, Data.schema(ds); name=sink_table)
+source = SQLite.Source(db, selall(source_table))
+SQLite.query(source, sink)
+ds = SQLite.query(db, selall(sink_table))
+@test size(ds) == (8,15)
+source = SQLite.Source(db, selall(source_table))
+SQLite.query(source, sink; append=true)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (16,15)
+
+# SQLite.load
+si = SQLite.load(db, sink_table, SQLite.Source, db, selall(source_table))
+ds = SQLite.query(db, selall(sink_table))
+@test size(ds) == (8,15)
+si = SQLite.load(db, sink_table, SQLite.Source, db, selall(source_table); append=true)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (16,15)
+
+source = SQLite.Source(db, selall(source_table))
+si = SQLite.load(db, sink_table, source)
+ds = SQLite.query(db, selall(sink_table))
+@test size(ds) == (8,15)
+source = SQLite.Source(db, selall(source_table))
+si = SQLite.load(db, sink_table, source; append=true)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (16,15)
+
+sink = SQLite.Sink(db, Data.schema(ds); name=sink_table)
+si = SQLite.load(sink, SQLite.Source, db, selall(source_table))
+ds = SQLite.query(db, selall(sink_table))
+@test size(ds) == (8,15)
+sink = SQLite.Sink(db, Data.schema(ds); name=sink_table, append=true)
+si = SQLite.load(sink, SQLite.Source, db, selall(source_table); append=true)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (16,15)
+
+source = SQLite.Source(db, selall(source_table))
+sink = SQLite.Sink(db, Data.schema(ds); name=sink_table)
+si = SQLite.load(sink, source)
+ds = SQLite.query(db, selall(sink_table))
+@test size(ds) == (8,15)
+source = SQLite.Source(db, selall(source_table))
+sink = SQLite.Sink(db, Data.schema(ds); name=sink_table, append=true)
+si = SQLite.load(sink, source; append=true)
+ds2 = SQLite.query(db, selall(sink_table))
+@test size(ds2) == (16,15)
+SQLite.drop!(db, sink_table)
+SQLite.drop!(db, "sqlite_stat1")
+rm(sink_file)
+
+# regular SQLite tests
 so = SQLite.Source(db,"SELECT name FROM sqlite_master WHERE type='table';")
 ds = Data.stream!(so,DataFrame)
 @test length(ds.columns) == 1
@@ -21,7 +125,7 @@ ds = Data.stream!(so,DataFrame)
 @test size(ds) == (11,1)
 
 results1 = SQLite.tables(db)
-@test Data.schema(ds) == Data.schema(results1)
+@test Data.types(ds) == Data.types(results1) && Data.header(ds) == Data.header(results1)
 @test ds.columns[1].values == results1.columns[1].values
 
 results = SQLite.query(db,"SELECT * FROM Employee;")
@@ -85,7 +189,7 @@ r = SQLite.query(db,"select * from $(sink.tablename)")
 @test all([eltype(i) for i in r.columns[1]] .== Int)
 
 dt = DataFrame(ones(Int,5,5))
-Data.stream!(dt,sink) # stream to an existing Sink
+Data.stream!(dt,sink,true) # stream to an existing Sink
 r = SQLite.query(db,"select * from $(sink.tablename)")
 @test size(r) == (10,5)
 @test [get(i) for i in r.columns[1]] == [0,0,0,0,0,1,1,1,1,1]
@@ -318,3 +422,5 @@ db = SQLite.DB() #In case the order of tests is changed
 SQLite.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
 stmt = SQLite.Stmt(db, "INSERT INTO tbl (a) VALUES (@a);")
 SQLite.bind!(stmt, "@a", 1)
+
+rm(dbfile2)
