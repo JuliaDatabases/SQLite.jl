@@ -4,23 +4,28 @@
 Independently constructs an `SQLite.Source` in `db` with the SQL statement `sql`.
 Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
-`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
+`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`. `nullable::Bool=true` indicates
+whether to allow null values when fetching results; if set to `false` and a null value is encountered, a `NullException` will be thrown.
 
 Note that no results are returned; `sql` is executed, and results are ready to be returned (i.e. streamed to an appropriate `Data.Sink` type)
 """
-function Source(db::DB, sql::AbstractString, values=[]; rows::Int=-1, stricttypes::Bool=true)
-    stmt = SQLite.Stmt(db,sql)
+function Source(db::DB, sql::AbstractString, values=[]; rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
+    stmt = SQLite.Stmt(db, sql)
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
     cols = SQLite.sqlite3_column_count(stmt.handle)
-    header = Array(String,cols)
-    types = Array(DataType,cols)
+    header = Array(String, cols)
+    types = Array(DataType, cols)
     for i = 1:cols
-        header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle,i))
+        header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle, i))
         # do better column type inference; query what the column was created for?
-        types[i] = stricttypes ? SQLite.juliatype(stmt.handle,i) : Any
+        if nullable
+            types[i] = Nullable{stricttypes ? SQLite.juliatype(stmt.handle, i) : Any}
+        else
+            types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
+        end
     end
-    return SQLite.Source(Data.Schema(header,types,rows),stmt,status)
+    return SQLite.Source(Data.Schema(header, types, rows), stmt, status)
 end
 
 """
@@ -31,9 +36,9 @@ constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from t
 Source(sink::SQLite.Sink,sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
 
 function juliatype(handle,col)
-    x = SQLite.sqlite3_column_type(handle,col)
+    x = SQLite.sqlite3_column_type(handle, col)
     if x == SQLITE_BLOB
-        val = sqlitevalue(Any,handle,col)
+        val = sqlitevalue(Any,handle, col)
         return typeof(val)
     else
         return juliatype(x)
@@ -41,15 +46,15 @@ function juliatype(handle,col)
 end
 juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
 
-sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T},handle,col) = convert(T, sqlite3_column_int64(handle,col))
-const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
-sqlitevalue{T<:FLOAT_TYPES}(::Type{T},handle,col) = convert(T, sqlite3_column_double(handle,col))
+sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T}, handle, col) = convert(T, sqlite3_column_int64(handle, col))
+const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
+sqlitevalue{T<:FLOAT_TYPES}(::Type{T}, handle, col) = convert(T, sqlite3_column_double(handle, col))
 #TODO: test returning a WeakRefString instead of calling `bytestring`
-sqlitevalue{T<:AbstractString}(::Type{T},handle,col) = convert(T,unsafe_string(sqlite3_column_text(handle,col)))
-function sqlitevalue{T}(::Type{T},handle,col)
-    blob = convert(Ptr{UInt8},sqlite3_column_blob(handle,col))
-    b = sqlite3_column_bytes(handle,col)
-    buf = zeros(UInt8,b) # global const?
+sqlitevalue{T<:AbstractString}(::Type{T}, handle, col) = convert(T,unsafe_string(sqlite3_column_text(handle, col)))
+function sqlitevalue{T}(::Type{T}, handle, col)
+    blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
+    b = sqlite3_column_bytes(handle, col)
+    buf = zeros(UInt8, b) # global const?
     unsafe_copy!(pointer(buf), blob, b)
     r = sqldeserialize(buf)::T
     return r
@@ -67,14 +72,26 @@ Data.streamtype{T<:SQLite.Source}(::Type{T}, ::Type{Data.Field}) = true
 # `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, NullType
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
 # `SQLite.getfield` returns the next `Nullable{T}` value from the `SQLite.Source`
-function Data.getfield{T}(source::SQLite.Source, ::Type{T}, row, col)
+function Data.getfield{T}(source::SQLite.Source, ::Type{Nullable{T}}, row, col)
     handle = source.stmt.handle
-    t = SQLite.sqlite3_column_type(handle,col)
+    t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
         val = Nullable{T}()
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val = Nullable{T}(sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT),handle,col))
+        val = Nullable{T}(sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col))
+    end
+    col == source.schema.cols && (source.status = sqlite3_step(handle))
+    return val
+end
+function Data.getfield{T}(source::SQLite.Source, ::Type{T}, row, col)
+    handle = source.stmt.handle
+    t = SQLite.sqlite3_column_type(handle, col)
+    if t == SQLite.SQLITE_NULL
+        throw(NullException)
+    else
+        TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
+        val = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val
@@ -89,13 +106,13 @@ Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true)
-    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes)
+function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
+    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     return Data.stream!(source, sink, append, args...)
 end
 
-function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true)
-    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes)
+function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
+    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     return Data.stream!(source, sink, append)
 end
 query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false) = Data.stream!(source, sink, append, args...)
