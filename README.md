@@ -1,6 +1,6 @@
 # SQLite
 
-*A fast, flexible delimited file reader/writer for Julia.*
+*A Julia interface to the SQLite library.*
 
 | **Documentation**                                                               | **PackageEvaluator**                                            | **Build Status**                                                                                |
 |:-------------------------------------------------------------------------------:|:---------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
