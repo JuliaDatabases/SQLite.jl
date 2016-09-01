@@ -15,7 +15,7 @@ SQLite.Source
 SQLite.Sink
 ```
 
-#### Types/Functions
+## Types/Functions
 * `SQLite.DB(file::AbstractString)`
 
   `SQLite.DB` requires the `file` string argument as the name of either a pre-defined SQLite database to be opened, or if the file doesn't exist, a database will be created.
@@ -26,11 +26,13 @@ SQLite.Sink
 
   The `SQLite.DB` will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 
+
 * `SQLite.Stmt(db::SQLite.DB, sql::String)`
 
   Constructs and prepares (compiled by the SQLite library) an SQL statement in the context of the provided `db`. Note the SQL statement is not actually executed, but only compiled (mainly for usage where the same statement is repeated with different parameters bound as values. See `bind!` below).
 
   The `SQLite.Stmt` will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
+
 
 * `SQLite.bind!(stmt::SQLite.Stmt,index,value)`
 
@@ -48,10 +50,12 @@ SQLite.Sink
 
   > In the examples above, NNN is an integer value and AAA is an identifier. A parameter initially has a value of NULL. Prior to calling sqlite3_step() for the first time or immediately after sqlite3_reset(), the application can invoke one of the sqlite3_bind() interfaces to attach values to the parameters. Each call to sqlite3_bind() overrides prior bindings on the same parameter.
 
+
 * `SQLite.execute!(stmt::SQLite.Stmt)`
   `SQLite.execute!(db::SQLite.DB, sql::String)`
 
   Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below.
+
 
 * `SQLite.query(db::SQLite.DB, sql::String, values=[])`
 
@@ -59,83 +63,64 @@ SQLite.Sink
 
   The values in `values` are used in parameter binding (see `bind!` above). If your statement uses nameless parameters `values` must be a `Vector` of the values you wish to bind to your statment. If your statement uses named parameters `values` must be a Dict where the keys are of type `Symbol`. The key must match an identifier name in the statement (the name **should not** include the ':', '@' or '$' prefix).
 
+
 * `SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)`
   `SQLite.dropindex!(db::SQLite.DB,index::String;ifexists::Bool=false)`
 
   These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.
 
+
 * `SQLite.createindex!(db::DB,table::AbstractString,index::AbstractString,cols;unique::Bool=true,ifnotexists::Bool=false)`
 
   Create a new index named `index` for `table` with the columns in `cols`, which should be a comma delimited list of column names. `unique` indicates whether the index will have unique values or not. `ifnotexists` will not throw an error if the index already exists.
+
 
 * `SQLite.removeduplicates!(db,table::AbstractString,cols::AbstractString)`
 
   A convenience method for the common task of removing duplicate rows in a dataset according to some subset of columns that make up a "primary key".
 
+
 * `SQLite.tables(db::SQLite.DB)`
 
   List the tables in an SQLite database `db`
+
 
 * `SQLite.columns(db::SQLite.DB,table::AbstractString)`
 
   List the columns in an SQLite table
 
+
 * `SQLite.indices(db::SQLite.DB)`
 
   List the indices that have been created in `db`
 
-* `SQLite.Source(db::DB, sql; rows=0, stricttypes::Bool=true)`
-
-  Create an `SQLite.Source` type in `db` with the SQL statement `sql`. This prepares and executes the statement, but does not return any data. The source is ready to be streamed to any sink type with an appropriate `Data.stream!` method defined. `rows` can be used to fetch a specific number of rows if known before hand and can help in pre-allocating for sinks. `stricttypes=false` can be used to relax type requirements on returned columns; typically, each value in a column must be of the same type, but SQLite itself uses a fairly weak typing scheme which allows any value to be in a column, regardless of type. Working with data in Julia is much more useful in strongly-typed structures, so by default we try to return strongly-typed columns, but this can be relaxed.
-
-* `SQLite.Source(sink::SQLite.Sink,sql)`
-
-  Creates an `SQLite.Source` type according the `sql` command executed in the same `db` as `sink`. By default, the `sql` command is `select * from $(sink.tablename)`.
-
-* `Data.stream!(source::SQLite.Source,::Type{Data.Table})`
-
-  Create a `Data.Table` and stream the data from an `SQLite.Source` into it.
-
-* `Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)`
-
-  stream the data from `source` to a `CSV.Sink`. `header` indicates whether the column names will be written first to `sink`.
-
-* `SQLite.Sink(schema::Data.Schema,db::DB,tablename;temp::Bool=false,ifnotexists::Bool=true)`
-
-  Create a new SQLite table as a sink to stream data to in `db`. `schema` is used to create the column names and types. If no `tablename` is supplied, one will be generated. `temp` indicates whether the table will be temporary, i.e. if it will be automatically destroyed when the `db` is closed.
-
-* `SQLite.Sink(source::Data.Source, db::DB, tablename)`  
-
-  Create a new SQLite table as a sink in `db` according to the `Data.schema(source)`.
-
-* `Data.stream!(dt::Data.Table,sink::SQLite.Sink)`
-
-  stream the data from a `Data.Table` to `sink`
-
-* `Data.stream!(source::CSV.Source,sink::SQLite.Sink)`
-
-  stream the data from a `CSV.Source` to `sink`
 
 * `SQLite.register(db::SQLite.DB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)`
+
+
 * `SQLite.register(db::SQLite.DB, init, step::Function, final::Function=identity; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)`
 
   Register a scalar (first method) or aggregate (second method) function with a `SQLite.DB`.
+
 
 * `@register db function`
 
   Automatically define then register `function` with a `SQLite.DB`.
 
+
 * `sr"..."`
 
   This string literal is used to escape all special characters in the string, useful for using regex in a query.
+
 
 * `SQLite.sqlreturn(contex, val)`
 
   This function should never be called explicitly. Instead it is exported so that it can be overloaded when necessary, see below.
 
-#### User Defined Functions
 
-##### SQLite Regular Expressions
+## User Defined Functions
+
+### SQLite Regular Expressions
 
 SQLite provides syntax for calling the [`regexp` function](http://sqlite.org/lang_expr.html#regexp) from inside `WHERE` clauses. Unfortunately, however, SQLite does not provide a default implementation of the `regexp` function so SQLite.jl creates one automatically when you open a database. The function can be called in the following ways (examples using the [Chinook Database](http://chinookdatabase.codeplex.com/))
 
@@ -226,7 +211,8 @@ julia> SQLite.query(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'")
 
 The sr"..." currently escapes all special characters in a string but it may be changed in the future to escape only characters which are part of a regex.
 
-##### Custom Scalar Functions
+
+### Custom Scalar Functions
 
 SQLite.jl also provides a way that you can implement your own [Scalar Functions](https://www.sqlite.org/lang_corefunc.html). This is done using the `register` function and macro.
 
@@ -278,7 +264,7 @@ sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 
 Any new method defined for `sqlreturn` must take two arguments and must pass the first argument straight through as the first argument.
 
-#### Custom Aggregate Functions
+### Custom Aggregate Functions
 
 Using the `SQLite.register` function, you can also define your own aggregate functions with largely the same semantics.
 
