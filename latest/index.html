@@ -190,6 +190,18 @@
               </a>
             </li>
           
+            <li class="anchor">
+              <a title="Types/Functions" href="#typesfunctions">
+                Types/Functions
+              </a>
+            </li>
+          
+            <li class="anchor">
+              <a title="User Defined Functions" href="#user-defined-functions">
+                User Defined Functions
+              </a>
+            </li>
+          
         </ul>
       
     
@@ -212,6 +224,8 @@
 <li><a href=".#SQLite.jl-Documentation-1">SQLite.jl Documentation</a><ul>
 <li><a href=".#High-level-interface-1">High-level interface</a></li>
 <li><a href=".#Lower-level-utilities-1">Lower-level utilities</a></li>
+<li><a href=".#Types/Functions-1">Types/Functions</a></li>
+<li><a href=".#User-Defined-Functions-1">User Defined Functions</a></li>
 </ul>
 </li>
 </ul>
@@ -222,90 +236,104 @@
 <p><code>SQLite.query(db, sql::String, sink=DataFrame, values=[]; rows::Int=0, stricttypes::Bool=true)</code></p>
 <p>convenience method for executing an SQL statement and streaming the results back in a <code>Data.Sink</code> (DataFrame by default)</p>
 <p>Will bind <code>values</code> to any parameters in <code>sql</code>. <code>rows</code> is used to indicate how many rows to return in the query result if known beforehand. <code>rows=0</code> (the default) will return all possible rows. <code>stricttypes=false</code> will remove strict column typing in the result set, making each column effectively <code>Vector{Any}</code></p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/e3b8c1638ace9cfd6debdffe2917d3c221aae8b5/src/Source.jl#L100-L108' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/Source.jl#L100-L108' class='documenter-source'>source</a><br></p>
 <p><a id='SQLite.load' href='#SQLite.load'>#</a>
 <strong><code>SQLite.load</code></strong> &mdash; <em>Function</em>.</p>
 <p>Load a Data.Source <code>source</code> into an SQLite table that will be named <code>tablename</code> (will be auto-generated if not specified).</p>
 <p><code>temp=true</code> will create a temporary SQLite table that will be destroyed automatically when the database is closed <code>ifnotexists=false</code> will throw an error if <code>tablename</code> already exists in <code>db</code></p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/e3b8c1638ace9cfd6debdffe2917d3c221aae8b5/src/Sink.jl#L95-L100' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/Sink.jl#L95-L100' class='documenter-source'>source</a><br></p>
 <p><a id='Lower-level-utilities-1'></a></p>
 <h2 id="lower-level-utilities">Lower-level utilities</h2>
 <p><a id='SQLite.Source' href='#SQLite.Source'>#</a>
 <strong><code>SQLite.Source</code></strong> &mdash; <em>Type</em>.</p>
 <p><code>SQLite.Source</code> implements the <code>Source</code> interface in the <code>DataStreams</code> framework</p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/e3b8c1638ace9cfd6debdffe2917d3c221aae8b5/src/SQLite.jl#L353' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/SQLite.jl#L353' class='documenter-source'>source</a><br></p>
 <p><a id='SQLite.Sink' href='#SQLite.Sink'>#</a>
 <strong><code>SQLite.Sink</code></strong> &mdash; <em>Type</em>.</p>
 <p>SQLite.Sink implements the <code>Sink</code> interface in the <code>DataStreams</code> framework</p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/e3b8c1638ace9cfd6debdffe2917d3c221aae8b5/src/SQLite.jl#L360' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/SQLite.jl#L360' class='documenter-source'>source</a><br></p>
 <p><a id='Types/Functions-1'></a></p>
-<h4 id="typesfunctions">Types/Functions</h4>
+<h2 id="typesfunctions">Types/Functions</h2>
 <ul>
 <li>
 <p><code>SQLite.DB(file::AbstractString)</code></p>
 <p><code>SQLite.DB</code> requires the <code>file</code> string argument as the name of either a pre-defined SQLite database to be opened, or if the file doesn't exist, a database will be created.</p>
 <p>The <code>SQLite.DB</code> object represents a single connection to an SQLite database. All other SQLite.jl functions take an <code>SQLite.DB</code> as the first argument as context.</p>
 <p>To create an in-memory temporary database, call <code>SQLite.DB()</code>.</p>
-<p>The <code>SQLite.DB</code> will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
-  * <code>SQLite.Stmt(db::SQLite.DB, sql::String)</code></p>
+<p>The <code>SQLite.DB</code> will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)</p>
+</li>
+<li>
+<p><code>SQLite.Stmt(db::SQLite.DB, sql::String)</code></p>
 <p>Constructs and prepares (compiled by the SQLite library) an SQL statement in the context of the provided <code>db</code>. Note the SQL statement is not actually executed, but only compiled (mainly for usage where the same statement is repeated with different parameters bound as values. See <code>bind!</code> below).</p>
-<p>The <code>SQLite.Stmt</code> will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
-  * <code>SQLite.bind!(stmt::SQLite.Stmt,index,value)</code></p>
+<p>The <code>SQLite.Stmt</code> will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)</p>
+</li>
+<li>
+<p><code>SQLite.bind!(stmt::SQLite.Stmt,index,value)</code></p>
 <p>Used to bind values to parameter placeholders in an prepared <code>SQLite.Stmt</code>. From the SQLite documentation:</p>
 <blockquote>
 <p>Usually, though, it is not useful to evaluate exactly the same SQL statement more than once. More often, one wants to evaluate similar statements. For example, you might want to evaluate an INSERT statement multiple times though with different values to insert. To accommodate this kind of flexibility, SQLite allows SQL statements to contain parameters which are "bound" to values prior to being evaluated. These values can later be changed and the same prepared statement can be evaluated a second time using the new values.</p>
 <p>In SQLite, wherever it is valid to include a string literal, one can use a parameter in one of the following forms:</p>
 <p>? ?NNN :AAA :AAA @AAA</p>
-<p>In the examples above, NNN is an integer value and AAA is an identifier. A parameter initially has a value of NULL. Prior to calling sqlite3_step() for the first time or immediately after sqlite3_reset(), the application can invoke one of the sqlite3_bind() interfaces to attach values to the parameters. Each call to sqlite3_bind() overrides prior bindings on the same parameter.
-  * <code>SQLite.execute!(stmt::SQLite.Stmt)</code> <code>SQLite.execute!(db::SQLite.DB, sql::String)</code></p>
+<p>In the examples above, NNN is an integer value and AAA is an identifier. A parameter initially has a value of NULL. Prior to calling sqlite3_step() for the first time or immediately after sqlite3_reset(), the application can invoke one of the sqlite3_bind() interfaces to attach values to the parameters. Each call to sqlite3_bind() overrides prior bindings on the same parameter.</p>
 </blockquote>
-<p>Used to execute a prepared <code>SQLite.Stmt</code>. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see <code>SQLite.query</code> below.
-  * <code>SQLite.query(db::SQLite.DB, sql::String, values=[])</code></p>
+</li>
+<li>
+<p><code>SQLite.execute!(stmt::SQLite.Stmt)</code> <code>SQLite.execute!(db::SQLite.DB, sql::String)</code></p>
+<p>Used to execute a prepared <code>SQLite.Stmt</code>. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see <code>SQLite.query</code> below.</p>
+</li>
+<li>
+<p><code>SQLite.query(db::SQLite.DB, sql::String, values=[])</code></p>
 <p>An SQL statement <code>sql</code> is prepared, executed in the context of <code>db</code>, and results, if any, are returned. The return value is a <code>Data.Table</code> by default from the <code>DataStreams.jl</code> package. The <code>Data.Table</code> has a field <code>.data</code> which is a <code>Vector{NullableVector}</code> which holds the columns of data returned from the <code>sql</code> statement.</p>
-<p>The values in <code>values</code> are used in parameter binding (see <code>bind!</code> above). If your statement uses nameless parameters <code>values</code> must be a <code>Vector</code> of the values you wish to bind to your statment. If your statement uses named parameters <code>values</code> must be a Dict where the keys are of type <code>Symbol</code>. The key must match an identifier name in the statement (the name <strong>should not</strong> include the ':', '@' or ':($(Expr(:incomplete, "incomplete: invalid character literal")))
-  * <code>SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)</code> <code>SQLite.dropindex!(db::SQLite.DB,index::String;ifexists::Bool=false)</code></p>
-<p>These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.
-  * <code>SQLite.createindex!(db::DB,table::AbstractString,index::AbstractString,cols;unique::Bool=true,ifnotexists::Bool=false)</code></p>
-<p>Create a new index named <code>index</code> for <code>table</code> with the columns in <code>cols</code>, which should be a comma delimited list of column names. <code>unique</code> indicates whether the index will have unique values or not. <code>ifnotexists</code> will not throw an error if the index already exists.
-  * <code>SQLite.removeduplicates!(db,table::AbstractString,cols::AbstractString)</code></p>
-<p>A convenience method for the common task of removing duplicate rows in a dataset according to some subset of columns that make up a "primary key".
-  * <code>SQLite.tables(db::SQLite.DB)</code></p>
-<p>List the tables in an SQLite database <code>db</code>
-  * <code>SQLite.columns(db::SQLite.DB,table::AbstractString)</code></p>
-<p>List the columns in an SQLite table
-  * <code>SQLite.indices(db::SQLite.DB)</code></p>
-<p>List the indices that have been created in <code>db</code>
-  * <code>SQLite.Source(db::DB, sql; rows=0, stricttypes::Bool=true)</code></p>
-<p>Create an <code>SQLite.Source</code> type in <code>db</code> with the SQL statement <code>sql</code>. This prepares and executes the statement, but does not return any data. The source is ready to be streamed to any sink type with an appropriate <code>Data.stream!</code> method defined. <code>rows</code> can be used to fetch a specific number of rows if known before hand and can help in pre-allocating for sinks. <code>stricttypes=false</code> can be used to relax type requirements on returned columns; typically, each value in a column must be of the same type, but SQLite itself uses a fairly weak typing scheme which allows any value to be in a column, regardless of type. Working with data in Julia is much more useful in strongly-typed structures, so by default we try to return strongly-typed columns, but this can be relaxed.
-  * <code>SQLite.Source(sink::SQLite.Sink,sql)</code></p>
-<p>Creates an <code>SQLite.Source</code> type according the <code>sql</code> command executed in the same <code>db</code> as <code>sink</code>. By default, the <code>sql</code> command is <code>select * from $(sink.tablename)</code>.
-  * <code>Data.stream!(source::SQLite.Source,::Type{Data.Table})</code></p>
-<p>Create a <code>Data.Table</code> and stream the data from an <code>SQLite.Source</code> into it.
-  * <code>Data.stream!(source::SQLite.Source,sink::CSV.Sink;header::Bool=true)</code></p>
-<p>stream the data from <code>source</code> to a <code>CSV.Sink</code>. <code>header</code> indicates whether the column names will be written first to <code>sink</code>.
-  * <code>SQLite.Sink(schema::Data.Schema,db::DB,tablename;temp::Bool=false,ifnotexists::Bool=true)</code></p>
-<p>Create a new SQLite table as a sink to stream data to in <code>db</code>. <code>schema</code> is used to create the column names and types. If no <code>tablename</code> is supplied, one will be generated. <code>temp</code> indicates whether the table will be temporary, i.e. if it will be automatically destroyed when the <code>db</code> is closed.
-  * <code>SQLite.Sink(source::Data.Source, db::DB, tablename)</code>  </p>
-<p>Create a new SQLite table as a sink in <code>db</code> according to the <code>Data.schema(source)</code>.
-  * <code>Data.stream!(dt::Data.Table,sink::SQLite.Sink)</code></p>
-<p>stream the data from a <code>Data.Table</code> to <code>sink</code>
-  * <code>Data.stream!(source::CSV.Source,sink::SQLite.Sink)</code></p>
-<p>stream the data from a <code>CSV.Source</code> to <code>sink</code>
-  * <code>SQLite.register(db::SQLite.DB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)</code>
-  * <code>SQLite.register(db::SQLite.DB, init, step::Function, final::Function=identity; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)</code></p>
-<p>Register a scalar (first method) or aggregate (second method) function with a <code>SQLite.DB</code>.
-  * <code>@register db function</code></p>
-<p>Automatically define then register <code>function</code> with a <code>SQLite.DB</code>.
-  * <code>sr"..."</code></p>
-<p>This string literal is used to escape all special characters in the string, useful for using regex in a query.
-  * <code>SQLite.sqlreturn(contex, val)</code></p>
+<p>The values in <code>values</code> are used in parameter binding (see <code>bind!</code> above). If your statement uses nameless parameters <code>values</code> must be a <code>Vector</code> of the values you wish to bind to your statment. If your statement uses named parameters <code>values</code> must be a Dict where the keys are of type <code>Symbol</code>. The key must match an identifier name in the statement (the name <strong>should not</strong> include the ':', '@' or ':($(Expr(:incomplete, "incomplete: invalid character literal")))</p>
+</li>
+<li>
+<p><code>SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)</code> <code>SQLite.dropindex!(db::SQLite.DB,index::String;ifexists::Bool=false)</code></p>
+<p>These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.</p>
+</li>
+<li>
+<p><code>SQLite.createindex!(db::DB,table::AbstractString,index::AbstractString,cols;unique::Bool=true,ifnotexists::Bool=false)</code></p>
+<p>Create a new index named <code>index</code> for <code>table</code> with the columns in <code>cols</code>, which should be a comma delimited list of column names. <code>unique</code> indicates whether the index will have unique values or not. <code>ifnotexists</code> will not throw an error if the index already exists.</p>
+</li>
+<li>
+<p><code>SQLite.removeduplicates!(db,table::AbstractString,cols::AbstractString)</code></p>
+<p>A convenience method for the common task of removing duplicate rows in a dataset according to some subset of columns that make up a "primary key".</p>
+</li>
+<li>
+<p><code>SQLite.tables(db::SQLite.DB)</code></p>
+<p>List the tables in an SQLite database <code>db</code></p>
+</li>
+<li>
+<p><code>SQLite.columns(db::SQLite.DB,table::AbstractString)</code></p>
+<p>List the columns in an SQLite table</p>
+</li>
+<li>
+<p><code>SQLite.indices(db::SQLite.DB)</code></p>
+<p>List the indices that have been created in <code>db</code></p>
+</li>
+<li>
+<p><code>SQLite.register(db::SQLite.DB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)</code></p>
+</li>
+<li>
+<p><code>SQLite.register(db::SQLite.DB, init, step::Function, final::Function=identity; nargs::Int=-1, name::AbstractString=string(final), isdeterm::Bool=true)</code></p>
+<p>Register a scalar (first method) or aggregate (second method) function with a <code>SQLite.DB</code>.</p>
+</li>
+<li>
+<p><code>@register db function</code></p>
+<p>Automatically define then register <code>function</code> with a <code>SQLite.DB</code>.</p>
+</li>
+<li>
+<p><code>sr"..."</code></p>
+<p>This string literal is used to escape all special characters in the string, useful for using regex in a query.</p>
+</li>
+<li>
+<p><code>SQLite.sqlreturn(contex, val)</code></p>
 <p>This function should never be called explicitly. Instead it is exported so that it can be overloaded when necessary, see below.</p>
 </li>
 </ul>
 <p><a id='User-Defined-Functions-1'></a></p>
-<h4 id="user-defined-functions">User Defined Functions</h4>
+<h2 id="user-defined-functions">User Defined Functions</h2>
 <p><a id='SQLite-Regular-Expressions-1'></a></p>
-<h5 id="sqlite-regular-expressions">SQLite Regular Expressions</h5>
+<h3 id="sqlite-regular-expressions">SQLite Regular Expressions</h3>
 <p>SQLite provides syntax for calling the <a href="http://sqlite.org/lang_expr.html#regexp"><code>regexp</code> function</a> from inside <code>WHERE</code> clauses. Unfortunately, however, SQLite does not provide a default implementation of the <code>regexp</code> function so SQLite.jl creates one automatically when you open a database. The function can be called in the following ways (examples using the <a href="http://chinookdatabase.codeplex.com/">Chinook Database</a>)</p>
 <pre><code class="julia">julia&gt; using SQLite
 
@@ -389,7 +417,7 @@ julia&gt; SQLite.query(db, sr&quot;SELECT * FROM MediaType WHERE Name REGEXP '-\
 
 <p>The sr"..." currently escapes all special characters in a string but it may be changed in the future to escape only characters which are part of a regex.</p>
 <p><a id='Custom-Scalar-Functions-1'></a></p>
-<h5 id="custom-scalar-functions">Custom Scalar Functions</h5>
+<h3 id="custom-scalar-functions">Custom Scalar Functions</h3>
 <p>SQLite.jl also provides a way that you can implement your own <a href="https://www.sqlite.org/lang_corefunc.html">Scalar Functions</a>. This is done using the <code>register</code> function and macro.</p>
 <p><code>@register</code> takes a <code>SQLite.DB</code> and a function. The function can be in block syntax</p>
 <pre><code class="julia">julia&gt; @register db function add3(x)
@@ -426,7 +454,7 @@ sqlreturn(context, val::Any)
 
 <p>Any new method defined for <code>sqlreturn</code> must take two arguments and must pass the first argument straight through as the first argument.</p>
 <p><a id='Custom-Aggregate-Functions-1'></a></p>
-<h4 id="custom-aggregate-functions">Custom Aggregate Functions</h4>
+<h3 id="custom-aggregate-functions">Custom Aggregate Functions</h3>
 <p>Using the <code>SQLite.register</code> function, you can also define your own aggregate functions with largely the same semantics.</p>
 <p>The <code>SQLite.register</code> function for aggregates must take a <code>SQLite.DB</code>, an initial value, a step function and a final function. The first argument to the step function will be the return value of the previous function (or the initial value if it is the first iteration). The final function must take a single argument which will be the return value of the last step function.</p>
 <pre><code class="julia">julia&gt; dsum(prev, cur) = prev + cur
