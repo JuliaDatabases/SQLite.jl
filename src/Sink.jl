@@ -77,7 +77,7 @@ function Data.stream!(source, ::Type{Data.Field}, sink::SQLite.Sink, append::Boo
     handle = sink.stmt.handle
     transaction(sink.db) do
         row = 1
-        while !Data.isdone(source, row, cols+1)
+        while true
             for col = 1:cols
                 @inbounds T = types[col]
                 @inbounds getfield!(source, T, sink.stmt, row, col)
@@ -85,8 +85,9 @@ function Data.stream!(source, ::Type{Data.Field}, sink::SQLite.Sink, append::Boo
             SQLite.sqlite3_step(handle)
             SQLite.sqlite3_reset(handle)
             row += 1
+            Data.isdone(source, row, cols) && break
         end
-        Data.setrows!(source, rows)
+        Data.setrows!(source, row - 1)
     end
     SQLite.execute!(sink.db,"ANALYZE $(esc_id(sink.tablename))")
     return sink
