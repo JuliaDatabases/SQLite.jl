@@ -108,15 +108,19 @@ Will bind `values` to any parameters in `sql`.
 """
 function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
-    return Data.stream!(source, sink, append, args...)
+    sink = Data.stream!(source, sink, append, args...)
+    Data.close!(sink)
+    return sink
 end
 
 function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
-    return Data.stream!(source, sink, append)
+    sink = Data.stream!(source, sink, append)
+    Data.close!(sink)
+    return sink
 end
-query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false) = Data.stream!(source, sink, append, args...)
-query{T}(source::SQLite.Source, sink::T; append::Bool=false) = Data.stream!(source, sink, append)
+query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false) = (sink = Data.stream!(source, sink, append, args...); Data.close!(sink); return sink)
+query{T}(source::SQLite.Source, sink::T; append::Bool=false) = (sink = Data.stream!(source, sink, append); Data.close!(sink); return sink)
 
 """
 `SQLite.tables(db, sink=DataFrame)`

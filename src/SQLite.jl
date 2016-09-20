@@ -250,8 +250,8 @@ function transaction(db, mode="DEFERRED")
 end
 function transaction(f::Function, db)
     # generate a random name for the savepoint
-    name = string("SQLITE",randstring(10))
-    execute!(db,"PRAGMA synchronous = OFF;")
+    name = string("SQLITE", randstring(10))
+    execute!(db, "PRAGMA synchronous = OFF;")
     transaction(db, name)
     try
         f()
@@ -261,7 +261,7 @@ function transaction(f::Function, db)
     finally
         # savepoints are not released on rollback
         commit(db, name)
-        execute!(db,"PRAGMA synchronous = ON;")
+        execute!(db, "PRAGMA synchronous = ON;")
     end
 end
 
@@ -363,6 +363,7 @@ type Sink <: Data.Sink # <: IO
     db::DB
     tablename::String
     stmt::Stmt
+    transaction::String
 end
 
 include("Source.jl")
