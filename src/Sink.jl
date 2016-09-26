@@ -23,23 +23,20 @@ function Sink(db::DB, schema::Data.Schema; name::AbstractString="julia_"*randstr
     return Sink(schema, db, name, stmt, "")
 end
 
-"constructs a new SQLite.Sink from the given `SQLite.Source`; uses `source` schema to create the SQLite table"
-function Sink(source::SQLite.Source; name::AbstractString="julia_"*randstring(), temp::Bool=false, ifnotexists::Bool=true)
-    return Sink(source.db, source.schema; name=name, temp=temp, ifnotexists=ifnotexists)
-end
-"constructs a new SQLite.Sink from the given `Data.Source`; uses `source` schema to create the SQLite table"
-function Sink(db::DB, source; name::AbstractString="julia_"*randstring(), temp::Bool=false, ifnotexists::Bool=true)
-    return Sink(db, Data.schema(source); name=name, temp=temp, ifnotexists=ifnotexists)
-end
-
 # DataStreams interface
 Data.streamtypes{T<:SQLite.Sink}(::Type{T}) = [Data.Field]
 
-function Sink{T}(source, ::Type{T}, append::Bool, db::DB, name::AbstractString="julia_" * randstring())
-    sink = Sink(db, Data.schema(source); name=name, append=append)
+function Sink{T}(sch::Data.Schema, ::Type{T}, append::Bool, ref::Vector{UInt8}, db::DB, name::AbstractString="julia_" * randstring(); kwargs...)
+    sink = Sink(db, sch; name=name, append=append, kwargs...)
+    execute!(sink.db,"PRAGMA synchronous = OFF;")
+    sink.transaction = string("SQLITE",randstring(10))
+    transaction(sink.db, sink.transaction)
     return sink
 end
-function Sink{T}(sink, source, ::Type{T}, append::Bool)
+function Sink{T}(sink, sch::Data.Schema, ::Type{T}, append::Bool, ref::Vector{UInt8})
+    execute!(sink.db,"PRAGMA synchronous = OFF;")
+    sink.transaction = string("SQLITE",randstring(10))
+    transaction(sink.db, sink.transaction)
     !append && execute!(sink.db, "delete from $(esc_id(sink.tablename))")
     return sink
 end
@@ -65,15 +62,7 @@ else
     getbind!{T}(val::T, col, stmt) = SQLite.bind!(stmt, col, val)
 end
 
-function Data.open!(sink::SQLite.Sink, source)
-    execute!(sink.db,"PRAGMA synchronous = OFF;")
-    sink.transaction = string("SQLITE",randstring(10))
-    transaction(sink.db, sink.transaction)
-    return nothing
-end
-
-function Data.streamfield!{T}(sink::SQLite.Sink, source, ::Type{T}, row, col, cols)
-    val = Data.getfield(source, T, row ,col)
+function Data.stream!{T}(sink::SQLite.Sink, ::Type{Data.Field}, val::T, row, col, cols)
     getbind!(val, col, sink.stmt)
     if col == cols
         SQLite.sqlite3_step(sink.stmt.handle)
@@ -84,6 +73,7 @@ end
 
 function Data.cleanup!(sink::SQLite.Sink)
     rollback(sink.db, sink.transaction)
+    commit(sink.db, sink.transaction)
     execute!(sink.db, "PRAGMA synchronous = ON;")
     return nothing
 end
@@ -101,26 +91,16 @@ Load a Data.Source `source` into an SQLite table that will be named `tablename` 
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
 """
-function load{T}(db, name, ::Type{T}, args...;
-              temp::Bool=false,
-              ifnotexists::Bool=true,
-              append::Bool=false)
-    source = T(args...)
-    schema = Data.schema(source)
-    sink = Sink(db, schema; name=name, temp=temp, ifnotexists=ifnotexists, append=append)
-    Data.stream!(source, sink, append)
+function load{T}(db, name, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+    sink = Data.stream!(T(args...), SQLite.Sink, append, transforms, db, name; kwargs...)
     Data.close!(sink)
     return sink
 end
-function load{T}(db, name, source::T;
-              temp::Bool=false,
-              ifnotexists::Bool=true,
-              append::Bool=false)
-    sink = Sink(db, Data.schema(source); name=name, temp=temp, ifnotexists=ifnotexists, append=append)
-    Data.stream!(source, sink, append)
+function load{T}(db, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+    sink = Data.stream!(source, SQLite.Sink, append, transforms, db, name; kwargs...)
     Data.close!(sink)
     return sink
 end
 
-load{T}(sink::Sink, ::Type{T}, args...; append::Bool=false) = (sink = Data.stream!(T(args...), sink, append); Data.close!(sink); return sink)
-load(sink::Sink, source; append::Bool=false) = (sink = Data.stream!(source, sink, append); Data.close!(sink); return sink)
+load{T}(sink::Sink, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(T(args...), sink, append, transforms); Data.close!(sink); return sink)
+load(sink::Sink, source; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink, append, transforms); Data.close!(sink); return sink)

@@ -25,7 +25,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Int=-1, stricttype
             types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
         end
     end
-    return SQLite.Source(Data.Schema(header, types, rows), stmt, status)
+    return SQLite.Source(Data.Schema(Data.Field, header, types, rows), stmt, status)
 end
 
 """
@@ -106,21 +106,21 @@ Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
+function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
-    sink = Data.stream!(source, sink, append, args...)
+    sink = Data.stream!(source, sink, append, transforms, args...)
     Data.close!(sink)
     return sink
 end
 
-function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
+function query{T}(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Int=-1, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
-    sink = Data.stream!(source, sink, append)
+    sink = Data.stream!(source, sink, append, transforms)
     Data.close!(sink)
     return sink
 end
-query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false) = (sink = Data.stream!(source, sink, append, args...); Data.close!(sink); return sink)
-query{T}(source::SQLite.Source, sink::T; append::Bool=false) = (sink = Data.stream!(source, sink, append); Data.close!(sink); return sink)
+query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink, append, transforms, args...); Data.close!(sink); return sink)
+query{T}(source::SQLite.Source, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink, append, transforms); Data.close!(sink); return sink)
 
 """
 `SQLite.tables(db, sink=DataFrame)`

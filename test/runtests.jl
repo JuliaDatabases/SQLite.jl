@@ -14,8 +14,8 @@ SQLite.DB(temp)
 
 dbfile = joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
-# dbfile = joinpath("/Users/jacobquinn/.julia/v0.5/SQLite/test","Chinook_Sqlite.sqlite")
-# dbfile2 = joinpath("/Users/jacobquinn/.julia/v0.5/SQLite/test","test.sqlite")
+# dbfile = joinpath(Pkg.dir("SQLite"),"test/Chinook_Sqlite.sqlite")
+# dbfile2 = joinpath(Pkg.dir("SQLite"),"test/test.sqlite")
 cp(dbfile, dbfile2; remove_destination=true)
 db = SQLite.DB(dbfile2)
 
@@ -163,8 +163,8 @@ r = SQLite.query(db,"select * from temp limit 10")
 @test all(Bool[get(x) == Date(2014,1,1) for x in r[:,5]])
 @test length(SQLite.query(db,"drop table temp").columns) == 0
 
-dt = DataFrame(Data.Schema([Float64,Float64,Float64,Float64,Float64],5))
-sink = SQLite.Sink(db,dt)
+dt = DataFrame(Data.Schema(Data.Field, [Float64,Float64,Float64,Float64,Float64],5))
+sink = SQLite.Sink(db,Data.schema(dt, Data.Field))
 Data.stream!(dt,sink)
 Data.close!(sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
@@ -173,7 +173,7 @@ r = SQLite.query(db,"select * from $(sink.tablename)")
 SQLite.drop!(db,"$(sink.tablename)")
 
 dt = DataFrame(zeros(5,5))
-sink = SQLite.Sink(db,dt)
+sink = SQLite.Sink(db,Data.schema(dt, Data.Field))
 Data.stream!(dt,sink)
 Data.close!(sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
@@ -183,7 +183,7 @@ r = SQLite.query(db,"select * from $(sink.tablename)")
 SQLite.drop!(db,"$(sink.tablename)")
 
 dt = DataFrame(zeros(Int,5,5))
-sink = SQLite.Sink(db,dt)
+sink = SQLite.Sink(db,Data.schema(dt, Data.Field))
 Data.stream!(dt,sink)
 Data.close!(sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
@@ -202,7 +202,7 @@ SQLite.drop!(db,"$(sink.tablename)")
 
 rng = Date(2013):Date(2013,1,5)
 dt = DataFrame([i for i = rng, j = rng])
-sink = SQLite.Sink(db,dt)
+sink = SQLite.Sink(db,Data.schema(dt, Data.Field))
 Data.stream!(dt,sink)
 Data.close!(sink)
 r = SQLite.query(db,"select * from $(sink.tablename)")
@@ -370,7 +370,7 @@ db = nothing; gc(); gc();
 
 db = SQLite.DB()
 source = CSV.Source(temp)
-sink = SQLite.Sink(db,source; name="temp")
+sink = SQLite.Sink(db,Data.schema(source); name="temp")
 Data.stream!(source,sink)
 Data.close!(sink)
 source2 = SQLite.Source(sink)
@@ -379,7 +379,7 @@ dt = Data.stream!(source2,DataFrame)
 @test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
 @test get(dt[1,3]) == 1
 
-sink = SQLite.Sink(db, Data.schema(dt); name="temp2")
+sink = SQLite.Sink(db, Data.schema(dt, Data.Field); name="temp2")
 Data.stream!(dt,sink)
 Data.close!(sink)
 source3 = SQLite.Source(sink)
@@ -392,12 +392,9 @@ dt = Data.stream!(source3,DataFrame)
 db = SQLite.DB() #In case the order of tests is changed
 arr = Array(String,2)
 arr[1] = "1" #Now an array with the second value undefined
-nv = NullableArrays.NullableArray(arr, [false, true])
-schema = DataStreams.Data.Schema(["nv"], [String],2)
-d = Any[nv]
-dt = DataFrame(d)
+dt = DataFrame(Any[NullableArrays.NullableArray(arr, [false, true])])
 SQLite.drop!(db, "temp", ifexists=true)
-sink = SQLite.Sink(db, dt; name="temp")
+sink = SQLite.Sink(db, Data.schema(dt, Data.Field); name="temp")
 Data.stream!(dt, sink)
 Data.close!(sink)
 dt2 = SQLite.query(db, "Select * from temp")
@@ -411,11 +408,10 @@ ints = Int64[1,1,2,2,3]
 strs = String["A", "A", "B", "C", "C"]
 nvInts = NullableArrays.NullableArray(ints)
 nvStrs = NullableArrays.NullableArray(strs)
-schema = Data.Schema(["ints", "strs"], [Int64, String],5)
 d = Any[nvInts, nvStrs]
-dt = DataFrame(d,[:ints,:strs])
+dt = DataFrame(d, [:ints,:strs])
 SQLite.drop!(db, "temp", ifexists=true)
-sink = SQLite.Sink(db, dt; name="temp")
+sink = SQLite.Sink(db, Data.schema(dt, Data.Field); name="temp")
 Data.stream!(dt, sink)
 Data.close!(sink)
 SQLite.removeduplicates!(db, "temp", ["ints","strs"]) #New format
