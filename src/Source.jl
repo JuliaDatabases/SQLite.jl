@@ -25,7 +25,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Int=-1, stricttype
             types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
         end
     end
-    return SQLite.Source(Data.Schema(Data.Field, header, types, rows), stmt, status)
+    return SQLite.Source(Data.Schema(header, types, rows), stmt, status)
 end
 
 """
@@ -33,7 +33,7 @@ end
 
 constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from the underlying Sink table by default
 """
-Source(sink::SQLite.Sink,sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
+Source(sink::SQLite.Sink, sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
 
 function juliatype(handle,col)
     x = SQLite.sqlite3_column_type(handle, col)
@@ -61,18 +61,19 @@ function sqlitevalue{T}(::Type{T}, handle, col)
 end
 
 # DataStreams interface
+Data.schema(source::SQLite.Source, ::Type{Data.Field}) = source.schema
 function Data.isdone(s::Source, row, col)
     (s.status == SQLITE_DONE || s.status == SQLITE_ROW) || sqliteerror(s.stmt.db)
     return s.status == SQLITE_DONE
 end
 # resets an SQLite.Source, ready to read data from at the start of the resultset
-Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
+# Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
 Data.streamtype{T<:SQLite.Source}(::Type{T}, ::Type{Data.Field}) = true
 
 # `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, NullType
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
-# `SQLite.getfield` returns the next `Nullable{T}` value from the `SQLite.Source`
-function Data.getfield{T}(source::SQLite.Source, ::Type{Nullable{T}}, row, col)
+# `SQLite.streamfrom` returns the next `Nullable{T}` value from the `SQLite.Source`
+function Data.streamfrom{T}(source::SQLite.Source, ::Type{Data.Field}, ::Type{Nullable{T}}, row, col)
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
@@ -84,7 +85,7 @@ function Data.getfield{T}(source::SQLite.Source, ::Type{Nullable{T}}, row, col)
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val
 end
-function Data.getfield{T}(source::SQLite.Source, ::Type{T}, row, col)
+function Data.streamfrom{T}(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, row, col)
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL

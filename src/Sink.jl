@@ -4,6 +4,16 @@ sqlitetype{T<:AbstractString}(::Type{T}) = "TEXT"
 sqlitetype(::Type{NullType}) = "NULL"
 sqlitetype(x) = "BLOB"
 
+function createtable!(db::DB, name::AbstractString, schema::Data.Schema; temp::Bool=false, ifnotexists::Bool=true)
+    rows, cols = size(schema)
+    temp = temp ? "TEMP" : ""
+    ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
+    header, types = Data.header(schema), Data.types(schema)
+    columns = [string(esc_id(header[i]), ' ', sqlitetype(types[i])) for i = 1:cols]
+    SQLite.execute!(db, "CREATE $temp TABLE $ifnotexists $(esc_id(name)) ($(join(columns, ',')))")
+    return name
+end
+
 """
 independent SQLite.Sink constructor to create a new or wrap an existing SQLite table with name `name`.
 must provide a `Data.Schema` through the `schema` argument
@@ -11,31 +21,32 @@ can optionally provide an existing SQLite table name or new name that a created 
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `name` already exists in `db`
 """
-function Sink(db::DB, schema::Data.Schema; name::AbstractString="julia_"*randstring(), temp::Bool=false, ifnotexists::Bool=true, append::Bool=false)
-    rows, cols = size(schema)
-    temp = temp ? "TEMP" : ""
-    ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
-    columns = [string(esc_id(schema.header[i]), ' ', sqlitetype(schema.types[i])) for i = 1:cols]
-    SQLite.execute!(db, "CREATE $temp TABLE $ifnotexists $(esc_id(name)) ($(join(columns, ',')))")
-    !append && execute!(db, "delete from $(esc_id(name))")
+function Sink(db::DB, name::AbstractString, schema::Data.Schema=Data.Schema(); temp::Bool=false, ifnotexists::Bool=true, append::Bool=false)
+    cols = size(SQLite.query(db, "pragma table_info($name)"), 1)
+    if cols == 0
+        createtable!(db, name, schema)
+        cols = size(SQLite.query(db, "pragma table_info($name)"), 1)
+    else
+        !append && execute!(db, "delete from $(esc_id(name))")
+    end
     params = chop(repeat("?,", cols))
     stmt = SQLite.Stmt(db, "INSERT INTO $(esc_id(name)) VALUES ($params)")
-    return Sink(schema, db, name, stmt, "")
+    return Sink(db, name, stmt, "")
 end
 
 # DataStreams interface
 Data.streamtypes{T<:SQLite.Sink}(::Type{T}) = [Data.Field]
 
-function Sink{T}(sch::Data.Schema, ::Type{T}, append::Bool, ref::Vector{UInt8}, db::DB, name::AbstractString="julia_" * randstring(); kwargs...)
-    sink = Sink(db, sch; name=name, append=append, kwargs...)
-    execute!(sink.db,"PRAGMA synchronous = OFF;")
+function Sink{T}(sch::Data.Schema, ::Type{T}, append::Bool, ref::Vector{UInt8}, db::DB, name::AbstractString; kwargs...)
+    sink = Sink(db, name, sch; append=append, kwargs...)
+    execute!(sink.db, "PRAGMA synchronous = OFF;")
     sink.transaction = string("SQLITE",randstring(10))
     transaction(sink.db, sink.transaction)
     return sink
 end
 function Sink{T}(sink, sch::Data.Schema, ::Type{T}, append::Bool, ref::Vector{UInt8})
-    execute!(sink.db,"PRAGMA synchronous = OFF;")
-    sink.transaction = string("SQLITE",randstring(10))
+    execute!(sink.db, "PRAGMA synchronous = OFF;")
+    sink.transaction = string("SQLITE", randstring(10))
     transaction(sink.db, sink.transaction)
     !append && execute!(sink.db, "delete from $(esc_id(sink.tablename))")
     return sink
@@ -62,9 +73,9 @@ else
     getbind!{T}(val::T, col, stmt) = SQLite.bind!(stmt, col, val)
 end
 
-function Data.stream!{T}(sink::SQLite.Sink, ::Type{Data.Field}, val::T, row, col, cols)
+function Data.streamto!{T}(sink::SQLite.Sink, ::Type{Data.Field}, val::T, row, col, sch)
     getbind!(val, col, sink.stmt)
-    if col == cols
+    if col == size(sch, 2)
         SQLite.sqlite3_step(sink.stmt.handle)
         SQLite.sqlite3_reset(sink.stmt.handle)
     end

@@ -358,8 +358,7 @@ type Source <: Data.Source
 end
 
 "SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
-type Sink <: Data.Sink # <: IO
-    schema::Data.Schema
+type Sink <: Data.Sink
     db::DB
     tablename::String
     stmt::Stmt
