@@ -117,36 +117,6 @@ r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1,3] === Nullable(0)
 SQLite.drop!(db, "temp")
 
-binddb = SQLite.DB()
-SQLite.query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[SQLite.NULL, convert(Int64,6), 6.4, "some text", b"bytearray"])
-r = SQLite.query(binddb, "SELECT * FROM temp")
-@test isa(get(r.columns[1][1], SQLite.NULL), SQLite.NullType)
-@test isa(get(r.columns[2][1]), Int)
-@test isa(get(r.columns[3][1]), Float64)
-@test isa(get(r.columns[4][1]), AbstractString)
-@test isa(get(r.columns[5][1]), Vector{UInt8})
-SQLite.query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])
-type Point{T}
-    x::T
-    y::T
-end
-==(a::Point, b::Point) = a.x == b.x && a.y == b.y
-p1 = Point(1, 2)
-p2 = Point(1.3, 2.4)
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p1])
-SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p2])
-r = SQLite.query(binddb, "SELECT * FROM blobtest";stricttypes=false)
-for v in r.columns[1]
-    @test get(v) == b"a"
-end
-for (v1, v2) in zip(r.columns[2], Any[b"b", BigInt(2), p1, p2])
-    @test get(v1) == v2
-end
-############################################
-
 SQLite.query(db, "CREATE TABLE temp AS SELECT * FROM Album")
 r = SQLite.query(db, "SELECT * FROM temp LIMIT :a"; values=Dict(:a => 3))
 @test size(r) == (3,3)
@@ -294,7 +264,35 @@ SQLite.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
 stmt = SQLite.Stmt(db, "INSERT INTO tbl (a) VALUES (@a);")
 SQLite.bind!(stmt, "@a", 1)
 
-rm(dbfile2)
+binddb = SQLite.DB()
+SQLite.query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
+SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[SQLite.NULL, convert(Int64,6), 6.4, "some text", b"bytearray"])
+r = SQLite.query(binddb, "SELECT * FROM temp")
+@test isa(get(r.columns[1][1], SQLite.NULL), SQLite.NullType)
+@test isa(get(r.columns[2][1]), Int)
+@test isa(get(r.columns[3][1]), Float64)
+@test isa(get(r.columns[4][1]), AbstractString)
+@test isa(get(r.columns[5][1]), Vector{UInt8})
+SQLite.query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])
+type Point{T}
+    x::T
+    y::T
+end
+==(a::Point, b::Point) = a.x == b.x && a.y == b.y
+p1 = Point(1, 2)
+p2 = Point(1.3, 2.4)
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p1])
+SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p2])
+r = SQLite.query(binddb, "SELECT * FROM blobtest";stricttypes=false)
+for v in r.columns[1]
+    @test get(v) == b"a"
+end
+for (v1, v2) in zip(r.columns[2], Any[b"b", BigInt(2), p1, p2])
+    @test get(v1) == v2
+end
+############################################
 
 installed = Pkg.installed()
 haskey(installed, "DataStreamsIntegrationTests") || Pkg.clone("https://github.com/JuliaData/DataStreamsIntegrationTests")
