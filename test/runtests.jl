@@ -49,6 +49,7 @@ r = SQLite.query(db,"select * from temp limit 10")
 stmt = SQLite.Stmt(db,"update temp set dates = ?")
 SQLite.bind!(stmt,1,Date(2014,1,1))
 SQLite.execute!(stmt)
+finalize(stmt); stmt = nothing; gc()
 r = SQLite.query(db,"select * from temp limit 10")
 @test length(r.columns) == 5
 @test size(r) == (10,5)
@@ -250,16 +251,7 @@ SQLite.drop!(db2, "tab2", ifexists=true)
 SQLite.drop!(db, "sqlite_stat1")
 @test size(SQLite.tables(db)) == (11,1)
 
-db = nothing; gc(); gc();
-
-sink = SQLite.Sink(db, "temp2", Data.schema(dt, Data.Field))
-Data.stream!(dt, sink)
-Data.close!(sink)
-source3 = SQLite.Source(sink)
-dt = Data.stream!(source3, DataFrame)
-@test get(dt[1,1]) == 1
-@test string(get(dt[1,2])) == "For Those About To Rock We Salute You"
-@test get(dt[1,3]) == 1
+finalize(db); db = nothing; gc(); gc();
 
 #Make sure we handle undefined values
 db = SQLite.DB() #In case the order of tests is changed
