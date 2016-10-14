@@ -236,22 +236,22 @@
 <p><code>SQLite.query(db, sql::String, sink=DataFrame, values=[]; rows::Int=0, stricttypes::Bool=true)</code></p>
 <p>convenience method for executing an SQL statement and streaming the results back in a <code>Data.Sink</code> (DataFrame by default)</p>
 <p>Will bind <code>values</code> to any parameters in <code>sql</code>. <code>rows</code> is used to indicate how many rows to return in the query result if known beforehand. <code>rows=0</code> (the default) will return all possible rows. <code>stricttypes=false</code> will remove strict column typing in the result set, making each column effectively <code>Vector{Any}</code></p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/Source.jl#L100-L108' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/584ad0809de9affca2dd4efbdec5355f649e2c43/src/Source.jl#L101-L109' class='documenter-source'>source</a><br></p>
 <p><a id='SQLite.load' href='#SQLite.load'>#</a>
 <strong><code>SQLite.load</code></strong> &mdash; <em>Function</em>.</p>
 <p>Load a Data.Source <code>source</code> into an SQLite table that will be named <code>tablename</code> (will be auto-generated if not specified).</p>
 <p><code>temp=true</code> will create a temporary SQLite table that will be destroyed automatically when the database is closed <code>ifnotexists=false</code> will throw an error if <code>tablename</code> already exists in <code>db</code></p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/Sink.jl#L95-L100' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/584ad0809de9affca2dd4efbdec5355f649e2c43/src/Sink.jl#L99-L104' class='documenter-source'>source</a><br></p>
 <p><a id='Lower-level-utilities-1'></a></p>
 <h2 id="lower-level-utilities">Lower-level utilities</h2>
 <p><a id='SQLite.Source' href='#SQLite.Source'>#</a>
 <strong><code>SQLite.Source</code></strong> &mdash; <em>Type</em>.</p>
 <p><code>SQLite.Source</code> implements the <code>Source</code> interface in the <code>DataStreams</code> framework</p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/SQLite.jl#L353' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/584ad0809de9affca2dd4efbdec5355f649e2c43/src/SQLite.jl#L342' class='documenter-source'>source</a><br></p>
 <p><a id='SQLite.Sink' href='#SQLite.Sink'>#</a>
 <strong><code>SQLite.Sink</code></strong> &mdash; <em>Type</em>.</p>
 <p>SQLite.Sink implements the <code>Sink</code> interface in the <code>DataStreams</code> framework</p>
-<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/49d57dbfa1cc330a9326e6a90c597cd34df3d341/src/SQLite.jl#L360' class='documenter-source'>source</a><br></p>
+<p><a target='_blank' href='https://github.com/JuliaDB/SQLite.jl/tree/584ad0809de9affca2dd4efbdec5355f649e2c43/src/SQLite.jl#L349' class='documenter-source'>source</a><br></p>
 <p><a id='Types/Functions-1'></a></p>
 <h2 id="typesfunctions">Types/Functions</h2>
 <ul>
