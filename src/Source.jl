@@ -50,7 +50,7 @@ sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T}, handle, col) = convert(T, sqli
 const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
 sqlitevalue{T<:FLOAT_TYPES}(::Type{T}, handle, col) = convert(T, sqlite3_column_double(handle, col))
 #TODO: test returning a WeakRefString instead of calling `bytestring`
-sqlitevalue{T<:AbstractString}(::Type{T}, handle, col) = convert(T,unsafe_string(sqlite3_column_text(handle, col)))
+sqlitevalue{T<:AbstractString}(::Type{T}, handle, col) = convert(T, unsafe_string(sqlite3_column_text(handle, col)))
 function sqlitevalue{T}(::Type{T}, handle, col)
     blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
     b = sqlite3_column_bytes(handle, col)
