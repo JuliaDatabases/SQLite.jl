@@ -3,11 +3,6 @@ using Base.Test, DataStreams, DataFrames, NullableArrays, WeakRefStrings
 
 import Base: +, ==
 
-a = SQLite.DB()
-
-temp = tempname()
-SQLite.DB(temp)
-
 dbfile = joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
 # dbfile = joinpath(Pkg.dir("SQLite"),"test/Chinook_Sqlite.sqlite")
@@ -163,6 +158,7 @@ r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1,3] === Nullable(0)
 SQLite.drop!(db, "temp")
 
+register(db, SQLite.regexp, nargs=2, name="regexp")
 r = SQLite.query(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'"))
 @test get(r.columns[1][1]) == "Peacock"
 

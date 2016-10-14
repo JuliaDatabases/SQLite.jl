@@ -41,9 +41,8 @@ type DB
     function DB(f::AbstractString)
         handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
-        if @OK sqliteopen(f,handle)
-            db = new(f,handle[],0)
-            register(db, regexp, nargs=2, name="regexp")
+        if @OK sqliteopen(f, handle)
+            db = new(f, handle[], 0)
             finalizer(db, _close)
             return db
         else # error

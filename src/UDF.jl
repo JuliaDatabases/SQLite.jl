@@ -209,8 +209,9 @@ function register(db, func::Function; nargs::Int=-1, name::AbstractString=string
 end
 
 # as above but for aggregate functions
+newidentity() = @eval x->x
 function register(
-    db, init, step::Function, final::Function=identity;
+    db, init, step::Function, final::Function= newidentity;
     nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
