@@ -2,9 +2,16 @@ using Documenter, SQLite
 
 makedocs(
     modules = [SQLite],
+    format = :html,
+    sitename = "SQLite.jl",
+    pages = ["Home" => "index.md"]
 )
 
 deploydocs(
-    deps = Deps.pip("mkdocs", "mkdocs-material", "python-markdown-math"),
-    repo = "github.com/JuliaDB/SQLite.jl.git"
+    repo = "github.com/JuliaDB/SQLite.jl.git",
+    target = "build",
+    deps = nothing,
+    make = nothing,
+    julia = "0.5",
+    osname = "linux"
 )
