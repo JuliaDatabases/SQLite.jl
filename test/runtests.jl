@@ -294,8 +294,6 @@ for (v1, v2) in zip(r.columns[2], Any[b"b", BigInt(2), p1, p2])
 end
 ############################################
 
-installed = Pkg.installed()
-haskey(installed, "DataStreamsIntegrationTests") || Pkg.clone("https://github.com/JuliaData/DataStreamsIntegrationTests")
 using DataStreamsIntegrationTests
 
 include("datastreams.jl")
