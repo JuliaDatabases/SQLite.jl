@@ -234,8 +234,8 @@ Data.stream!(dt, sink)
 Data.close!(sink)
 dt2 = SQLite.query(db, "Select * from temp")
 #There might be a better way to check this
-@test dt.columns[1][1].value==dt2.columns[1][1].value
-@test dt.columns[1][2].isnull==dt2.columns[1][2].isnull
+@test get(dt.columns[1][1]) == get(dt2.columns[1][1])
+@test isnull(dt.columns[1][2]) == isnull(dt2.columns[1][2])
 
 #Test removeduplicates!
 db = SQLite.DB() #In case the order of tests is changed
