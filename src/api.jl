@@ -226,6 +226,11 @@ end
 # SQLITE_API const char *sqlite3_column_origin_name(sqlite3_stmt*,int);
 # SQLITE_API const void *sqlite3_column_origin_name16(sqlite3_stmt*,int);
 
+function sqlite3_column_decltype(stmt::Ptr{Void},col::Int)
+    return ccall( (:sqlite3_column_decltype, sqlite3_lib),
+        Ptr{UInt8}, (Ptr{Void},Cint),
+        stmt,col-1)
+end
 # SQLITE_API const char *sqlite3_column_decltype(sqlite3_stmt*,int);
 # SQLITE_API const void *sqlite3_column_decltype16(sqlite3_stmt*,int);
 

@@ -35,7 +35,12 @@ constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from t
 """
 Source(sink::SQLite.Sink, sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
 
-function juliatype(handle,col)
+function juliatype(handle, col)
+    t = SQLite.sqlite3_column_decltype(handle, col)
+    if t != C_NULL
+        T = juliatype(unsafe_string(t))
+        T !== Any && return T
+    end
     x = SQLite.sqlite3_column_type(handle, col)
     if x == SQLITE_BLOB
         val = sqlitevalue(Any,handle, col)
@@ -44,7 +49,8 @@ function juliatype(handle,col)
         return juliatype(x)
     end
 end
-juliatype(x) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
+juliatype(x::Integer) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
+juliatype(x::String) = x == "INTEGER" ? Int : x in ("NUMERIC","REAL") ? Float64 : x == "TEXT" ? String : Any
 
 sqlitevalue{T<:Union{Signed,Unsigned}}(::Type{T}, handle, col) = convert(T, sqlite3_column_int64(handle, col))
 const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
