@@ -52,7 +52,9 @@ SQLite.Sink
 
 
 * `SQLite.execute!(stmt::SQLite.Stmt)`
+
   `SQLite.execute!(db::SQLite.DB, sql::String)`
+
 
   Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below.
 
@@ -65,7 +67,9 @@ SQLite.Sink
 
 
 * `SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)`
+
   `SQLite.dropindex!(db::SQLite.DB,index::String;ifexists::Bool=false)`
+  
 
   These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.
 

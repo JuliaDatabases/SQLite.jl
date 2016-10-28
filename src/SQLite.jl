@@ -181,7 +181,9 @@ end
 
 """
 `SQLite.execute!(stmt::SQLite.Stmt)` => `Void`
+
 `SQLite.execute!(db::DB, sql::String)` => `Void`
+
 
 Execute a prepared SQLite statement, not checking for or returning any results.
 """
@@ -217,7 +219,9 @@ esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
 # Transaction-based commands
 """
 `SQLite.transaction(db, mode="DEFERRED")`
+
 `SQLite.transaction(func, db)`
+
 
 Begin a transaction in the specified `mode`, default = "DEFERRED".
 
@@ -256,7 +260,9 @@ end
 
 """
 `SQLite.commit(db)`
+
 `SQLite.commit(db, name)`
+
 
 commit a transaction or named savepoint
 """
@@ -267,7 +273,9 @@ commit(db, name) = execute!(db, "RELEASE SAVEPOINT $(name);")
 
 """
 `SQLite.rollback(db)`
+
 `SQLite.rollback(db, name)`
+
 
 rollback transaction or named savepoint
 """
