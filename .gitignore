@@ -6,3 +6,4 @@
 CMakeLists.txt.user
 /deps/deps.jl
 /test/test.sqlite
+/test/test2.sqlite

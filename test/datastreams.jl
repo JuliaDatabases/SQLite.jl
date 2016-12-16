@@ -54,7 +54,7 @@ end
 
 # SQLite
 dbfile = joinpath(DSTESTDIR, "randoms.sqlite")
-dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
+dbfile2 = joinpath(dirname(@__FILE__),"test2.sqlite")
 cp(dbfile, dbfile2; remove_destination=true)
 db2 = SQLite.DB(dbfile2)
 SQLite.createtable!(db2, "randoms2_small", Data.schema(SQLite.Source(db2, "select * from randoms_small")))
