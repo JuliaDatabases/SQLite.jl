@@ -54,12 +54,11 @@ end
 
 # SQLite
 dbfile = joinpath(DSTESTDIR, "randoms.sqlite")
-dbfile2 = joinpath(DSTESTDIR, "randoms2.sqlite")
+dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
 cp(dbfile, dbfile2; remove_destination=true)
-db = SQLite.DB(dbfile)
 db2 = SQLite.DB(dbfile2)
-SQLite.createtable!(db2, "randoms2_small", Data.schema(SQLite.Source(db, "select * from randoms_small")))
-sqlitesource = Tester("SQLite.Source", SQLite.query, true, SQLite.Source, (db, "select * from randoms_small"), scalartransforms, vectortransforms, x->x, ()->nothing)
+SQLite.createtable!(db2, "randoms2_small", Data.schema(SQLite.Source(db2, "select * from randoms_small")))
+sqlitesource = Tester("SQLite.Source", SQLite.query, true, SQLite.Source, (db2, "select * from randoms_small"), scalartransforms, vectortransforms, x->x, ()->nothing)
 sqlitesink = Tester("SQLite.Sink", SQLite.load, true, SQLite.Sink, (db2, "randoms2_small"), scalartransforms, vectortransforms, x->SQLite.query(db2, "select * from randoms2_small"), (x,y)->nothing)
 
 DataStreamsIntegrationTests.teststream([dfsource, sqlitesource], [dfsink, sqlitesink]; rows=99)
