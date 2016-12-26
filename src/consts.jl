@@ -135,7 +135,7 @@ const SQLITE_CONFIG_HEAP =           8 #  /* void*, int nByte, int min */
 const SQLITE_CONFIG_MEMSTATUS =      9 #  /* boolean */
 const SQLITE_CONFIG_MUTEX =         10 #  /* sqlite3_mutex_methods* */
 const SQLITE_CONFIG_GETMUTEX =      11 #  /* sqlite3_mutex_methods* */
-#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */ 
+#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */
 const SQLITE_CONFIG_LOOKASIDE =     13 #  /* int int */
 const SQLITE_CONFIG_PCACHE =        14 #  /* no-op */
 const SQLITE_CONFIG_GETPCACHE =     15 #  /* no-op */
@@ -302,3 +302,14 @@ const SQLITE_TESTCTRL_LAST =                     19 #
 
 #Virtual Table Configuration Options
 const SQLITE_VTAB_CONSTRAINT_SUPPORT =  1 #
+
+#Flags for sqlite3_open_v2
+const SQLITE_OPEN_READONLY =                    1
+const SQLITE_OPEN_READWRITE =                   2
+const SQLITE_OPEN_CREATE =                      4
+const SQLITE_OPEN_URI =                        40
+const SQLITE_OPEN_MEMORY =                     80
+const SQLITE_OPEN_NOMUTEX =                  8000
+const SQLITE_OPEN_FULLMUTEX =               10000
+const SQLITE_OPEN_SHAREDCACHE =             20000
+const SQLITE_OPEN_PRIVATECACHE =            40000

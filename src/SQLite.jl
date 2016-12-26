@@ -18,10 +18,10 @@ immutable NullType end
 const NULL = NullType()
 show(io::IO,::NullType) = print(io,"#NULL")
 
-#TODO: Support sqlite3_open_v2
 # Normal constructor from filename
 sqliteopen(file,handle) = sqlite3_open(file,handle)
 sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
+sqliteopen(file::String,handle,flags::Integer) = sqlite3_open_v2(file,handle,flags)
 sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
@@ -30,18 +30,24 @@ represents an SQLite database, either backed by an on-disk file or in-memory
 
 Constructors:
 
-* `SQLite.DB()` => in-memory SQLite database
-* `SQLite.DB(file)` => file-based SQLite database
+* `SQLite.DB(;flags=[])` => in-memory SQLite database
+* `SQLite.DB(file;flags=[])` => file-based SQLite database
+
+flags are an `Array` of SQLite constants to pass to `sqlite3_open_v2()`
 """
 type DB
     file::String
     handle::Ptr{Void}
     changes::Int
 
-    function DB(f::AbstractString)
+    function DB(f::AbstractString;flags=[])
         handle = Ref{Ptr{Void}}()
         f = isempty(f) ? f : expanduser(f)
-        if @OK sqliteopen(f, handle)
+        int_flags = reduce(|,flags)
+        if int_flags & 7 == 0
+            int_flags |= (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        end
+        if @OK sqliteopen(f, handle, Int32(int_flags))
             db = new(f, handle[], 0)
             finalizer(db, _close)
             return db
