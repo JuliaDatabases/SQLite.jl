@@ -1,7 +1,7 @@
 __precompile__(true)
 module SQLite
 
-using DataStreams, DataFrames, WeakRefStrings, LegacyStrings
+using DataStreams, DataFrames, WeakRefStrings, LegacyStrings, Compat
 import LegacyStrings: UTF16String
 
 export Data, DataFrame
@@ -158,7 +158,7 @@ function sqlserialize(x)
     # that the array has been serialized
     s = Serialization(x)
     serialize(t,s)
-    return takebuf_array(t)
+    return take!(t)
 end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
 bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
