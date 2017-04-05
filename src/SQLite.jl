@@ -163,13 +163,21 @@ end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
 bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
 
+immutable SerializeError <: Exception
+    msg::String
+end
+
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
 const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18,length(r)))
     if ret == 0
-        v = deserialize(IOBuffer(r))
+        try
+            v = deserialize(IOBuffer(r))
+        catch e
+            throw(SerializeError("Error deserializing non-primitive value out of database; this is probably due to using SQLite.jl with a different Julia version than was used to originally serialize the database values. The same Julia version that was used to serialize should be used to extract the database values into a different format (csv file, feather file, etc.) and then loaded back into the sqlite database with the current Julia version."))
+        end
         return v.object
     else
         return r
