@@ -34,6 +34,7 @@ build_script:
   - IF EXIST .git\shallow (git fetch --unshallow)
   - C:\projects\julia\bin\julia -e "versioninfo();
       Pkg.clone(pwd(), \"SQLite\"); Pkg.build(\"SQLite\")"
+  - where *sqlite3*
 
 test_script:
   - C:\projects\julia\bin\julia -e "Pkg.test(\"SQLite\")"
