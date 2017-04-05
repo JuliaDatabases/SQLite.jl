@@ -175,10 +175,10 @@ function sqldeserialize(r)
     if ret == 0
         try
             v = deserialize(IOBuffer(r))
+            return v.object
         catch e
             throw(SerializeError("Error deserializing non-primitive value out of database; this is probably due to using SQLite.jl with a different Julia version than was used to originally serialize the database values. The same Julia version that was used to serialize should be used to extract the database values into a different format (csv file, feather file, etc.) and then loaded back into the sqlite database with the current Julia version."))
         end
-        return v.object
     else
         return r
     end
