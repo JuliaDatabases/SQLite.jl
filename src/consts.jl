@@ -2,25 +2,25 @@ include("../deps/deps.jl")
 
 #Macros
 macro OK(func)
-    :($func == SQLITE_OK)
+    :($(esc(func)) == SQLITE_OK)
 end
 
 macro CHECK(db,ex)
-    quote
+    esc(quote
         if !(@OK $ex)
             sqliteerror($db)
         end
         SQLITE_OK
-    end
+    end)
 end
 
 const SQLNullPtrError = SQLiteException("Cannot operate on null pointer")
 macro NULLCHECK(ptr)
-    quote
+    esc(quote
         if $ptr == C_NULL
             throw(SQLNullPtrError)
         end
-    end
+    end)
 end
 
 #Return codes
@@ -135,7 +135,7 @@ const SQLITE_CONFIG_HEAP =           8 #  /* void*, int nByte, int min */
 const SQLITE_CONFIG_MEMSTATUS =      9 #  /* boolean */
 const SQLITE_CONFIG_MUTEX =         10 #  /* sqlite3_mutex_methods* */
 const SQLITE_CONFIG_GETMUTEX =      11 #  /* sqlite3_mutex_methods* */
-#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */ 
+#/* previously SQLITE_CONFIG_CHUNKALLOC 12 which is now unused. */
 const SQLITE_CONFIG_LOOKASIDE =     13 #  /* int int */
 const SQLITE_CONFIG_PCACHE =        14 #  /* no-op */
 const SQLITE_CONFIG_GETPCACHE =     15 #  /* no-op */

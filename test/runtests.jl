@@ -139,7 +139,7 @@ SQLite.register(db, triple, nargs=1)
 r = SQLite.query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5")
 s = SQLite.query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5")
 for (i, j) in zip(r.columns[1], s.columns[1])
-    @test_approx_eq get(i) 3*get(j)
+    @test get(i) - 3*get(j) < 0.02
 end
 
 SQLite.@register db function add4(q)
@@ -177,7 +177,7 @@ doublesum_final(persist) = 2 * persist
 SQLite.register(db, 0, doublesum_step, doublesum_final, name="doublesum")
 r = SQLite.query(db, "SELECT doublesum(UnitPrice) FROM Track")
 s = SQLite.query(db, "SELECT UnitPrice FROM Track")
-@test_approx_eq get(r[1,1]) 2*sum(convert(Vector{Float64},s.columns[1]))
+@test get(r[1,1]) - 2*sum(convert(Vector{Float64},s.columns[1])) < 0.02
 
 mycount(p, c) = p + 1
 SQLite.register(db, 0, mycount)
@@ -225,7 +225,7 @@ finalize(db); db = nothing; gc(); gc();
 
 #Make sure we handle undefined values
 db = SQLite.DB() #In case the order of tests is changed
-arr = Array(String,2)
+arr = Vector{String}(2)
 arr[1] = "1" #Now an array with the second value undefined
 dt = DataFrame(Any[NullableArrays.NullableArray(arr, [false, true])])
 SQLite.drop!(db, "temp", ifexists=true)

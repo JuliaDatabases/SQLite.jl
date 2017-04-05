@@ -14,8 +14,8 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Int=-1, stricttype
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
     cols = SQLite.sqlite3_column_count(stmt.handle)
-    header = Array(String, cols)
-    types = Array(DataType, cols)
+    header = Vector{String}(cols)
+    types = Vector{DataType}(cols)
     for i = 1:cols
         header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle, i))
         # do better column type inference; query what the column was created for?
