@@ -53,8 +53,10 @@ function DataFrame(sink, sch::Data.Schema, ::Type{Data.Field}, append::Bool, ref
 end
 
 # SQLite
-dbfile = joinpath(DSTESTDIR, "randoms.sqlite")
+dbfile = joinpath(dirname(@__FILE__), "randoms.sqlite")
 dbfile2 = joinpath(dirname(@__FILE__),"test2.sqlite")
+db = SQLite.DB(dbfile)
+SQLite.load(db, "randoms_small", DF)
 cp(dbfile, dbfile2; remove_destination=true)
 db2 = SQLite.DB(dbfile2)
 SQLite.createtable!(db2, "randoms2_small", Data.schema(SQLite.Source(db2, "select * from randoms_small")))
@@ -62,3 +64,7 @@ sqlitesource = Tester("SQLite.Source", SQLite.query, true, SQLite.Source, (db2, 
 sqlitesink = Tester("SQLite.Sink", SQLite.load, true, SQLite.Sink, (db2, "randoms2_small"), scalartransforms, vectortransforms, x->SQLite.query(db2, "select * from randoms2_small"), (x,y)->nothing)
 
 DataStreamsIntegrationTests.teststream([dfsource, sqlitesource], [dfsink, sqlitesink]; rows=99)
+db = db2 = nothing;
+gc(); gc();
+rm(dbfile)
+rm(dbfile2)

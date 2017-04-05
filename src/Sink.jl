@@ -102,12 +102,12 @@ Load a Data.Source `source` into an SQLite table that will be named `tablename` 
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
 """
-function load{T}(db, name, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+function load{T}(db::SQLite.DB, name, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
     sink = Data.stream!(T(args...), SQLite.Sink, append, transforms, db, name; kwargs...)
     Data.close!(sink)
     return sink
 end
-function load{T}(db, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+function load{T}(db::SQLite.DB, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
     sink = Data.stream!(source, SQLite.Sink, append, transforms, db, name; kwargs...)
     Data.close!(sink)
     return sink
