@@ -64,6 +64,8 @@ sqlitesource = Tester("SQLite.Source", SQLite.query, true, SQLite.Source, (db2, 
 sqlitesink = Tester("SQLite.Sink", SQLite.load, true, SQLite.Sink, (db2, "randoms2_small"), scalartransforms, vectortransforms, x->SQLite.query(db2, "select * from randoms2_small"), (x,y)->nothing)
 
 DataStreamsIntegrationTests.teststream([dfsource, sqlitesource], [dfsink, sqlitesink]; rows=99)
+finalize(db)
+finalize(db2)
 db = db2 = nothing;
 gc(); gc();
 rm(dbfile)
