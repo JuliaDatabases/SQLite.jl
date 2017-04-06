@@ -54,7 +54,7 @@ end
 DB() = DB(":memory:")
 
 function _close(db::DB)
-    sqlite3_close_v2(db.handle)
+    db.handle == C_NULL || sqlite3_close_v2(db.handle)
     db.handle = C_NULL
     return
 end
@@ -78,7 +78,7 @@ type Stmt
 end
 
 function _close(stmt::Stmt)
-    sqlite3_finalize(stmt.handle)
+    stmt.handle == C_NULL || sqlite3_finalize(stmt.handle)
     stmt.handle = C_NULL
     return
 end
