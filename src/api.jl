@@ -124,7 +124,11 @@ end
 # SQLITE_API int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
 # SQLITE_API int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
-# SQLITE_API int sqlite3_clear_bindings(sqlite3_stmt*);
+function sqlite3_clear_bindings(stmt::Ptr{Void})
+    return ccall( (:sqlite3_clear_bindings, sqlite3_lib),
+        Cint, (Ptr{Void},),
+        stmt)
+end
 
 function sqlite3_step(stmt::Ptr{Void})
     return ccall( (:sqlite3_step, sqlite3_lib),

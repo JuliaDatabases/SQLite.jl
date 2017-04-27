@@ -89,6 +89,16 @@ include("UDF.jl")
 export @sr_str, @register, register
 
 """
+`SQLite.clear!(stmt::SQLite.Stmt)`
+
+clears any bound values to a prepared SQL statement.
+"""
+function clear!(stmt::Stmt)
+    sqlite3_clear_bindings(stmt.handle)
+    return
+end
+
+"""
 `SQLite.bind!(stmt::SQLite.Stmt, values)`
 
 bind `values` to parameters in a prepared SQL statement. Values can be:
@@ -103,6 +113,13 @@ Additional methods exist for working individual SQL parameters:
 """
 function bind! end
 
+function bind!(stmt::Stmt, values::Tuple)
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all placeholders"
+    for i in 1:nparams
+        @inbounds bind!(stmt, i, values[i])
+    end
+end
 function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
