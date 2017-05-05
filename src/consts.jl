@@ -302,3 +302,14 @@ const SQLITE_TESTCTRL_LAST =                     19 #
 
 #Virtual Table Configuration Options
 const SQLITE_VTAB_CONSTRAINT_SUPPORT =  1 #
+
+#Flags for sqlite3_open_v2
+const SQLITE_OPEN_READONLY =                    1
+const SQLITE_OPEN_READWRITE =                   2
+const SQLITE_OPEN_CREATE =                      4
+const SQLITE_OPEN_URI =                        40
+const SQLITE_OPEN_MEMORY =                     80
+const SQLITE_OPEN_NOMUTEX =                  8000
+const SQLITE_OPEN_FULLMUTEX =               10000
+const SQLITE_OPEN_SHAREDCACHE =             20000
+const SQLITE_OPEN_PRIVATECACHE =            40000

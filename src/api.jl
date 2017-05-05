@@ -19,6 +19,11 @@ function sqlite3_open16(file::UTF16String,handle)
         Cint, (Ptr{UInt16},Ptr{Void}),
         file,handle)
 end
+function sqlite3_open_v2(file::AbstractString,handle,flags::Cint,vfs::Union{Ptr{Void},AbstractString}=C_NULL)
+    return ccall( (:sqlite3_open_v2, sqlite3_lib),
+            Cint, (Ptr{UInt8},Ptr{Void},Cint,Ptr{UInt8}),
+            file,handle,flags,vfs)
+end
 function sqlite3_close(handle::Ptr{Void})
     @NULLCHECK handle
     return ccall( (:sqlite3_close, sqlite3_lib),
@@ -450,11 +455,6 @@ end
 # SQLITE_API int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 # Not directly used
-function sqlite3_open_v2(file::AbstractString,handle,flags::Cint,vfs::AbstractString)
-    return ccall( (:sqlite3_open_v2, sqlite3_lib),
-            Cint, (Ptr{UInt8},Ptr{Void},Cint,Ptr{UInt8}),
-            file,handle,flags,vfs)
-end
 function sqlite3_prepare(handle::Ptr{Void},query::AbstractString,stmt,unused)
     @NULLCHECK handle
     return ccall( (:sqlite3_prepare, sqlite3_lib),
