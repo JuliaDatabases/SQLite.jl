@@ -93,7 +93,7 @@ export @sr_str, @register, register
 
 clears any bound values to a prepared SQL statement.
 """
-function clear!(stmt::Stmt)
+function Base.clear!(stmt::Stmt)
     sqlite3_clear_bindings(stmt.handle)
     return
 end
