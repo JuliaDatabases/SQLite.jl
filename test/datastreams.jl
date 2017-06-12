@@ -2,17 +2,12 @@
 # DataFrames
 FILE = joinpath(DSTESTDIR, "randoms_small.csv")
 DF = readtable(FILE)
-if typeof(DF[:hiredate]) <: NullableVector
-    DF[:hiredate] = NullableArray(Date[isnull(x) ? Date() : Date(get(x)) for x in DF[:hiredate]], [isnull(x) for x in DF[:hiredate]])
-    DF[:lastclockin] = NullableArray(DateTime[isnull(x) ? DateTime() : DateTime(get(x)) for x in DF[:lastclockin]], [isnull(x) for x in DF[:lastclockin]])
-else
-    for i = 1:5
-        T = eltype(DF.columns[i])
-        DF.columns[i] = NullableArray(T[isna(x) ? (T <: String ? "" : zero(T)) : x for x in DF.columns[i]], [isna(x) for x in DF.columns[i]])
-    end
-    DF.columns[6] = NullableArray(Date[isna(x) ? Date() : Date(x) for x in DF[:hiredate]], [isna(x) for x in DF[:hiredate]])
-    DF.columns[7] = NullableArray(DateTime[isna(x) ? DateTime() : DateTime(x) for x in DF[:lastclockin]], [isna(x) for x in DF[:lastclockin]])
+for i = 1:5
+    T = eltype(DF.columns[i])
+    DF.columns[i] = DataArray(T[isna(x) ? (T <: String ? "" : zero(T)) : x for x in DF.columns[i]], [isna(x) for x in DF.columns[i]])
 end
+DF.columns[6] = DataArray(Date[isna(x) ? Date() : Date(x) for x in DF[:hiredate]], [isna(x) for x in DF[:hiredate]])
+DF.columns[7] = DataArray(DateTime[isna(x) ? DateTime() : DateTime(x) for x in DF[:lastclockin]], [isna(x) for x in DF[:lastclockin]])
 DF2 = deepcopy(DF)
 dfsource = Tester("DataFrame", x->x, false, DataFrame, (:DF,), scalartransforms, vectortransforms, x->x, x->nothing)
 dfsink = Tester("DataFrame", x->x, false, DataFrame, (:DF2,), scalartransforms, vectortransforms, x->x, x->nothing)
@@ -29,14 +24,14 @@ function DataFrame(sink, sch::Data.Schema, ::Type{Data.Field}, append::Bool, ref
     if append
         for (i, T) in enumerate(Data.types(sch))
             if T <: Nullable{WeakRefString{UInt8}}
-                sink.columns[i] = NullableArray(String[string(get(x, "")) for x in sink.columns[i]])
+                sink.columns[i] = DataArray(String[string(x) for x in sink.columns[i]])
                 sch.types[i] = Nullable{String}
             end
         end
     else
         for (i, T) in enumerate(Data.types(sch))
             if T != eltype(sink.columns[i])
-                sink.columns[i] = NullableArray(eltype(T), newsize)
+                sink.columns[i] = DataArray(eltype(T), newsize)
             end
         end
     end
@@ -44,7 +39,7 @@ function DataFrame(sink, sch::Data.Schema, ::Type{Data.Field}, append::Bool, ref
     if !append
         for (i, T) in enumerate(eltypes(sink))
             if T <: Nullable{WeakRefString{UInt8}}
-                sink.columns[i] = NullableArray{WeakRefString{UInt8}, 1}(Array{WeakRefString{UInt8}}(newsize), fill(true, newsize), isempty(ref) ? UInt8[] : ref)
+                sink.columns[i] = DataVector{String}(Vector{String}(newsize), fill(true, newsize), isempty(ref) ? UInt8[] : ref)
             end
         end
     end

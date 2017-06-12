@@ -98,7 +98,7 @@ function Data.streamfrom{T}(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}
         throw(NullException)
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val::T = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
+        val::Union{NAtype, T} = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val
