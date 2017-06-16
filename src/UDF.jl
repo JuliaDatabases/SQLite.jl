@@ -20,11 +20,11 @@ function sqlvalue(values, i)
         unsafe_copy!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
     else
-        return NULL
+        return null
     end
 end
 
-sqlreturn(context, ::NullType)          = sqlite3_result_null(context)
+sqlreturn(context, ::Null)              = sqlite3_result_null(context)
 sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
 sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
 sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
