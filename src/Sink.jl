@@ -53,7 +53,7 @@ function Sink(sink, sch::Data.Schema, T, append::Bool; reference::Vector{UInt8}=
     return sink
 end
 
-function Data.streamto!(sink::SQLite.Sink, ::Type{Data.Field}, val, row, col::Int)
+function Data.streamto!(sink::SQLite.Sink, ::Type{Data.Field}, val, row, col)
     SQLite.bind!(sink.stmt, col, val)
     if col == sink.cols
         SQLite.sqlite3_step(sink.stmt.handle)

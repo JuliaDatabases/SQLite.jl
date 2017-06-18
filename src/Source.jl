@@ -24,7 +24,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::(?Int)=null, stric
             types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
         end
     end
-    return SQLite.Source(Data.Schema(header, types, rows), stmt, status)
+    return SQLite.Source(Data.Schema(types, header, rows), stmt, status)
 end
 
 """
@@ -78,7 +78,7 @@ Data.streamtype(::Type{SQLite.Source}, ::Type{Data.Field}) = true
 # `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, Null
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
 # `SQLite.streamfrom` returns the next `Nullable{T}` value from the `SQLite.Source`
-function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union{T, Null}}, row, col::Int) where {T}
+function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union{T, Null}}, row, col) where {T}
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
@@ -90,7 +90,7 @@ function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val::Union{T, Null}
 end
-function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, row, col::Int) where {T}
+function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, row, col) where {T}
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
