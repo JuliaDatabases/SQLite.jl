@@ -1,6 +1,6 @@
-sqlitetype{T<:Integer}(::Type{T}) = "INT"
-sqlitetype{T<:AbstractFloat}(::Type{T}) = "REAL"
-sqlitetype{T<:AbstractString}(::Type{T}) = "TEXT"
+sqlitetype(::Type{T}) where {T<:Integer} = "INT"
+sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL"
+sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT"
 sqlitetype(::Type{Null}) = "NULL"
 sqlitetype(x) = "BLOB"
 
@@ -86,7 +86,7 @@ function load(db::SQLite.DB, name, ::Type{T}, args...; append::Bool=false, trans
     sink = Data.stream!(T(args...), SQLite.Sink, db, name; append=append, transforms=transforms, kwargs...)
     return Data.close!(sink)
 end
-function load{T}(db::SQLite.DB, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+function load(db::SQLite.DB, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...) where {T}
     sink = Data.stream!(source, SQLite.Sink, db, name; append=append, transforms=transforms, kwargs...)
     return Data.close!(sink)
 end

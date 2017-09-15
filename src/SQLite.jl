@@ -1,7 +1,7 @@
 __precompile__(true)
 module SQLite
 
-using Nulls, DataStreams, WeakRefStrings, LegacyStrings, Compat
+using Nulls, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
 import LegacyStrings: UTF16String
 
 export Data, DataFrame
@@ -15,8 +15,8 @@ include("api.jl")
 
 #TODO: Support sqlite3_open_v2
 # Normal constructor from filename
-sqliteopen(file,handle) = sqlite3_open(file,handle)
-sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
+sqliteopen(file, handle) = sqlite3_open(file, handle)
+sqliteopen(file::UTF16String, handle) = sqlite3_open16(file, handle)
 sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
@@ -122,7 +122,7 @@ function bind!(stmt::Stmt, values::Vector)
         @inbounds bind!(stmt, i, values[i])
     end
 end
-function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
+function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams

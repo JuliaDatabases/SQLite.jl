@@ -9,7 +9,7 @@ whether to allow null values when fetching results; if set to `false` and a null
 
 Note that no results are returned; `sql` is executed, and results are ready to be returned (i.e. streamed to an appropriate `Data.Sink` type)
 """
-function Source(db::DB, sql::AbstractString, values=[]; rows::(?Int)=null, stricttypes::Bool=true, nullable::Bool=true)
+function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true)
     stmt = SQLite.Stmt(db, sql)
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
@@ -19,7 +19,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::(?Int)=null, stric
     for i = 1:cols
         header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle, i))
         if nullable
-            types[i] = stricttypes ? (?SQLite.juliatype(stmt.handle, i)) : Any
+            types[i] = stricttypes ? Union{SQLite.juliatype(stmt.handle, i), Null} : Any
         else
             types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
         end
@@ -41,8 +41,8 @@ function juliatype(handle, col)
         T !== Any && return T
     end
     x = SQLite.sqlite3_column_type(handle, col)
-    if x == SQLITE_BLOB
-        val = sqlitevalue(Any, handle, col)
+    if x == SQLite.SQLITE_BLOB
+        val = SQLite.sqlitevalue(Any, handle, col)
         return typeof(val)
     else
         return juliatype(x)
@@ -51,7 +51,7 @@ end
 juliatype(x::Integer) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
 juliatype(x::String) = x == "INTEGER" ? Int : x in ("NUMERIC","REAL") ? Float64 : x == "TEXT" ? String : Any
 
-sqlitevalue(::Type{T}, handle, col) where {T <: Union{Signed, Unsigned}} = convert(T, sqlite3_column_int64(handle, col))
+sqlitevalue(::Type{T}, handle, col) where {T <: Union{Base.BitSigned, Base.BitUnsigned}} = convert(T, sqlite3_column_int64(handle, col))
 const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
 sqlitevalue(::Type{T}, handle, col) where {T <: FLOAT_TYPES} = convert(T, sqlite3_column_double(handle, col))
 #TODO: test returning a WeakRefString instead of calling `unsafe_string`
@@ -77,7 +77,7 @@ Data.streamtype(::Type{SQLite.Source}, ::Type{Data.Field}) = true
 
 # `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, Null
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
-# `SQLite.streamfrom` returns the next `Nullable{T}` value from the `SQLite.Source`
+# `SQLite.streamfrom` returns the next `Union{T, Null}` value from the `SQLite.Source`
 function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union{T, Null}}, row, col) where {T}
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
@@ -85,7 +85,7 @@ function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union
         val = null
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
+        val = SQLite.sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val::Union{T, Null}
@@ -104,45 +104,45 @@ function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, r
 end
 
 """
-`SQLite.query(db, sql::String, sink=NamedTuple, values=[]; rows::Int=0, stricttypes::Bool=true)`
+`SQLite.query(db, sql::String, sink=DataFrame, values=[]; rows::Int=0, stricttypes::Bool=true)`
 
-convenience method for executing an SQL statement and streaming the results back in a `Data.Sink` (NamedTuple by default)
+convenience method for executing an SQL statement and streaming the results back in a `Data.Sink` (DataFrame by default)
 
 Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=NamedTuple, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::(?Int)=null, stricttypes::Bool=true, nullable::Bool=true)
+function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
     return Data.close!(sink)
 end
 
-function query(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::(?Int)=null, stricttypes::Bool=true, nullable::Bool=true) where {T}
+function query(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true) where {T}
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     sink = Data.stream!(source, sink; append=append, transforms=transforms)
     return Data.close!(sink)
 end
-query(source::SQLite.Source, sink=NamedTuple, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink; append=append, transforms=transforms, args...); return Data.close!(sink))
+query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink; append=append, transforms=transforms, args...); return Data.close!(sink))
 query(source::SQLite.Source, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T} = (sink = Data.stream!(source, sink; append=append, transforms=transforms); return Data.close!(sink))
 
 """
-`SQLite.tables(db, sink=NamedTuple)`
+`SQLite.tables(db, sink=DataFrame)`
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=NamedTuple) = query(db, "SELECT name FROM sqlite_master WHERE type='table';", sink)
+tables(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='table';", sink)
 
 """
-`SQLite.indices(db, sink=NamedTuple)`
+`SQLite.indices(db, sink=DataFrame)`
 
 returns a list of indices in `db`
 """
-indices(db::DB, sink=NamedTuple) = query(db, "SELECT name FROM sqlite_master WHERE type='index';", sink)
+indices(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='index';", sink)
 
 """
-`SQLite.columns(db, table, sink=NamedTuple)`
+`SQLite.columns(db, table, sink=DataFrame)`
 
 returns a list of columns in `table`
 """
-columns(db::DB,table::AbstractString, sink=NamedTuple) = query(db, "PRAGMA table_info($(esc_id(table)))", sink)
+columns(db::DB,table::AbstractString, sink=DataFrame) = query(db, "PRAGMA table_info($(esc_id(table)))", sink)
