@@ -1,27 +1,22 @@
 __precompile__(true)
 module SQLite
 
-using DataStreams, DataFrames, WeakRefStrings, LegacyStrings, Compat
+using Nulls, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
 import LegacyStrings: UTF16String
 
 export Data, DataFrame
 
-type SQLiteException <: Exception
+struct SQLiteException <: Exception
     msg::AbstractString
 end
 
 include("consts.jl")
 include("api.jl")
 
-immutable NullType end
-# custom NULL value for interacting with the SQLite database
-const NULL = NullType()
-show(io::IO,::NullType) = print(io,"#NULL")
-
 #TODO: Support sqlite3_open_v2
 # Normal constructor from filename
-sqliteopen(file,handle) = sqlite3_open(file,handle)
-sqliteopen(file::UTF16String,handle) = sqlite3_open16(file,handle)
+sqliteopen(file, handle) = sqlite3_open(file, handle)
+sqliteopen(file::UTF16String, handle) = sqlite3_open16(file, handle)
 sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
@@ -33,7 +28,7 @@ Constructors:
 * `SQLite.DB()` => in-memory SQLite database
 * `SQLite.DB(file)` => file-based SQLite database
 """
-type DB
+mutable struct DB
     file::String
     handle::Ptr{Void}
     changes::Int
@@ -59,19 +54,19 @@ function _close(db::DB)
     return
 end
 
-Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(",db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"",")"))
+Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"", ")"))
 
 """
 `SQLite.Stmt(db::DB, sql::AbstractString)` creates and prepares an SQLite statement
 """
-type Stmt
+mutable struct Stmt
     db::DB
     handle::Ptr{Void}
 
     function Stmt(db::DB,sql::AbstractString)
         handle = Ref{Ptr{Void}}()
-        sqliteprepare(db,sql,handle,Ref{Ptr{Void}}())
-        stmt = new(db,handle[])
+        sqliteprepare(db, sql, handle, Ref{Ptr{Void}}())
+        stmt = new(db, handle[])
         finalizer(stmt, _close)
         return stmt
     end
@@ -83,7 +78,7 @@ function _close(stmt::Stmt)
     return
 end
 
-sqliteprepare(db,sql,stmt,null) = @CHECK db sqlite3_prepare_v2(db.handle,sql,stmt,null)
+sqliteprepare(db, sql, stmt, null) = @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
 
 include("UDF.jl")
 export @sr_str, @register, register
@@ -127,7 +122,7 @@ function bind!(stmt::Stmt, values::Vector)
         @inbounds bind!(stmt, i, values[i])
     end
 end
-function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
+function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all placeholders"
     for i in 1:nparams
@@ -139,56 +134,58 @@ function bind!{V}(stmt::Stmt, values::Dict{Symbol, V})
     end
 end
 # Binding parameters to SQL statements
-function bind!(stmt::Stmt,name::AbstractString,val)
-    i::Int = sqlite3_bind_parameter_index(stmt.handle,name)
+function bind!(stmt::Stmt,name::AbstractString, val)
+    i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
-    return bind!(stmt,i,val)
+    return bind!(stmt, i, val)
 end
-bind!(stmt::Stmt,i::Int,val::AbstractFloat)  = (sqlite3_bind_double(stmt.handle,i,Float64(val)); return nothing)
-bind!(stmt::Stmt,i::Int,val::Int32)          = (sqlite3_bind_int(stmt.handle,i,val); return nothing)
-bind!(stmt::Stmt,i::Int,val::Int64)          = (sqlite3_bind_int64(stmt.handle,i,val); return nothing)
-bind!(stmt::Stmt,i::Int,val::NullType)       = (sqlite3_bind_null(stmt.handle,i); return nothing)
-bind!(stmt::Stmt,i::Int,val::AbstractString) = (sqlite3_bind_text(stmt.handle,i,val); return nothing)
-bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle,i,val.ptr,val.len); return nothing)
-bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle,i,val.ptr,val.len*2); return nothing)
-bind!(stmt::Stmt,i::Int,val::UTF16String)    = (sqlite3_bind_text16(stmt.handle,i,val); return nothing)
-function bind!(stmt::Stmt,i::Int,val::WeakRefString{UInt32})
+bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int32)          = (sqlite3_bind_int(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int64)          = (sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Null)           = (sqlite3_bind_null(stmt.handle, i ); return nothing)
+bind!(stmt::Stmt, i::Int, val::AbstractString) = (sqlite3_bind_text(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
+bind!(stmt::Stmt, i::Int, val::UTF16String)    = (sqlite3_bind_text16(stmt.handle, i, val); return nothing)
+function bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt32})
     A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
-    return bind!(stmt, i, convert(String,A))
+    return bind!(stmt, i, convert(String, A))
 end
-# We may want to track the new ByteVec type proposed at https://github.com/JuliaLang/julia/pull/8964
-# as the "official" bytes type instead of Vector{UInt8}
-bind!(stmt::Stmt,i::Int,val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle,i,val); return nothing)
+# We may want to track the new ByteVec mutable struct proposed at https://github.com/JuliaLang/julia/pull/8964
+# as the "official" bytes mutable struct instead of Vector{UInt8}
+bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle, i, val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
 
-# internal wrapper type to, in-effect, mark something which has been serialized
-immutable Serialization
+# internal wrapper mutable struct to, in-effect, mark something which has been serialized
+struct Serialization
     object
 end
 
+const GLOBAL_BUF = IOBuffer()
 function sqlserialize(x)
-    t = IOBuffer()
+    seekstart(GLOBAL_BUF)
     # deserialize will sometimes return a random object when called on an array
-    # which has not been previously serialized, we can use this type to check
+    # which has not been previously serialized, we can use this mutable struct to check
     # that the array has been serialized
     s = Serialization(x)
-    serialize(t,s)
-    return take!(t)
+    serialize(GLOBAL_BUF, s)
+    return take!(GLOBAL_BUF)
 end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
-bind!(stmt::Stmt,i::Int,val) = bind!(stmt,i,sqlserialize(val))
+bind!(stmt::Stmt, i::Int, val) = bind!(stmt, i, sqlserialize(val))
 
-immutable SerializeError <: Exception
+struct SerializeError <: Exception
     msg::String
 end
 
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
-const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
+# const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
+const SERIALIZATION = UInt8[0x34,0x10,0x01,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x1f]
 function sqldeserialize(r)
-    ret = ccall(:memcmp, Int32, (Ptr{UInt8},Ptr{UInt8}, UInt),
-            SERIALIZATION, r, min(18,length(r)))
+    ret = ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt),
+            SERIALIZATION, r, min(18, length(r)))
     if ret == 0
         try
             v = deserialize(IOBuffer(r))
@@ -223,8 +220,8 @@ function execute!(stmt::Stmt)
     end
     return r
 end
-function execute!(db::DB,sql::AbstractString)
-    stmt = Stmt(db,sql)
+function execute!(db::DB, sql::AbstractString)
+    stmt = Stmt(db, sql)
     return execute!(stmt)
 end
 
@@ -237,8 +234,8 @@ A vector of identifiers will be separated by commas.
 """
 function esc_id end
 
-esc_id(x::AbstractString) = "\""*replace(x,"\"","\"\"")*"\""
-esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
+esc_id(x::AbstractString) = "\"" * replace(x,"\"","\"\"") * "\""
+esc_id(X::AbstractVector{S}) where {S <: AbstractString} = join(map(esc_id, X), ',')
 
 
 # Transaction-based commands
@@ -251,7 +248,7 @@ esc_id{S<:AbstractString}(X::AbstractVector{S}) = join(map(esc_id,X),',')
 Begin a transaction in the specified `mode`, default = "DEFERRED".
 
 If `mode` is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
-transaction of that (or the default) type is started. Otherwise a savepoint
+transaction of that (or the default) mutable struct is started. Otherwise a savepoint
 is created whose name is `mode` converted to AbstractString.
 
 In the second method, `func` is executed within a transaction (the transaction being committed upon successful execution)
@@ -259,7 +256,7 @@ In the second method, `func` is executed within a transaction (the transaction b
 function transaction end
 
 function transaction(db, mode="DEFERRED")
-    execute!(db,"PRAGMA temp_store=MEMORY;")
+    execute!(db, "PRAGMA temp_store=MEMORY;")
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
         execute!(db, "BEGIN $(mode) TRANSACTION;")
     else
@@ -317,9 +314,9 @@ drop the SQLite table `table` from the database `db`; `ifexists=true` will preve
 function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db,"DROP TABLE $exists $(esc_id(table))")
+        execute!(db, "DROP TABLE $exists $(esc_id(table))")
     end
-    execute!(db,"VACUUM")
+    execute!(db, "VACUUM")
     return
 end
 
@@ -328,10 +325,10 @@ end
 
 drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist
 """
-function dropindex!(db::DB,index::AbstractString;ifexists::Bool=false)
+function dropindex!(db::DB, index::AbstractString; ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db,"DROP INDEX $exists $(esc_id(index))")
+        execute!(db, "DROP INDEX $exists $(esc_id(index))")
     end
     return
 end
@@ -343,14 +340,14 @@ create the SQLite index `index` on the table `table` using `cols`, which may be 
 `unique` specifies whether the index will be unique or not.
 `ifnotexists=true` will not throw an error if the index already exists
 """
-function createindex!{S<:AbstractString}(db::DB,table::AbstractString,index::AbstractString,cols::Union{S,AbstractVector{S}}
-                      ;unique::Bool=true,ifnotexists::Bool=false)
+function createindex!(db::DB, table::AbstractString, index::AbstractString, cols::Union{S, AbstractVector{S}};
+                      unique::Bool=true, ifnotexists::Bool=false) where {S <: AbstractString}
     u = unique ? "UNIQUE" : ""
     exists = ifnotexists ? "IF NOT EXISTS" : ""
     transaction(db) do
-        execute!(db,"CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))")
+        execute!(db, "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))")
     end
-    execute!(db,"ANALYZE $index")
+    execute!(db, "ANALYZE $index")
     return
 end
 
@@ -359,32 +356,33 @@ end
 
 removes duplicate rows from `table` based on the values in `cols` which is an array of column names
 """
-function removeduplicates!{T <: AbstractString}(db,table::AbstractString,cols::AbstractArray{T})
+function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) where {T <: AbstractString}
     colsstr = ""
     for c in cols
        colsstr = colsstr * esc_id(c) * ","
     end
     colsstr = chop(colsstr)
     transaction(db) do
-        execute!(db,"DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
+        execute!(db, "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
     end
-    execute!(db,"ANALYZE $table")
+    execute!(db, "ANALYZE $table")
     return
  end
 
 "`SQLite.Source` implements the `Source` interface in the `DataStreams` framework"
-type Source <: Data.Source
+mutable struct Source <: Data.Source
     schema::Data.Schema
     stmt::Stmt
     status::Cint
 end
 
 "SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
-type Sink <: Data.Sink
+mutable struct Sink <: Data.Sink
     db::DB
     tablename::String
     stmt::Stmt
     transaction::String
+    cols::Int
 end
 
 include("Source.jl")

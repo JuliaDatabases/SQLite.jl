@@ -20,11 +20,11 @@ function sqlvalue(values, i)
         unsafe_copy!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
     else
-        return NULL
+        return null
     end
 end
 
-sqlreturn(context, ::NullType)          = sqlite3_result_null(context)
+sqlreturn(context, ::Null)              = sqlite3_result_null(context)
 sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
 sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
 sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
@@ -198,7 +198,7 @@ function register(db, func::Function; nargs::Int=-1, name::AbstractString=string
 
     f = eval(scalarfunc(func,Symbol(name)))
 
-    cfunc = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cfunc = cfunction(f, Void, Tuple{Ptr{Void}, Cint, Ptr{Ptr{Void}}})
     # TODO: allow the other encodings
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
@@ -219,9 +219,9 @@ function register(
     @assert sizeof(name) <= 255 "size of function name must be <= 255 chars"
 
     s = eval(stepfunc(init, step, Base.function_name(step)))
-    cs = cfunction(s, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cs = cfunction(s, Void, Tuple{Ptr{Void}, Cint, Ptr{Ptr{Void}}})
     f = eval(finalfunc(init, final, Base.function_name(final)))
-    cf = cfunction(f, Void, (Ptr{Void}, Cint, Ptr{Ptr{Void}}))
+    cf = cfunction(f, Void, Tuple{Ptr{Void}, Cint, Ptr{Ptr{Void}}})
 
     enc = SQLITE_UTF8
     enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
