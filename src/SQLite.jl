@@ -1,7 +1,7 @@
 __precompile__(true)
 module SQLite
 
-using Nulls, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
+using Missings, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
 import LegacyStrings: UTF16String
 
 export Data, DataFrame
@@ -144,7 +144,7 @@ end
 bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int32)          = (sqlite3_bind_int(stmt.handle, i ,val); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int64)          = (sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::Null)           = (sqlite3_bind_null(stmt.handle, i ); return nothing)
+bind!(stmt::Stmt, i::Int, val::Missing)        = (sqlite3_bind_null(stmt.handle, i ); return nothing)
 bind!(stmt::Stmt, i::Int, val::AbstractString) = (sqlite3_bind_text(stmt.handle, i ,val); return nothing)
 bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
 bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)

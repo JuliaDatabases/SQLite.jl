@@ -24,7 +24,7 @@ function sqlvalue(values, i)
     end
 end
 
-sqlreturn(context, ::Null)              = sqlite3_result_null(context)
+sqlreturn(context, ::Missing)           = sqlite3_result_null(context)
 sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
 sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
 sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)

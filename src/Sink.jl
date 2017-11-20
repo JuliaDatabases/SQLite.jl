@@ -1,7 +1,7 @@
 sqlitetype(::Type{T}) where {T<:Integer} = "INT"
 sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL"
 sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT"
-sqlitetype(::Type{Null}) = "NULL"
+sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
 function createtable!(db::DB, name::AbstractString, schema::Data.Schema; temp::Bool=false, ifnotexists::Bool=true)

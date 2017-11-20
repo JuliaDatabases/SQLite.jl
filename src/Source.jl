@@ -5,11 +5,11 @@ Independently constructs an `SQLite.Source` in `db` with the SQL statement `sql`
 Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`. `nullable::Bool=true` indicates
-whether to allow null values when fetching results; if set to `false` and a null value is encountered, a `NullException` will be thrown.
+whether to allow missing values when fetching results; if set to `false` and a missing value is encountered, a `NullException` will be thrown.
 
 Note that no results are returned; `sql` is executed, and results are ready to be returned (i.e. streamed to an appropriate `Data.Sink` type)
 """
-function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true)
+function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true)
     stmt = SQLite.Stmt(db, sql)
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
@@ -19,7 +19,7 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Null}=n
     for i = 1:cols
         header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle, i))
         if nullable
-            types[i] = stricttypes ? Union{SQLite.juliatype(stmt.handle, i), Null} : Any
+            types[i] = stricttypes ? Union{SQLite.juliatype(stmt.handle, i), Missing} : Any
         else
             types[i] = stricttypes ? SQLite.juliatype(stmt.handle, i) : Any
         end
@@ -75,26 +75,26 @@ end
 Data.reset!(io::SQLite.Source) = (sqlite3_reset(io.stmt.handle); execute!(io.stmt))
 Data.streamtype(::Type{SQLite.Source}, ::Type{Data.Field}) = true
 
-# `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, Null
+# `T` might be Int, Float64, String, WeakRefString, any Julia type, Any, Missing
 # `t` (the actual type of the value we're returning), might be SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL
-# `SQLite.streamfrom` returns the next `Union{T, Null}` value from the `SQLite.Source`
-function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union{T, Null}}, row, col) where {T}
+# `SQLite.streamfrom` returns the next `Union{T, Missing}` value from the `SQLite.Source`
+function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union{T, Missing}}, row, col) where {T}
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
-        val = null
+        val = missing
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
         val = SQLite.sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
-    return val::Union{T, Null}
+    return val::Union{T, Missing}
 end
 function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, row, col) where {T}
     handle = source.stmt.handle
     t = SQLite.sqlite3_column_type(handle, col)
     if t == SQLite.SQLITE_NULL
-        throw(Data.NullException("encountered null value in non-null typed column: row = $row, col = $col"))
+        throw(Data.NullException("encountered missing value in non-missing typed column: row = $row, col = $col"))
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
         val::T = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
@@ -112,13 +112,13 @@ Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true)
+function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true)
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
     return Data.close!(sink)
 end
 
-function query(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Null}=null, stricttypes::Bool=true, nullable::Bool=true) where {T}
+function query(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true) where {T}
     source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
     sink = Data.stream!(source, sink; append=append, transforms=transforms)
     return Data.close!(sink)
