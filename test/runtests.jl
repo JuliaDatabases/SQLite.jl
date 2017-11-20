@@ -1,5 +1,5 @@
 using SQLite
-using Base.Test, Nulls, WeakRefStrings, DataStreams, DataFrames
+using Base.Test, Missings, WeakRefStrings, DataStreams, DataFrames
 
 import Base: +, ==
 
@@ -24,7 +24,7 @@ results1 = SQLite.tables(db)
 results = SQLite.query(db,"SELECT * FROM Employee;")
 @test length(results) == 15
 @test size(Data.schema(results)) == (8,15)
-@test isnull(results[5][1])
+@test ismissing(results[5][1])
 
 SQLite.query(db,"SELECT * FROM Album;")
 SQLite.query(db,"SELECT a.*, b.AlbumId
@@ -92,7 +92,7 @@ r = SQLite.query(db, "select * from $(sink.tablename)")
 @test all([typeof(i) for i in r[1]] .== Float64)
 SQLite.drop!(db, "$(sink.tablename)")
 
-rng = Date(2013):Date(2013,1,5)
+rng = Date(2013):Dates.Day(1):Date(2013,1,5)
 dt = DataFrame(i=collect(rng), j=collect(rng))
 sink = SQLite.Sink(db, "temp", Data.schema(dt))
 SQLite.load(sink, dt)
@@ -244,9 +244,9 @@ SQLite.bind!(stmt, "@a", 1)
 
 binddb = SQLite.DB()
 SQLite.query(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[null, convert(Int64,6), 6.4, "some text", b"bytearray"])
+SQLite.query(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[missing, convert(Int64,6), 6.4, "some text", b"bytearray"])
 r = SQLite.query(binddb, "SELECT * FROM temp")
-@test isa(r[1][1], Null)
+@test isa(r[1][1], Missing)
 @test isa(r[2][1], Int)
 @test isa(r[3][1], Float64)
 @test isa(r[4][1], AbstractString)
