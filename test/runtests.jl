@@ -1,6 +1,12 @@
 using SQLite
 using Base.Test, Missings, WeakRefStrings, DataStreams, DataFrames
 
+if Base.VERSION < v"0.7.0-DEV.2575"
+    const Dates = Base.Dates
+else
+    import Dates
+end
+
 import Base: +, ==
 
 dbfile = joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite")
@@ -45,17 +51,17 @@ r = SQLite.query(db,"select * from temp limit 10")
 @test all(Bool[x == 2014 for x in r[4]])
 @test length(SQLite.query(db,"alter table temp add column dates blob")) == 0
 stmt = SQLite.Stmt(db,"update temp set dates = ?")
-SQLite.bind!(stmt,1,Date(2014,1,1))
+SQLite.bind!(stmt,1,Dates.Date(2014,1,1))
 SQLite.execute!(stmt)
 finalize(stmt); stmt = nothing; gc()
 r = SQLite.query(db,"select * from temp limit 10")
 @test length(r) == 5
 @test size(Data.schema(r)) == (10,5)
-@test typeof(r[5][1]) == Date
-@test all(Bool[x == Date(2014,1,1) for x in r[5]])
+@test typeof(r[5][1]) == Dates.Date
+@test all(Bool[x == Dates.Date(2014,1,1) for x in r[5]])
 @test length(SQLite.query(db,"drop table temp")) == 0
 
-dt = DataFrame(eye(5))
+dt = DataFrame([1.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0; 0.0 0.0 0.0 0.0 1.0])
 sink = SQLite.Sink(db, "temp", Data.schema(dt))
 SQLite.load(sink, dt)
 r = SQLite.query(db,"select * from $(sink.tablename)")
@@ -92,14 +98,14 @@ r = SQLite.query(db, "select * from $(sink.tablename)")
 @test all([typeof(i) for i in r[1]] .== Float64)
 SQLite.drop!(db, "$(sink.tablename)")
 
-rng = Date(2013):Dates.Day(1):Date(2013,1,5)
+rng = Dates.Date(2013):Dates.Day(1):Dates.Date(2013,1,5)
 dt = DataFrame(i=collect(rng), j=collect(rng))
 sink = SQLite.Sink(db, "temp", Data.schema(dt))
 SQLite.load(sink, dt)
 r = SQLite.query(db, "select * from $(sink.tablename)")
 @test size(Data.schema(r)) == (5,2)
 @test all([i for i in r[1]] .== rng)
-@test all([typeof(i) for i in r[1]] .== Date)
+@test all([typeof(i) for i in r[1]] .== Dates.Date)
 SQLite.drop!(db, "$(sink.tablename)")
 
 SQLite.query(db, "CREATE TABLE temp AS SELECT * FROM Album")
