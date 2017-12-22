@@ -32,21 +32,21 @@ Contributions are very welcome, as are feature requests and suggestions. Please 
 
 
 [docs-latest-img]: https://img.shields.io/badge/docs-latest-blue.svg
-[docs-latest-url]: https://JuliaDB.github.io/SQLite.jl/latest
+[docs-latest-url]: https://juliadatabases.github.io/SQLite.jl/latest
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
-[docs-stable-url]: https://JuliaDB.github.io/SQLite.jl/stable
+[docs-stable-url]: https://juliadatabases.github.io/SQLite.jl/stable
 
-[travis-img]: https://travis-ci.org/JuliaDB/SQLite.jl.svg?branch=master
-[travis-url]: https://travis-ci.org/JuliaDB/SQLite.jl
+[travis-img]: https://travis-ci.org/juliadatabases/SQLite.jl.svg?branch=master
+[travis-url]: https://travis-ci.org/juliadatabases/SQLite.jl
 
-[appveyor-img]: https://ci.appveyor.com/api/projects/status/github/JuliaDB/SQLite.jl?branch=master&svg=true
+[appveyor-img]: https://ci.appveyor.com/api/projects/status/github/juliadatabases/SQLite.jl?branch=master&svg=true
 [appveyor-url]: https://ci.appveyor.com/project/quinnj/sqlite-jl/branch/master
 
-[codecov-img]: https://codecov.io/gh/JuliaDB/SQLite.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/JuliaDB/SQLite.jl
+[codecov-img]: https://codecov.io/gh/juliadatabases/SQLite.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/juliadatabases/SQLite.jl
 
-[issues-url]: https://github.com/JuliaDB/SQLite.jl/issues
+[issues-url]: https://github.com/juliadatabases/SQLite.jl/issues
 
 [pkg-0.4-img]: http://pkg.julialang.org/badges/SQLite_0.4.svg
 [pkg-0.4-url]: http://pkg.julialang.org/?pkg=SQLite
