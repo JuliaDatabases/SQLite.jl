@@ -1,6 +1,9 @@
-sqlitetype(::Type{T}) where {T<:Integer} = "INT"
-sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL"
-sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT"
+sqlitetype(::Type{T}) where {T<:Integer} = "INT NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, Integer}} = "INT"
+sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractFloat}} = "REAL"
+sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
 sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
