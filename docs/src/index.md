@@ -74,7 +74,7 @@ SQLite.Sink
   These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.
 
 
-* `SQLite.createindex!(db::DB,table::AbstractString,index::AbstractString,cols;unique::Bool=true,ifnotexists::Bool=false)`
+* `SQLite.createindex!(db::DB,table::AbstractString,index::AbstractString,cols::AbstractString;unique::Bool=true,ifnotexists::Bool=false)`
 
   Create a new index named `index` for `table` with the columns in `cols`, which should be a comma delimited list of column names. `unique` indicates whether the index will have unique values or not. `ifnotexists` will not throw an error if the index already exists.
 
