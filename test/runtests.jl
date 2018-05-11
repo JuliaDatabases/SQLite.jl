@@ -125,6 +125,9 @@ r = SQLite.query(db, "SELECT * FROM temp LIMIT :a"; values=Dict(:a => 3))
 @test size(Data.schema(r)) == (3,3)
 r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word"; values=Dict(:word => "%time%"))
 @test r[1] == [76, 111, 187]
+# Issue #144, ignore irrelevant keys in dict
+r = SQLite.query(db, "SELECT * FROM temp WHERE Title LIKE @word"; values=Dict(:word => "%time%", :not_a_col => "irrelevant"))
+@test r[1] == [76, 111, 187]
 SQLite.query(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)"; values=Dict(:rid => 0, :lid => 0, :title => "Test Album"))
 r = SQLite.query(db, "SELECT * FROM temp WHERE AlbumId = 0")
 @test r[1][1] === 0
