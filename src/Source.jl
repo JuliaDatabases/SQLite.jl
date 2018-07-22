@@ -143,7 +143,7 @@ indices(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHER
 """
 `SQLite.views(db, sink=DataFrame)`
 
-returns a list of view in `db`
+returns a list of views in `db`
 """
 views(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='view';", sink)
 
