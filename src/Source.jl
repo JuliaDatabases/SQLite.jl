@@ -141,6 +141,13 @@ returns a list of indices in `db`
 indices(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='index';", sink)
 
 """
+`SQLite.views(db, sink=DataFrame)`
+
+returns a list of view in `db`
+"""
+views(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='view';", sink)
+
+"""
 `SQLite.columns(db, table, sink=DataFrame)`
 
 returns a list of columns in `table`
