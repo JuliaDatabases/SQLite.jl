@@ -14,8 +14,8 @@ function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Missing
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
     cols = SQLite.sqlite3_column_count(stmt.handle)
-    header = Vector{String}(cols)
-    types = Vector{Type}(cols)
+    header = Vector{String}(undef, cols)
+    types = Vector{Type}(undef, cols)
     for i = 1:cols
         header[i] = unsafe_string(SQLite.sqlite3_column_name(stmt.handle, i))
         if nullable
@@ -60,7 +60,7 @@ function sqlitevalue(::Type{T}, handle, col) where {T}
     blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
     b = sqlite3_column_bytes(handle, col)
     buf = zeros(UInt8, b) # global const?
-    unsafe_copy!(pointer(buf), blob, b)
+    unsafe_copyto!(pointer(buf), blob, b)
     r = sqldeserialize(buf)::T
     return r
 end
@@ -85,7 +85,7 @@ function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{Union
         val = missing
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val = SQLite.sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
+        val = SQLite.sqlitevalue(ifelse(TT === Any && !isbitstype(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val::Union{T, Missing}
@@ -97,7 +97,7 @@ function Data.streamfrom(source::SQLite.Source, ::Type{Data.Field}, ::Type{T}, r
         throw(Data.NullException("encountered missing value in non-missing typed column: row = $row, col = $col"))
     else
         TT = SQLite.juliatype(t) # native SQLite Int, Float, and Text types
-        val::T = sqlitevalue(ifelse(TT === Any && !isbits(T), T, TT), handle, col)
+        val::T = sqlitevalue(ifelse(TT === Any && !isbitstype(T), T, TT), handle, col)
     end
     col == source.schema.cols && (source.status = sqlite3_step(handle))
     return val

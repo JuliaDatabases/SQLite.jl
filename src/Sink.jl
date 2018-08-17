@@ -44,13 +44,13 @@ Data.weakrefstrings(::Type{Sink}) = true
 function Sink(sch::Data.Schema, T, append::Bool, db::DB, name::AbstractString; reference::Vector{UInt8}=UInt8[], kwargs...)
     sink = Sink(db, name, sch; append=append, kwargs...)
     execute!(sink.db, "PRAGMA synchronous = OFF;")
-    sink.transaction = string("SQLITE",randstring(10))
+    sink.transaction = string("SQLITE", Random.randstring(10))
     transaction(sink.db, sink.transaction)
     return sink
 end
 function Sink(sink, sch::Data.Schema, T, append::Bool; reference::Vector{UInt8}=UInt8[])
     execute!(sink.db, "PRAGMA synchronous = OFF;")
-    sink.transaction = string("SQLITE", randstring(10))
+    sink.transaction = string("SQLITE", Random.randstring(10))
     transaction(sink.db, sink.transaction)
     !append && execute!(sink.db, "delete from $(esc_id(sink.tablename))")
     return sink

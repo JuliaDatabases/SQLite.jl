@@ -250,8 +250,8 @@ const SQLITE_SHM_EXCLUSIVE =     8 #
 
 #Constants Defining Special Destructor Behavior
 # typedef void (*sqlite3_destructor_type)(void*);
-const SQLITE_STATIC = reinterpret(Ptr{Void},0)
-const SQLITE_TRANSIENT = reinterpret(Ptr{Void},-1)
+const SQLITE_STATIC = Ptr{Cvoid}(0)
+const SQLITE_TRANSIENT = Ptr{Cvoid}(-1)
 
 #Function Flags
 const SQLITE_DETERMINISTIC = 0x800

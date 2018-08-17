@@ -1,13 +1,9 @@
-__precompile__(true)
 module SQLite
 
-using Missings, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
+using Random, Missings, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
 import LegacyStrings: UTF16String
 
-if VERSION < v"0.7.0-DEV.2562"
-    import Base: finalizer
-    finalizer(f::Function, o) = finalizer(o, f)
-end
+import Serialization
 
 export Data, DataFrame
 
@@ -35,11 +31,11 @@ Constructors:
 """
 mutable struct DB
     file::String
-    handle::Ptr{Void}
+    handle::Ptr{Cvoid}
     changes::Int
 
     function DB(f::AbstractString)
-        handle = Ref{Ptr{Void}}()
+        handle = Ref{Ptr{Cvoid}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f, handle)
             db = new(f, handle[], 0)
@@ -66,11 +62,11 @@ Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":m
 """
 mutable struct Stmt
     db::DB
-    handle::Ptr{Void}
+    handle::Ptr{Cvoid}
 
     function Stmt(db::DB,sql::AbstractString)
-        handle = Ref{Ptr{Void}}()
-        sqliteprepare(db, sql, handle, Ref{Ptr{Void}}())
+        handle = Ref{Ptr{Cvoid}}()
+        sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
         stmt = new(db, handle[])
         finalizer(_close, stmt)
         return stmt
@@ -93,7 +89,7 @@ export @sr_str, @register, register
 
 clears any bound values to a prepared SQL statement.
 """
-function Base.clear!(stmt::Stmt)
+function clear!(stmt::Stmt)
     sqlite3_clear_bindings(stmt.handle)
     return
 end
@@ -164,7 +160,7 @@ bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle,
 # Fallback is BLOB and defaults to serializing the julia value
 
 # internal wrapper mutable struct to, in-effect, mark something which has been serialized
-struct Serialization
+struct Serialized
     object
 end
 
@@ -174,8 +170,8 @@ function sqlserialize(x)
     # deserialize will sometimes return a random object when called on an array
     # which has not been previously serialized, we can use this mutable struct to check
     # that the array has been serialized
-    s = Serialization(x)
-    serialize(GLOBAL_BUF, s)
+    s = Serialized(x)
+    Serialization.serialize(GLOBAL_BUF, s)
     return take!(GLOBAL_BUF)
 end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
@@ -186,18 +182,14 @@ struct SerializeError <: Exception
 end
 
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
-# const SERIALIZATION = UInt8[0x11,0x01,0x02,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x23]
-if VERSION < v"0.7.0-DEV.1833"
-    const SERIALIZATION = UInt8[0x34,0x10,0x01,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c,0x69,0x7a,0x61,0x74,0x69,0x6f,0x6e,0x1f]
-else
-    const SERIALIZATION = UInt8[0x37,0x4a,0x4c,0x07,0x04,0x00,0x00,0x00,0x34,0x10,0x01,0x0d,0x53,0x65,0x72,0x69,0x61,0x6c]
-end
+const SERIALIZATION = UInt8[0x37,0x4a,0x4c,0x07,0x04,0x00,0x00,0x00,0x34,0x10,0x01,0x0a,0x53,0x65,0x72,0x69,0x61,0x6c]
+
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(18, length(r)))
     if ret == 0
         try
-            v = deserialize(IOBuffer(r))
+            v = Serialization.deserialize(IOBuffer(r))
             return v.object
         catch e
             throw(SerializeError("Error deserializing non-primitive value out of database; this is probably due to using SQLite.jl with a different Julia version than was used to originally serialize the database values. The same Julia version that was used to serialize should be used to extract the database values into a different format (csv file, feather file, etc.) and then loaded back into the sqlite database with the current Julia version."))
@@ -211,9 +203,9 @@ end
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
 """
-`SQLite.execute!(stmt::SQLite.Stmt)` => `Void`
+`SQLite.execute!(stmt::SQLite.Stmt)` => `Cvoid`
 
-`SQLite.execute!(db::DB, sql::String)` => `Void`
+`SQLite.execute!(db::DB, sql::String)` => `Cvoid`
 
 
 Execute a prepared SQLite statement, not checking for or returning any results.
@@ -243,7 +235,7 @@ A vector of identifiers will be separated by commas.
 """
 function esc_id end
 
-esc_id(x::AbstractString) = "\"" * replace(x,"\"","\"\"") * "\""
+esc_id(x::AbstractString) = "\"" * replace(x, "\""=>"\"\"") * "\""
 esc_id(X::AbstractVector{S}) where {S <: AbstractString} = join(map(esc_id, X), ',')
 
 
@@ -274,7 +266,7 @@ function transaction(db, mode="DEFERRED")
 end
 function transaction(f::Function, db)
     # generate a random name for the savepoint
-    name = string("SQLITE", randstring(10))
+    name = string("SQLITE", Random.randstring(10))
     execute!(db, "PRAGMA synchronous = OFF;")
     transaction(db, name)
     try
