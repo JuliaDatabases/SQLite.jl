@@ -264,7 +264,7 @@ function transaction(db, mode="DEFERRED")
         execute!(db, "SAVEPOINT $(mode);")
     end
 end
-function transaction(f::Function, db)
+@inline function transaction(f::Function, db)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
     execute!(db, "PRAGMA synchronous = OFF;")
@@ -388,5 +388,6 @@ end
 
 include("Source.jl")
 include("Sink.jl")
+include("Table.jl")
 
 end # module
