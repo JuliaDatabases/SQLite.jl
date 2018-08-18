@@ -1,19 +1,11 @@
 using SQLite
-using Base.Test, Missings, WeakRefStrings, DataStreams, DataFrames
-
-if Base.VERSION < v"0.7.0-DEV.2575"
-    const Dates = Base.Dates
-else
-    import Dates
-end
+using Test, Dates, Random, Missings, WeakRefStrings, DataStreams, DataFrames
 
 import Base: +, ==
 
 dbfile = joinpath(dirname(@__FILE__),"Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(dirname(@__FILE__),"test.sqlite")
-dbfile = joinpath(Pkg.dir("SQLite"),"test/Chinook_Sqlite.sqlite")
-dbfile2 = joinpath(Pkg.dir("SQLite"),"test/test.sqlite")
-cp(dbfile, dbfile2; remove_destination=true)
+cp(dbfile, dbfile2; force=true)
 db = SQLite.DB(dbfile2)
 
 # regular SQLite tests
@@ -53,7 +45,7 @@ r = SQLite.query(db,"select * from temp limit 10")
 stmt = SQLite.Stmt(db,"update temp set dates = ?")
 SQLite.bind!(stmt,1,Dates.Date(2014,1,1))
 SQLite.execute!(stmt)
-finalize(stmt); stmt = nothing; gc()
+finalize(stmt); stmt = nothing; GC.gc()
 r = SQLite.query(db,"select * from temp limit 10")
 @test length(r) == 5
 @test size(Data.schema(r)) == (10,5)
@@ -224,7 +216,7 @@ SQLite.drop!(db2, "tab2", ifexists=true)
 SQLite.drop!(db, "sqlite_stat1")
 @test size(Data.schema(SQLite.tables(db))) == (11,1)
 
-finalize(db); db = nothing; gc(); gc();
+finalize(db); db = nothing; GC.gc(); GC.gc();
 
 #Test removeduplicates!
 db = SQLite.DB() #In case the order of tests is changed
@@ -256,7 +248,7 @@ r = SQLite.query(binddb, "SELECT * FROM temp")
 @test isa(r[2][1], Int)
 @test isa(r[3][1], Float64)
 @test isa(r[4][1], AbstractString)
-@test isa(r[5][1], Vector{UInt8})
+@test isa(r[5][1], Base.CodeUnits)
 SQLite.query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
 SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
 SQLite.query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])

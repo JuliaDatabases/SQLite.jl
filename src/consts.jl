@@ -1,4 +1,14 @@
-include("../deps/deps.jl")
+# Load libcurl libraries from our deps.jl
+const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
+if !isfile(depsjl_path)
+    error("SQLite not installed properly, run Pkg.build(\"SQLite\"), restart Julia and try again")
+end
+include(depsjl_path)
+
+function __init__()
+    check_deps()  # Always check your dependencies from `deps.jl`
+end
+
 
 #Macros
 macro OK(func)
@@ -250,8 +260,8 @@ const SQLITE_SHM_EXCLUSIVE =     8 #
 
 #Constants Defining Special Destructor Behavior
 # typedef void (*sqlite3_destructor_type)(void*);
-const SQLITE_STATIC = reinterpret(Ptr{Void},0)
-const SQLITE_TRANSIENT = reinterpret(Ptr{Void},-1)
+const SQLITE_STATIC = Ptr{Cvoid}(0)
+const SQLITE_TRANSIENT = Ptr{Cvoid}(-1)
 
 #Function Flags
 const SQLITE_DETERMINISTIC = 0x800
