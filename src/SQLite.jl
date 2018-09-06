@@ -202,6 +202,47 @@ end
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
+function juliatype(handle, col)
+    t = SQLite.sqlite3_column_decltype(handle, col)
+    if t != C_NULL
+        T = juliatype(unsafe_string(t))
+        T !== Any && return T
+    end
+    x = SQLite.sqlite3_column_type(handle, col)
+    if x == SQLite.SQLITE_BLOB
+        val = SQLite.sqlitevalue(Any, handle, col)
+        return typeof(val)
+    else
+        return juliatype(x)
+    end
+end
+
+juliatype(x::Integer) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
+juliatype(x::String) = x == "INTEGER" ? Int : x in ("NUMERIC","REAL") ? Float64 : x == "TEXT" ? String : Any
+
+sqlitevalue(::Type{T}, handle, col) where {T <: Union{Base.BitSigned, Base.BitUnsigned}} = convert(T, sqlite3_column_int64(handle, col))
+const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
+sqlitevalue(::Type{T}, handle, col) where {T <: FLOAT_TYPES} = convert(T, sqlite3_column_double(handle, col))
+#TODO: test returning a WeakRefString instead of calling `unsafe_string`
+sqlitevalue(::Type{T}, handle, col) where {T <: AbstractString} = convert(T, unsafe_string(sqlite3_column_text(handle, col)))
+function sqlitevalue(::Type{T}, handle, col) where {T}
+    blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
+    b = sqlite3_column_bytes(handle, col)
+    buf = zeros(UInt8, b) # global const?
+    unsafe_copyto!(pointer(buf), blob, b)
+    r = sqldeserialize(buf)::T
+    return r
+end
+
+sqlitetype(::Type{T}) where {T<:Integer} = "INT NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, Integer}} = "INT"
+sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractFloat}} = "REAL"
+sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT NOT NULL"
+sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
+sqlitetype(::Type{Missing}) = "NULL"
+sqlitetype(x) = "BLOB"
+
 """
 `SQLite.execute!(stmt::SQLite.Stmt)` => `Cvoid`
 
@@ -221,6 +262,7 @@ function execute!(stmt::Stmt)
     end
     return r
 end
+
 function execute!(db::DB, sql::AbstractString)
     stmt = Stmt(db, sql)
     return execute!(stmt)
@@ -237,7 +279,6 @@ function esc_id end
 
 esc_id(x::AbstractString) = "\"" * replace(x, "\""=>"\"\"") * "\""
 esc_id(X::AbstractVector{S}) where {S <: AbstractString} = join(map(esc_id, X), ',')
-
 
 # Transaction-based commands
 """
@@ -264,6 +305,7 @@ function transaction(db, mode="DEFERRED")
         execute!(db, "SAVEPOINT $(mode);")
     end
 end
+
 @inline function transaction(f::Function, db)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
@@ -388,6 +430,27 @@ end
 
 include("Source.jl")
 include("Sink.jl")
-include("Table.jl")
+include("tables.jl")
+
+"""
+`SQLite.tables(db, sink=DataFrame)`
+
+returns a list of tables in `db`
+"""
+tables(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
+
+"""
+`SQLite.indices(db, sink=DataFrame)`
+
+returns a list of indices in `db`
+"""
+indices(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
+
+"""
+`SQLite.columns(db, table, sink=DataFrame)`
+
+returns a list of columns in `table`
+"""
+columns(db::DB,table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 end # module

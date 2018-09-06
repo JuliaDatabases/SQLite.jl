@@ -1,12 +1,3 @@
-sqlitetype(::Type{T}) where {T<:Integer} = "INT NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, Integer}} = "INT"
-sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractFloat}} = "REAL"
-sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
-sqlitetype(::Type{Missing}) = "NULL"
-sqlitetype(x) = "BLOB"
-
 function createtable!(db::DB, name::AbstractString, schema::Data.Schema; temp::Bool=false, ifnotexists::Bool=true)
     rows, cols = size(schema)
     temp = temp ? "TEMP" : ""
@@ -25,6 +16,7 @@ can optionally provide an existing SQLite table name or new name that a created 
 `ifnotexists=false` will throw an error if `name` already exists in `db`
 """
 function Sink(db::DB, name::AbstractString, schema::Data.Schema=Data.Schema(); temp::Bool=false, ifnotexists::Bool=true, append::Bool=false)
+    Base.depwarn("`SQLite.Sink(db, name)` is deprecated in favor of calling `SQLite.load!(table, db, name)` where `table` can be any Tables.jl interface implementation", nothing)
     cols = size(Data.schema(SQLite.query(db, "pragma table_info($name)")), 1)
     if cols == 0
         createtable!(db, name, schema)
@@ -86,13 +78,22 @@ Load a Data.Source `source` into an SQLite table that will be named `tablename` 
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
 """
 function load(db::SQLite.DB, name, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...) where {T}
+    Base.depwarn("`SQLite.load(db, name, args...)` is deprecated in favor of calling `SQLite.load!(table, db, name)` where `table` can be any Tables.jl interface implementation", nothing)
     sink = Data.stream!(T(args...), SQLite.Sink, db, name; append=append, transforms=transforms, kwargs...)
     return Data.close!(sink)
 end
 function load(db::SQLite.DB, name, source::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...) where {T}
+    Base.depwarn("`SQLite.load(db, name, args...)` is deprecated in favor of calling `SQLite.load!(table, db, name)` where `table` can be any Tables.jl interface implementation", nothing)
     sink = Data.stream!(source, SQLite.Sink, db, name; append=append, transforms=transforms, kwargs...)
     return Data.close!(sink)
 end
 
-load(sink::Sink, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T} = (sink = Data.stream!(T(args...), sink; append=append, transforms=transforms); return Data.close!(sink))
-load(sink::Sink, source; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink; append=append, transforms=transforms); return Data.close!(sink))
+function load(sink::Sink, ::Type{T}, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T}
+    Base.depwarn("`SQLite.load(sink::SQLite.Sink, args...)` is deprecated in favor of calling `SQLite.load!(table, db, name)` where `table` can be any Tables.jl interface implementation", nothing)
+    (sink = Data.stream!(T(args...), sink; append=append, transforms=transforms); return Data.close!(sink))
+end
+
+function load(sink::Sink, source; append::Bool=false, transforms::Dict=Dict{Int,Function}())
+    Base.depwarn("`SQLite.load(sink::SQLite.Sink, args...)` is deprecated in favor of calling `SQLite.load!(table, db, name)` where `table` can be any Tables.jl interface implementation", nothing)
+    (sink = Data.stream!(source, sink; append=append, transforms=transforms); return Data.close!(sink))
+end
