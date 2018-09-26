@@ -5,14 +5,8 @@
 
 ## High-level interface
 ```@docs
-SQLite.query
-SQLite.load
-```
-
-## Lower-level utilities
-```@docs
-SQLite.Source
-SQLite.Sink
+SQLite.Query
+SQLite.load!
 ```
 
 ## Types/Functions
@@ -59,11 +53,21 @@ SQLite.Sink
   Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below.
 
 
-* `SQLite.query(db::SQLite.DB, sql::String, values=[])`
+* `SQLite.Query(db::SQLite.DB, sql::String, values=[])`
 
-  An SQL statement `sql` is prepared, executed in the context of `db`, and results, if any, are returned. The return value is a `Data.Table` by default from the `DataStreams.jl` package. The `Data.Table` has a field `.data` which is a `Vector{NullableVector}` which holds the columns of data returned from the `sql` statement.
+  Constructs a `SQLite.Query` object by executing the SQL query `sql` against the sqlite database `db` and querying
+the columns names and types of the result set, if any.
 
-  The values in `values` are used in parameter binding (see `bind!` above). If your statement uses nameless parameters `values` must be a `Vector` of the values you wish to bind to your statment. If your statement uses named parameters `values` must be a Dict where the keys are of type `Symbol`. The key must match an identifier name in the statement (the name **should not** include the ':', '@' or '$' prefix).
+Will bind `values` to any parameters in `sql`.
+`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`; in sqlite, individual
+column values are only loosely associated with declared column types, and instead each carry their own type information. This can lead to
+type errors when trying to query columns when a single type is expected.
+`nullable` controls whether `null` (`missing` in Julia) values are expected in a column.
+
+An `SQLite.Query` object will iterate NamedTuple rows by default, and also supports the Tables.jl interface for integrating with
+any other Tables.jl implementation. Due note however that iterating an sqlite result set is a forward-once-only operation. If you need
+to iterate over an `SQLite.Query` multiple times, but can't store the iterated NamedTuples, call `SQLite.reset!(q::SQLite.Query)` to
+re-execute the query and position the iterator back at the begining of the result set.
 
 
 * `SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)`
@@ -135,7 +139,7 @@ julia> db = SQLite.DB("Chinook_Sqlite.sqlite")
 
 julia> # using SQLite's in-built syntax
 
-julia> SQLite.query(db, "SELECT FirstName, LastName FROM Employee WHERE LastName REGEXP 'e(?=a)'")
+julia> SQLite.Query(db, "SELECT FirstName, LastName FROM Employee WHERE LastName REGEXP 'e(?=a)'") |> DataFrame
 1x2 ResultSet
 | Row | "FirstName" | "LastName" |
 |-----|-------------|------------|
@@ -143,7 +147,7 @@ julia> SQLite.query(db, "SELECT FirstName, LastName FROM Employee WHERE LastName
 
 julia> # explicitly calling the regexp() function
 
-julia> SQLite.query(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)")
+julia> SQLite.Query(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)") |> DataFrame
 6x2 ResultSet
 | Row | "GenreId" | "Name"               |
 |-----|-----------|----------------------|
@@ -156,20 +160,20 @@ julia> SQLite.query(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)")
 
 julia> # you can even do strange things like this if you really want
 
-julia> SQLite.query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2")
+julia> SQLite.Query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
 2x2 ResultSet
 | Row | "GenreId" | "Name" |
 |-----|-----------|--------|
 | 1   | 1         | "Rock" |
 | 2   | 2         | "Jazz" |
 
-julia> SQLite.query(db, "INSERT INTO Genre VALUES (regexp('^word', 'this is a string'), 'My Genre')")
+julia> SQLite.Query(db, "INSERT INTO Genre VALUES (regexp('^word', 'this is a string'), 'My Genre')") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
 | 1   | 0               |
 
-julia> SQLite.query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2")
+julia> SQLite.Query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
 2x2 ResultSet
 | Row | "GenreId" | "Name"     |
 |-----|-----------|------------|
@@ -180,13 +184,13 @@ julia> SQLite.query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2")
 Due to the heavy use of escape characters you may run into problems where julia parses out some backslashes in your query, for example `"\y"` simply becomes `"y"`. For example the following two queries are identical
 
 ```julia
-julia> SQLite.query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\d'")
+julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
 | 1   | 0               |
 
-julia> SQLite.query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-d'")
+julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-d'") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
@@ -198,7 +202,7 @@ This can be avoided in two ways. You can either escape each backslash yourself o
 ```julia
 julia> # manually escaping backslashes
 
-julia> SQLite.query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'")
+julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'") |> DataFrame
 1x2 ResultSet
 | Row | "MediaTypeId" | "Name"                        |
 |-----|---------------|-------------------------------|
@@ -206,7 +210,7 @@ julia> SQLite.query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'")
 
 julia> # using sr"..."
 
-julia> SQLite.query(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'")
+julia> SQLite.Query(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
 1x2 ResultSet
 | Row | "MediaTypeId" | "Name"                        |
 |-----|---------------|-------------------------------|

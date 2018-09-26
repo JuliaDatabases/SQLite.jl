@@ -10,6 +10,7 @@ whether to allow missing values when fetching results; if set to `false` and a m
 Note that no results are returned; `sql` is executed, and results are ready to be returned (i.e. streamed to an appropriate `Data.Sink` type)
 """
 function Source(db::DB, sql::AbstractString, values=[]; rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true)
+    Base.depwarn("`SQLite.Source(db, sql)` is deprecated in favor of `SQLite.Query(db, sql)` which executes a query and returns a row iterator", nothing)
     stmt = SQLite.Stmt(db, sql)
     bind!(stmt, values)
     status = SQLite.execute!(stmt)
@@ -33,37 +34,6 @@ end
 constructs an SQLite.Source from an SQLite.Sink; selects all rows/columns from the underlying Sink table by default
 """
 Source(sink::SQLite.Sink, sql::AbstractString="select * from $(sink.tablename)") = Source(sink.db, sql::AbstractString)
-
-function juliatype(handle, col)
-    t = SQLite.sqlite3_column_decltype(handle, col)
-    if t != C_NULL
-        T = juliatype(unsafe_string(t))
-        T !== Any && return T
-    end
-    x = SQLite.sqlite3_column_type(handle, col)
-    if x == SQLite.SQLITE_BLOB
-        val = SQLite.sqlitevalue(Any, handle, col)
-        return typeof(val)
-    else
-        return juliatype(x)
-    end
-end
-juliatype(x::Integer) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
-juliatype(x::String) = x == "INTEGER" ? Int : x in ("NUMERIC","REAL") ? Float64 : x == "TEXT" ? String : Any
-
-sqlitevalue(::Type{T}, handle, col) where {T <: Union{Base.BitSigned, Base.BitUnsigned}} = convert(T, sqlite3_column_int64(handle, col))
-const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
-sqlitevalue(::Type{T}, handle, col) where {T <: FLOAT_TYPES} = convert(T, sqlite3_column_double(handle, col))
-#TODO: test returning a WeakRefString instead of calling `unsafe_string`
-sqlitevalue(::Type{T}, handle, col) where {T <: AbstractString} = convert(T, unsafe_string(sqlite3_column_text(handle, col)))
-function sqlitevalue(::Type{T}, handle, col) where {T}
-    blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
-    b = sqlite3_column_bytes(handle, col)
-    buf = zeros(UInt8, b) # global const?
-    unsafe_copyto!(pointer(buf), blob, b)
-    r = sqldeserialize(buf)::T
-    return r
-end
 
 # DataStreams interface
 Data.schema(source::SQLite.Source) = source.schema
@@ -112,37 +82,37 @@ Will bind `values` to any parameters in `sql`.
 `rows` is used to indicate how many rows to return in the query result if known beforehand. `rows=0` (the default) will return all possible rows.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`
 """
-function query(db::DB, sql::AbstractString, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true)
-    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
+function query(db::DB, sql::AbstractString, sink::Union{Type, Nothing}=nothing, args...; values=[], append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
+    if sink === nothing
+        Base.depwarn("`SQLite.query(db, sql)` will return an `SQLite.Query` object in the future; to materialize a resultset, do `DataFrame(SQLite.query(db, sql))` instead", nothing)
+        sink = DataFrame
+    else
+        Base.depwarn("`SQLite.query(db, sql, $sink, args...)` is deprecated; use `SQLite.query(db, sql) |> $sink(args...)` instead", nothing)
+    end
+    if append
+        Base.depwarn("`append=true` is deprecated in favor of sink-specific append support; for a DataFrame, for example, one can do `append!(existing_df, SQLite.query(db, sql))`", nothing)
+    end
+    source = Source(db, sql, values; kwargs...)
     sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
     return Data.close!(sink)
 end
 
-function query(db::DB, sql::AbstractString, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}(), values=[], rows::Union{Int, Missing}=missing, stricttypes::Bool=true, nullable::Bool=true) where {T}
-    source = Source(db, sql, values; rows=rows, stricttypes=stricttypes, nullable=nullable)
+function query(db::DB, sql::AbstractString, sink::T; values=[], append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...) where {T}
+    Base.depwarn("`SQLite.query(db, sql, ::$T)` is deprecated; use `SQLite.query(db, sql) |> $T` instead", nothing)
+    if append
+        Base.depwarn("`append=true` is deprecated in favor of sink-specific append support; for a DataFrame, for example, one can do `append!(existing_df, SQLite.query(db, sql))`", nothing)
+    end
+    source = Source(db, sql, values; kwargs...)
     sink = Data.stream!(source, sink; append=append, transforms=transforms)
     return Data.close!(sink)
 end
-query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}()) = (sink = Data.stream!(source, sink; append=append, transforms=transforms, args...); return Data.close!(sink))
-query(source::SQLite.Source, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T} = (sink = Data.stream!(source, sink; append=append, transforms=transforms); return Data.close!(sink))
-
-"""
-`SQLite.tables(db, sink=DataFrame)`
-
-returns a list of tables in `db`
-"""
-tables(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='table';", sink)
-
-"""
-`SQLite.indices(db, sink=DataFrame)`
-
-returns a list of indices in `db`
-"""
-indices(db::DB, sink=DataFrame) = query(db, "SELECT name FROM sqlite_master WHERE type='index';", sink)
-
-"""
-`SQLite.columns(db, table, sink=DataFrame)`
-
-returns a list of columns in `table`
-"""
-columns(db::DB,table::AbstractString, sink=DataFrame) = query(db, "PRAGMA table_info($(esc_id(table)))", sink)
+function query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}())
+    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.query(db, sql) |> sink` instead", nothing)
+    sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
+    return Data.close!(sink)
+end
+function query(source::SQLite.Source, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T}
+    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.query(db, sql) |> sink` instead", nothing)
+    sink = Data.stream!(source, sink; append=append, transforms=transforms)
+    return Data.close!(sink)
+end
