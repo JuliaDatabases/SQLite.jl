@@ -84,13 +84,13 @@ Will bind `values` to any parameters in `sql`.
 """
 function query(db::DB, sql::AbstractString, sink::Union{Type, Nothing}=nothing, args...; values=[], append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...)
     if sink === nothing
-        Base.depwarn("`SQLite.query(db, sql)` will return an `SQLite.Query` object in the future; to materialize a resultset, do `DataFrame(SQLite.query(db, sql))` instead", nothing)
+        Base.depwarn("`SQLite.query(db, sql)` will return an `SQLite.Query` object in the future; to materialize a resultset, do `DataFrame(SQLite.Query(db, sql))` instead", nothing)
         sink = DataFrame
     else
-        Base.depwarn("`SQLite.query(db, sql, $sink, args...)` is deprecated; use `SQLite.query(db, sql) |> $sink(args...)` instead", nothing)
+        Base.depwarn("`SQLite.query(db, sql, $sink, args...)` is deprecated; use `SQLite.Query(db, sql) |> $sink(args...)` instead", nothing)
     end
     if append
-        Base.depwarn("`append=true` is deprecated in favor of sink-specific append support; for a DataFrame, for example, one can do `append!(existing_df, SQLite.query(db, sql))`", nothing)
+        Base.depwarn("`append=true` is deprecated in favor of sink-specific append support; for a DataFrame, for example, one can do `append!(existing_df, SQLite.Query(db, sql))`", nothing)
     end
     source = Source(db, sql, values; kwargs...)
     sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
@@ -98,7 +98,7 @@ function query(db::DB, sql::AbstractString, sink::Union{Type, Nothing}=nothing, 
 end
 
 function query(db::DB, sql::AbstractString, sink::T; values=[], append::Bool=false, transforms::Dict=Dict{Int,Function}(), kwargs...) where {T}
-    Base.depwarn("`SQLite.query(db, sql, ::$T)` is deprecated; use `SQLite.query(db, sql) |> $T` instead", nothing)
+    Base.depwarn("`SQLite.query(db, sql, ::$T)` is deprecated; use `SQLite.Query(db, sql) |> $T` instead", nothing)
     if append
         Base.depwarn("`append=true` is deprecated in favor of sink-specific append support; for a DataFrame, for example, one can do `append!(existing_df, SQLite.query(db, sql))`", nothing)
     end
@@ -107,12 +107,12 @@ function query(db::DB, sql::AbstractString, sink::T; values=[], append::Bool=fal
     return Data.close!(sink)
 end
 function query(source::SQLite.Source, sink=DataFrame, args...; append::Bool=false, transforms::Dict=Dict{Int,Function}())
-    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.query(db, sql) |> sink` instead", nothing)
+    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.Query(db, sql) |> sink` instead", nothing)
     sink = Data.stream!(source, sink; append=append, transforms=transforms, args...)
     return Data.close!(sink)
 end
 function query(source::SQLite.Source, sink::T; append::Bool=false, transforms::Dict=Dict{Int,Function}()) where {T}
-    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.query(db, sql) |> sink` instead", nothing)
+    Base.depwarn("`SQLite.query(s::SQLite.Source, args...)` is deprecated; use `SQLite.Query(db, sql) |> sink` instead", nothing)
     sink = Data.stream!(source, sink; append=append, transforms=transforms)
     return Data.close!(sink)
 end
