@@ -18,7 +18,7 @@ include("api.jl")
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
 sqliteopen(file::UTF16String, handle) = sqlite3_open16(file, handle)
-sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
+#sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
 """
@@ -42,8 +42,9 @@ mutable struct DB
             finalizer(_close, db)
             return db
         else # error
-            sqlite3_close(handle[])
-            sqliteerror()
+            db = new(f, handle[], 0)
+            finalizer(_close, db)
+            sqliteerror(db)
         end
     end
 end

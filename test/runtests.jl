@@ -262,4 +262,7 @@ end
 @test r[2][4] == p2
 ############################################
 
+#test for #158
+@test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")
+
 include("deprecated.jl")
