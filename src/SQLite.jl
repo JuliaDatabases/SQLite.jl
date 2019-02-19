@@ -12,6 +12,31 @@ end
 include("consts.jl")
 include("api.jl")
 
+macro retry(ex)
+    return quote
+        local succeeded::Bool = false
+        local timeout::Millisecond = Millisecond(1000)
+        local starttime::Millisecond = now()
+
+        while !succeeded
+            try
+                $(esc(ex))
+                succeeded = true
+            catch e
+                if isa(e, SQLite.SQLiteException) && e.msg == "database is locked"
+                    sleep(0.001)
+                    local elapsedtime::Millisecond = now() - starttime
+                    if elapsedtime > timeout
+                        rethrow(e)
+                    end
+                else
+                    rethrow(e)
+                end
+            end
+        end
+    end
+end
+
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
