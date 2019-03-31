@@ -12,10 +12,21 @@ end
 include("consts.jl")
 include("api.jl")
 
-macro retry(ex)
+# Detect when the database is locked, and retry the command
+# until either the command succeeds or the specified timeout
+# is reached
+#
+# timeout = retry timeout in seconds
+# ex = the command to execute
+#
+# Set timeout ≤ 0 to retry forever
+macro lockretry(timeout, ex)
     return quote
+
+        local timeoutmillis::Millisecond = Millisecond($timeout * 1000)
+        local dotimeout::Bool = $timeout > 0
+
         local succeeded::Bool = false
-        local timeout::Millisecond = Millisecond(1000)
         local starttime::Millisecond = now()
 
         while !succeeded
@@ -24,11 +35,15 @@ macro retry(ex)
                 succeeded = true
             catch e
                 if isa(e, SQLite.SQLiteException) && e.msg == "database is locked"
-                    sleep(0.001)
-                    local elapsedtime::Millisecond = now() - starttime
-                    if elapsedtime > timeout
-                        rethrow(e)
+                    if dotimeout
+                        local elapsedtime::Millisecond = now() - starttime
+                        if elapsedtime > Millisecond(timeoutmillis)
+                            println("ELAPSED TIME EXPIRED")
+                            rethrow(e)
+                        end
                     end
+
+                    sleep(rand()/1000)
                 else
                     rethrow(e)
                 end
