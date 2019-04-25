@@ -3,10 +3,6 @@ using Test, Dates, Random, WeakRefStrings, Tables, DataFrames
 
 import Base: +, ==
 
-# rewrite tests
-# get all tests passing
-# update docs
-
 dbfile = joinpath(dirname(pathof(SQLite)),"../test/Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(dirname(pathof(SQLite)),"../test/test.sqlite")
 cp(dbfile, dbfile2; force=true)
@@ -22,9 +18,7 @@ results1 = SQLite.tables(db, columntable)
 @test isequal(ds, results1)
 
 results = SQLite.Query(db,"SELECT * FROM Employee;") |> DataFrame
-@test length(results) == 15
-@test size(results) == (8,15)
-@test ismissing(results[5][1])
+@test size(results) == (8, 15)
 
 SQLite.Query(db,"SELECT * FROM Album;")
 SQLite.Query(db,"SELECT a.*, b.AlbumId
@@ -32,28 +26,24 @@ SQLite.Query(db,"SELECT a.*, b.AlbumId
 	LEFT OUTER JOIN Album b ON b.ArtistId = a.ArtistId
 	ORDER BY name;")
 
-r = SQLite.Query(db,"create table temp as select * from album") |> DataFrame
-@test length(r) == 0
+r = SQLite.execute!(db,"create table temp as select * from album")
 r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test length(r) == 3
 @test size(r) == (10,3)
-@test length(SQLite.Query(db,"alter table temp add column colyear int") |> DataFrame) == 0
-@test length(SQLite.Query(db,"update temp set colyear = 2014") |> DataFrame) == 0
+SQLite.execute!(db,"alter table temp add column colyear int")
+SQLite.execute!(db,"update temp set colyear = 2014")
 r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test length(r) == 4
 @test size(r) == (10,4)
 @test all(Bool[x == 2014 for x in r[4]])
-@test length(SQLite.Query(db,"alter table temp add column dates blob") |> DataFrame) == 0
+SQLite.execute!(db,"alter table temp add column dates blob")
 stmt = SQLite.Stmt(db,"update temp set dates = ?")
 SQLite.bind!(stmt,1,Dates.Date(2014,1,1))
 SQLite.execute!(stmt)
 finalize(stmt); stmt = nothing; GC.gc()
 r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test length(r) == 5
 @test size(r) == (10,5)
-@test typeof(r[5][1]) == Dates.Date
-@test all(Bool[x == Dates.Date(2014,1,1) for x in r[5]])
-@test length(SQLite.Query(db,"drop table temp") |> DataFrame) == 0
+@test typeof(r[5][1]) == Date
+@test all(Bool[x == Date(2014,1,1) for x in r[5]])
+SQLite.execute!(db,"drop table temp")
 
 dt = DataFrame([1.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0; 0.0 0.0 0.0 0.0 1.0])
 tablename = dt |> SQLite.load!(db, "temp")
@@ -208,7 +198,7 @@ SQLite.drop!(db2, "tab2", ifexists=true)
 @test !in("tab2", SQLite.tables(db2)[1])
 
 SQLite.drop!(db, "sqlite_stat1")
-@test size(Data.schema(SQLite.tables(db))) == (11,1)
+@test size(SQLite.tables(db)) == (11,1)
 
 finalize(db); db = nothing; GC.gc(); GC.gc();
 
@@ -262,4 +252,5 @@ end
 @test r[2][4] == p2
 ############################################
 
-include("deprecated.jl")
+#test for #158
+@test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")

@@ -11,7 +11,6 @@ function sqlvalue(values, i)
     elseif valuetype == SQLITE_FLOAT
         return sqlite3_value_double(temp_val_ptr)
     elseif valuetype == SQLITE_TEXT
-        # TODO: have a way to return UTF16
         return unsafe_string(sqlite3_value_text(temp_val_ptr))
     elseif valuetype == SQLITE_BLOB
         nbytes = sqlite3_value_bytes(temp_val_ptr)
@@ -20,7 +19,7 @@ function sqlvalue(values, i)
         unsafe_copyto!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
     else
-        return null
+        return missing
     end
 end
 
@@ -28,7 +27,6 @@ sqlreturn(context, ::Missing)           = sqlite3_result_null(context)
 sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
 sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
 sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
-sqlreturn(context, val::UTF16String)    = sqlite3_result_text16(context, val)
 sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
 sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, val)
 
@@ -37,7 +35,7 @@ sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
 # Internal method for generating an SQLite scalar function from
 # a Julia function name
-function scalarfunc(func,fsym=symbol(string(func)))
+function scalarfunc(func,fsym=Symbol(string(func)))
     # check if name defined in Base so we don't clobber Base methods
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
@@ -69,7 +67,7 @@ function bytestoint(ptr::Ptr{UInt8}, start::Int, len::Int)
     return htol(s)
 end
 
-function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
+function stepfunc(init, func, fsym=Symbol(string(func)*"_step"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
         function $(nm)(context::Ptr{Cvoid}, nargs::Cint, values::Ptr{Ptr{Cvoid}})
@@ -143,7 +141,7 @@ function stepfunc(init, func, fsym=symbol(string(func)*"_step"))
     end
 end
 
-function finalfunc(init, func, fsym=symbol(string(func)*"_final"))
+function finalfunc(init, func, fsym=Symbol(string(func)*"_final"))
     nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
     return quote
         function $(nm)(context::Ptr{Cvoid}, nargs::Cint, values::Ptr{Ptr{Cvoid}})

@@ -48,11 +48,17 @@ function generate_namedtuple(::Type{NamedTuple{names, types}}, q) where {names, 
     end
 end
 
-function Base.iterate(q::Query{NT}, row::Int=1) where {NT}
+function Base.iterate(q::Query{NT}) where {NT}
     done(q) && return nothing
     nt = generate_namedtuple(NT, q)
+    return nt, nothing
+end
+
+function Base.iterate(q::Query{NT}, ::Nothing) where {NT}
     q.status[] = sqlite3_step(q.stmt.handle)
-    return nt, row + 1
+    done(q) && return nothing
+    nt = generate_namedtuple(NT, q)
+    return nt, nothing
 end
 
 """
