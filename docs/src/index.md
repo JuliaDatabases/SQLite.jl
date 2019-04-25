@@ -62,7 +62,7 @@ Will bind `values` to any parameters in `sql`.
 `stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`; in sqlite, individual
 column values are only loosely associated with declared column types, and instead each carry their own type information. This can lead to
 type errors when trying to query columns when a single type is expected.
-`nullable` controls whether `null` (`missing` in Julia) values are expected in a column.
+`nullable` controls whether `NULL` (`missing` in Julia) values are expected in a column.
 
 An `SQLite.Query` object will iterate NamedTuple rows by default, and also supports the Tables.jl interface for integrating with
 any other Tables.jl implementation. Due note however that iterating an sqlite result set is a forward-once-only operation. If you need
