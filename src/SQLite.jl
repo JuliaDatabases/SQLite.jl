@@ -1,11 +1,7 @@
 module SQLite
 
-using Random, Missings, DataStreams, WeakRefStrings, LegacyStrings, DataFrames
-import LegacyStrings: UTF16String
-
-import Serialization
-
-export Data, DataFrame
+using Random, Serialization
+using WeakRefStrings, DataFrames
 
 struct SQLiteException <: Exception
     msg::AbstractString
@@ -14,11 +10,8 @@ end
 include("consts.jl")
 include("api.jl")
 
-#TODO: Support sqlite3_open_v2
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
-sqliteopen(file::UTF16String, handle) = sqlite3_open16(file, handle)
-#sqliteerror() = throw(SQLiteException(unsafe_string(sqlite3_errmsg())))
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 
 """
@@ -150,13 +143,6 @@ bind!(stmt::Stmt, i::Int, val::Missing)        = (sqlite3_bind_null(stmt.handle,
 bind!(stmt::Stmt, i::Int, val::AbstractString) = (sqlite3_bind_text(stmt.handle, i ,val); return nothing)
 bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
 bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
-bind!(stmt::Stmt, i::Int, val::UTF16String)    = (sqlite3_bind_text16(stmt.handle, i, val); return nothing)
-function bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt32})
-    A = UTF32String(pointer_to_array(val.ptr, val.len+1, false))
-    return bind!(stmt, i, convert(String, A))
-end
-# We may want to track the new ByteVec mutable struct proposed at https://github.com/JuliaLang/julia/pull/8964
-# as the "official" bytes mutable struct instead of Vector{UInt8}
 bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle, i, val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
 
@@ -413,24 +399,6 @@ function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) wh
     return
  end
 
-"`SQLite.Source` implements the `Source` interface in the `DataStreams` framework"
-mutable struct Source <: Data.Source
-    schema::Data.Schema
-    stmt::Stmt
-    status::Cint
-end
-
-"SQLite.Sink implements the `Sink` interface in the `DataStreams` framework"
-mutable struct Sink <: Data.Sink
-    db::DB
-    tablename::String
-    stmt::Stmt
-    transaction::String
-    cols::Int
-end
-
-include("Source.jl")
-include("Sink.jl")
 include("tables.jl")
 
 """
@@ -452,6 +420,6 @@ indices(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHER
 
 returns a list of columns in `table`
 """
-columns(db::DB,table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
+columns(db::DB, table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 end # module
