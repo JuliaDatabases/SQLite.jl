@@ -1,8 +1,0 @@
-julia 0.7
-DataStreams 0.3.0
-DataFrames 0.11.0
-WeakRefStrings 0.4.0
-LegacyStrings
-Missings
-BinaryProvider
-Tables

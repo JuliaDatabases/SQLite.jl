@@ -14,11 +14,6 @@ function sqlite3_open(file::AbstractString, handle)
         Cint, (Ptr{UInt8}, Ptr{Cvoid}),
         file, handle)
 end
-function sqlite3_open16(file::UTF16String, handle)
-    return ccall( (:sqlite3_open16, libsqlite),
-        Cint, (Ptr{UInt16}, Ptr{Cvoid}),
-        file, handle)
-end
 function sqlite3_close(handle::Ptr{Cvoid})
     @NULLCHECK handle
     return ccall( (:sqlite3_close, libsqlite),
@@ -104,11 +99,6 @@ function sqlite3_bind_text(stmt::Ptr{Cvoid}, col::Int, ptr::Ptr{UInt8}, len::Int
         stmt, col, ptr, len, C_NULL)
 end
 # SQLITE_API int sqlite3_bind_text16(sqlite3_stmt*, int, const void*, int, void(*)(void*));
-function sqlite3_bind_text16(stmt::Ptr{Cvoid}, col::Int, value::UTF16String)
-    return ccall( (:sqlite3_bind_text16, libsqlite),
-        Cint, (Ptr{Cvoid}, Cint, Ptr{UInt16}, Cint, Ptr{Cvoid}),
-        stmt, col, value, sizeof(value), C_NULL)
-end
 function sqlite3_bind_text16(stmt::Ptr{Cvoid}, col::Int, ptr::Ptr{UInt16}, len::Int)
     return ccall( (:sqlite3_bind_text16, libsqlite),
         Cint, (Ptr{Cvoid}, Cint, Ptr{UInt16}, Cint, Ptr{Cvoid}),
@@ -253,11 +243,6 @@ function sqlite3_result_error(context::Ptr{Cvoid}, msg::AbstractString)
         context, value, sizeof(msg)+1)
 end
 # SQLITE_API void sqlite3_result_error16(sqlite3_context*, const void*, int)
-function sqlite3_result_error(context::Ptr{Cvoid}, msg::UTF16String)
-    return ccall( (:sqlite3_result_error16, libsqlite),
-        Cvoid, (Ptr{Cvoid}, Ptr{UInt16}, Cint),
-        context, value, sizeof(msg)+1)
-end
 # SQLITE_API void sqlite3_result_int(sqlite3_context*, int);
 function sqlite3_result_int(context::Ptr{Cvoid}, value::Int32)
     return ccall( (:sqlite3_result_int, libsqlite),
@@ -283,11 +268,6 @@ function sqlite3_result_text(context::Ptr{Cvoid}, value::AbstractString)
         context, value, sizeof(value)+1, SQLITE_TRANSIENT)
 end
 # SQLITE_API void sqlite3_result_text16(sqlite3_context*, const void*, int, void(*)(void*));
-function sqlite3_result_text16(context::Ptr{Cvoid}, value::UTF16String)
-    return ccall( (:sqlite3_result_text, libsqlite),
-        Cvoid, (Ptr{Cvoid}, Ptr{UInt16}, Cint, Ptr{Cvoid}),
-        context, value, sizeof(value)+1, SQLITE_TRANSIENT)
-end
 # SQLITE_API void sqlite3_result_blob(sqlite3_context*, const void*, int n, void(*)(void*));
 function sqlite3_result_blob(context::Ptr{Cvoid}, value)
     return ccall( (:sqlite3_result_blob, libsqlite),
