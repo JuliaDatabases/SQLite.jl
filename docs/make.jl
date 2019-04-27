@@ -7,6 +7,6 @@ makedocs(
 )
 
 deploydocs(
-    repo = "github.com/JuliaDB/SQLite.jl.git",
+    repo = "github.com/JuliaDatabases/SQLite.jl.git",
     target = "build",
 )
