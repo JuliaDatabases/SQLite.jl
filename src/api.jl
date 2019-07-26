@@ -459,3 +459,9 @@ function sqlite3_close_v2(handle::Ptr{Cvoid})
         sqlite3_close(handle)
     end
 end
+function sqlite3_last_insert_rowid(handle::Ptr{Cvoid})
+    @NULLCHECK handle
+    return ccall( (:sqlite3_last_insert_rowid, libsqlite),
+        Clong, (Ptr{Cvoid},),
+        handle)
+end

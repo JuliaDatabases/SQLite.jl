@@ -422,4 +422,11 @@ returns a list of columns in `table`
 """
 columns(db::DB, table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
+"""
+`SQLite.last_insert_rowid(db)`
+
+returns the auto increment id of the last row
+"""
+last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
+
 end # module
