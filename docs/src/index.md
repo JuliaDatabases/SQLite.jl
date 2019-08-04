@@ -37,9 +37,13 @@ SQLite.load!
   > In SQLite, wherever it is valid to include a string literal, one can use a parameter in one of the following forms:
 
   > ?
+  >
   > ?NNN
+  >
   > :AAA
+  >
   > $AAA
+  >
   > @AAA
 
   > In the examples above, NNN is an integer value and AAA is an identifier. A parameter initially has a value of NULL. Prior to calling sqlite3_step() for the first time or immediately after sqlite3_reset(), the application can invoke one of the sqlite3_bind() interfaces to attach values to the parameters. Each call to sqlite3_bind() overrides prior bindings on the same parameter.
