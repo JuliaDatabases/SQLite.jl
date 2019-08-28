@@ -171,11 +171,12 @@ struct SerializeError <: Exception
 end
 
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
-const SERIALIZATION = UInt8[0x37,0x4a,0x4c,0x07,0x04,0x00,0x00,0x00,0x34,0x10,0x01,0x0a,0x53,0x65,0x72,0x69,0x61,0x6c]
+# these bytes depend on the julia version and other things, so they are determined using an actual serialization
+const SERIALIZATION = sqlserialize(0)[1:18]
 
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt),
-            SERIALIZATION, r, min(18, length(r)))
+            SERIALIZATION, r, min(sizeof(SERIALIZATION), sizeof(r)))
     if ret == 0
         try
             v = Serialization.deserialize(IOBuffer(r))
