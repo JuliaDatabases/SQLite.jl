@@ -254,3 +254,12 @@ end
 
 #test for #158
 @test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")
+
+#test for #180
+param = "Hello!"
+query = SQLite.Query(SQLite.DB(), "SELECT ?1 UNION ALL SELECT ?1", values = Any[param])
+param = "x"
+for row in query
+    @test row[1] == "Hello!"
+    GC.gc() # this must NOT garbage collect the "Hello!" bound value
+end
