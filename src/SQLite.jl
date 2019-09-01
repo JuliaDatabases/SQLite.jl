@@ -1,6 +1,7 @@
 module SQLite
 
 using Random, Serialization
+using Dates
 using WeakRefStrings, DBInterface
 
 export DBInterface
@@ -11,46 +12,6 @@ end
 
 include("consts.jl")
 include("api.jl")
-
-# Detect when the database is locked, and retry the command
-# until either the command succeeds or the specified timeout
-# is reached
-#
-# timeout = retry timeout in seconds
-# ex = the command to execute
-#
-# Set timeout ≤ 0 to retry forever
-macro lockretry(timeout, ex)
-    return quote
-
-        local timeoutmillis::Millisecond = Millisecond($timeout * 1000)
-        local dotimeout::Bool = $timeout > 0
-
-        local succeeded::Bool = false
-        local starttime::Millisecond = now()
-
-        while !succeeded
-            try
-                $(esc(ex))
-                succeeded = true
-            catch e
-                if isa(e, SQLite.SQLiteException) && e.msg == "database is locked"
-                    if dotimeout
-                        local elapsedtime::Millisecond = now() - starttime
-                        if elapsedtime > Millisecond(timeoutmillis)
-                            println("ELAPSED TIME EXPIRED")
-                            rethrow(e)
-                        end
-                    end
-
-                    sleep(rand()/1000)
-                else
-                    rethrow(e)
-                end
-            end
-        end
-    end
-end
 
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
@@ -576,6 +537,50 @@ Enables extension loading (off by default) on the sqlite database `db`. Pass `fa
 """
 function enable_load_extension(db, enable::Bool=true)
    ccall((:sqlite3_enable_load_extension, SQLite.libsqlite), Cint, (Ptr{Cvoid}, Cint), db.handle, enable)
+end
+
+"""
+`@SQLite.lockretry(timeout, ex)`
+
+Attempt to evaluate the specified expression `ex`. If SQLite reports that the
+database is locked, wait a short, random period of time before trying the
+expression again.
+
+The macro will continue to retry the expression until the specified `timeout`
+is reached, at which point the SQLite error is thrown.
+
+If `timeout ≤ 0`, the expression will be retried forever until it succeeds.
+"""
+macro lockretry(timeout, ex)
+    return quote
+
+        local timeoutmillis::Millisecond = Millisecond($timeout * 1000)
+        local dotimeout::Bool = $timeout > 0
+
+        local succeeded::Bool = false
+        local starttime::Millisecond = now()
+
+        while !succeeded
+            try
+                $(esc(ex))
+                succeeded = true
+            catch e
+                if isa(e, SQLite.SQLiteException) && e.msg == "database is locked"
+                    if dotimeout
+                        local elapsedtime::Millisecond = now() - starttime
+                        if elapsedtime > Millisecond(timeoutmillis)
+                            println("ELAPSED TIME EXPIRED")
+                            rethrow(e)
+                        end
+                    end
+                    println("LOCKRETRY SLEEPING")
+                    sleep(rand()/1000)
+                else
+                    rethrow(e)
+                end
+            end
+        end
+    end
 end
 
 end # module
