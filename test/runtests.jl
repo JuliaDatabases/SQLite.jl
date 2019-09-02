@@ -80,7 +80,7 @@ dt = DataFrame(i=collect(rng), j=collect(rng))
 tablename = dt |> SQLite.load!(db, "temp")
 r = SQLite.Query(db, "select * from $tablename") |> DataFrame
 @test size(r) == (5,2)
-@test all([i for i in r[1]] .== rng)
+@test all([i for i in r[1]] .== collect(rng))
 @test all([typeof(i) for i in r[1]] .== Dates.Date)
 SQLite.drop!(db, "$tablename")
 
