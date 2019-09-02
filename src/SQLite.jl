@@ -255,7 +255,9 @@ end
 
 function execute!(db::DB, sql::AbstractString)
     stmt = Stmt(db, sql)
-    return execute!(stmt)
+    r = execute!(stmt)
+    finalize(stmt)
+    return r
 end
 
 """
