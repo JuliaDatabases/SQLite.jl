@@ -57,11 +57,12 @@ Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":m
 mutable struct Stmt
     db::DB
     handle::Ptr{Cvoid}
+    params::Dict{Int, Any}
 
     function Stmt(db::DB,sql::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
-        stmt = new(db, handle[])
+        stmt = new(db, handle[], Dict{Int, Any}())
         finalizer(_close, stmt)
         return stmt
     end
@@ -85,6 +86,7 @@ clears any bound values to a prepared SQL statement.
 """
 function clear!(stmt::Stmt)
     sqlite3_clear_bindings(stmt.handle)
+    empty!(stmt.params)
     return
 end
 
@@ -136,14 +138,14 @@ function bind!(stmt::Stmt,name::AbstractString, val)
     end
     return bind!(stmt, i, val)
 end
-bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
-bind!(stmt::Stmt, i::Int, val::Int32)          = (sqlite3_bind_int(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::Int64)          = (sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::Missing)        = (sqlite3_bind_null(stmt.handle, i ); return nothing)
-bind!(stmt::Stmt, i::Int, val::AbstractString) = (sqlite3_bind_text(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
-bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
-bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (sqlite3_bind_blob(stmt.handle, i, val); return nothing)
+bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (stmt.params[i] = val; sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int32)          = (stmt.params[i] = val; sqlite3_bind_int(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int64)          = (stmt.params[i] = val; sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Missing)        = (stmt.params[i] = val; sqlite3_bind_null(stmt.handle, i ); return nothing)
+bind!(stmt::Stmt, i::Int, val::AbstractString) = (stmt.params[i] = val; sqlite3_bind_text(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (stmt.params[i] = val; sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (stmt.params[i] = val; sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
+bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (stmt.params[i] = val; sqlite3_bind_blob(stmt.handle, i, val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
 
 # internal wrapper mutable struct to, in-effect, mark something which has been serialized
@@ -169,11 +171,12 @@ struct SerializeError <: Exception
 end
 
 # magic bytes that indicate that a value is in fact a serialized julia value, instead of just a byte vector
-const SERIALIZATION = UInt8[0x37,0x4a,0x4c,0x07,0x04,0x00,0x00,0x00,0x34,0x10,0x01,0x0a,0x53,0x65,0x72,0x69,0x61,0x6c]
+# these bytes depend on the julia version and other things, so they are determined using an actual serialization
+const SERIALIZATION = sqlserialize(0)[1:18]
 
 function sqldeserialize(r)
     ret = ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt),
-            SERIALIZATION, r, min(18, length(r)))
+            SERIALIZATION, r, min(sizeof(SERIALIZATION), sizeof(r)))
     if ret == 0
         try
             v = Serialization.deserialize(IOBuffer(r))
@@ -252,7 +255,9 @@ end
 
 function execute!(db::DB, sql::AbstractString)
     stmt = Stmt(db, sql)
-    return execute!(stmt)
+    r = execute!(stmt)
+    finalize(stmt)
+    return r
 end
 
 """

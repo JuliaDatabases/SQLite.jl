@@ -80,7 +80,7 @@ dt = DataFrame(i=collect(rng), j=collect(rng))
 tablename = dt |> SQLite.load!(db, "temp")
 r = SQLite.Query(db, "select * from $tablename") |> DataFrame
 @test size(r) == (5,2)
-@test all([i for i in r[1]] .== rng)
+@test all([i for i in r[1]] .== collect(rng))
 @test all([typeof(i) for i in r[1]] .== Dates.Date)
 SQLite.drop!(db, "$tablename")
 
@@ -254,3 +254,24 @@ end
 
 #test for #158
 @test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")
+
+#test for #180 (Query)
+param = "Hello!"
+query = SQLite.Query(SQLite.DB(), "SELECT ?1 UNION ALL SELECT ?1", values = Any[param])
+param = "x"
+for row in query
+    @test row[1] == "Hello!"
+    GC.gc() # this must NOT garbage collect the "Hello!" bound value
+end
+
+#test for #180 (bind! and clear!)
+params = tuple("string", UInt8[1, 2, 3]) # parameter types that can be finalized
+wkdict = WeakKeyDict{Any, Any}(param => 1 for param in params)
+stmt = SQLite.Stmt(SQLite.DB(), "SELECT ?, ?")
+SQLite.bind!(stmt, params)
+params = "x"
+GC.gc() # this MUST NOT garbage collect any of the bound values
+@test length(wkdict) == 2
+SQLite.clear!(stmt)
+GC.gc() # this will garbage collect the no longer bound values
+@test isempty(wkdict)
