@@ -56,6 +56,8 @@ function Base.getindex(r::Row, col::Symbol)
     return getvalue(q, i, q.types[i])
 end
 
+Base.propertynames(r::Row) = getquery(r).names
+
 function Base.getproperty(r::Row, col::Symbol)
     q = getquery(r)
     i = q.lookup[col]
