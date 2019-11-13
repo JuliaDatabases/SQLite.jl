@@ -2,18 +2,27 @@ using Tables
 
 sym(ptr) = ccall(:jl_symbol, Ref{Symbol}, (Ptr{UInt8},), ptr)
 
-struct Query{NT}
+struct Query
     stmt::Stmt
     status::Base.RefValue{Cint}
+    names::Vector{Symbol}
+    types::Vector{Type}
+    lookup::Dict{Symbol, Int}
 end
 
-Tables.istable(::Type{<:Query}) = true
-Tables.rowaccess(::Type{<:Query}) = true
-Tables.rows(q::Query) = q
-Tables.schema(q::Query{NamedTuple{names, types}}) where {names, types} = Tables.Schema(names, types)
+struct Row
+    q::Query
+end
 
-Base.IteratorSize(::Type{<:Query}) = Base.SizeUnknown()
-Base.eltype(q::Query{NT}) where {NT} = NT
+getquery(r::Row) = getfield(r, :q)
+
+Tables.istable(::Type{Query}) = true
+Tables.rowaccess(::Type{Query}) = true
+Tables.rows(q::Query) = q
+Tables.schema(q::Query) = Tables.Schema(q.names, q.types)
+
+Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
+Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
     sqlite3_reset(q.stmt.handle)
@@ -39,26 +48,29 @@ function getvalue(q::Query, col::Int, ::Type{T}) where {T}
     end
 end
 
-function generate_namedtuple(::Type{NamedTuple{names, types}}, q) where {names, types}
-    if @generated
-        vals = Tuple(:(getvalue(q, $i, $(fieldtype(types, i)))) for i = 1:fieldcount(types))
-        return :(NamedTuple{names, types}(($(vals...),)))
-    else
-        return NamedTuple{names, types}(Tuple(getvalue(q, i, fieldtype(types, i)) for i = 1:fieldcount(types)))
-    end
+Base.getindex(r::Row, col::Int) = getvalue(getquery(r), col, getquery(r).types[col])
+
+function Base.getindex(r::Row, col::Symbol)
+    q = getquery(r)
+    i = q.lookup[col]
+    return getvalue(q, i, q.types[i])
 end
 
-function Base.iterate(q::Query{NT}) where {NT}
+function Base.getproperty(r::Row, col::Symbol)
+    q = getquery(r)
+    i = q.lookup[col]
+    return getvalue(q, i, q.types[i])
+end
+
+function Base.iterate(q::Query)
     done(q) && return nothing
-    nt = generate_namedtuple(NT, q)
-    return nt, nothing
+    return Row(q), nothing
 end
 
-function Base.iterate(q::Query{NT}, ::Nothing) where {NT}
+function Base.iterate(q::Query, ::Nothing)
     q.status[] = sqlite3_step(q.stmt.handle)
     done(q) && return nothing
-    nt = generate_namedtuple(NT, q)
-    return nt, nothing
+    return Row(q), nothing
 end
 
 """
@@ -93,7 +105,7 @@ function Query(db::DB, sql::AbstractString; values=[], stricttypes::Bool=true, n
             types[i] = stricttypes ? juliatype(stmt.handle, i) : Any
         end
     end
-    return Query{NamedTuple{Tuple(header), Tuple{types...}}}(stmt, Ref(status))
+    return Query(stmt, Ref(status), header, types, Dict(x=>i for (i, x) in enumerate(header)))
 end
 
 # as a sink
