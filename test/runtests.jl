@@ -4,8 +4,9 @@ using Test, Dates, Random, WeakRefStrings, Tables, DataFrames
 import Base: +, ==
 
 dbfile = joinpath(dirname(pathof(SQLite)),"../test/Chinook_Sqlite.sqlite")
-dbfile2 = joinpath(dirname(pathof(SQLite)),"../test/test.sqlite")
+dbfile2 = joinpath(tempdir(), "test.sqlite")
 cp(dbfile, dbfile2; force=true)
+chmod(dbfile2, 0o777)
 db = SQLite.DB(dbfile2)
 
 # regular SQLite tests
