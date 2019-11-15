@@ -437,4 +437,13 @@ returns the auto increment id of the last row
 """
 last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
 
+"""
+`SQLite.enable_load_extension(db, enable::Bool=true)`
+
+Enables extension loading (off by default) on the sqlite database `db`. Pass `false` as the second argument to disable.
+"""
+function enable_load_extension(db, enable::Bool=true)
+   ccall((:sqlite3_enable_load_extension, SQLite.libsqlite), Cint, (Ptr{Cvoid}, Cint), db.handle, enable)
+end
+
 end # module

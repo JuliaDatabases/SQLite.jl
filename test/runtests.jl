@@ -23,8 +23,6 @@ cp(dbfile, dbfile2; force=true)
 chmod(dbfile2, 0o777)
 db = SQLite.DB(dbfile2)
 
-@testset "SQLite" begin
-
 # regular SQLite tests
 ds = SQLite.Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
@@ -293,4 +291,4 @@ SQLite.execute!(q)
 SQLite.bind!(q, 1, "a")
 @test_throws SQLite.SQLiteException SQLite.execute!(q)
 
-end #@testset
+@test SQLite.@OK SQLite.enable_load_extension(db)
