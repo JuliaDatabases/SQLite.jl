@@ -2,12 +2,28 @@ using SQLite
 using Test, Dates, Random, WeakRefStrings, Tables, DataFrames
 
 import Base: +, ==
+mutable struct Point{T}
+    x::T
+    y::T
+end
+==(a::Point, b::Point) = a.x == b.x && a.y == b.y
+
+mutable struct Point3D{T<:Number}
+    x::T
+    y::T
+    z::T
+end
+==(a::Point3D, b::Point3D) = a.x == b.x && a.y == b.y && a.z == b.z
++(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
+
 
 dbfile = joinpath(dirname(pathof(SQLite)),"../test/Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(tempdir(), "test.sqlite")
 cp(dbfile, dbfile2; force=true)
 chmod(dbfile2, 0o777)
 db = SQLite.DB(dbfile2)
+
+@testset "SQLite" begin
 
 # regular SQLite tests
 ds = SQLite.Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
@@ -175,13 +191,7 @@ SQLite.Query(db, "CREATE TABLE points (x INT, y INT, z INT)")
 SQLite.Query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[1, 2, 3])
 SQLite.Query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[4, 5, 6])
 SQLite.Query(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[7, 8, 9])
-mutable struct Point3D{T<:Number}
-    x::T
-    y::T
-    z::T
-end
-==(a::Point3D, b::Point3D) = a.x == b.x && a.y == b.y && a.z == b.z
-+(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
+
 sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 SQLite.register(db, Point3D(0, 0, 0), sumpoint)
 r = SQLite.Query(db, "SELECT sumpoint(x, y, z) FROM points") |> DataFrame
@@ -236,11 +246,7 @@ r = SQLite.Query(binddb, "SELECT * FROM temp") |> DataFrame
 SQLite.Query(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
 SQLite.Query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
 SQLite.Query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])
-mutable struct Point{T}
-    x::T
-    y::T
-end
-==(a::Point, b::Point) = a.x == b.x && a.y == b.y
+
 p1 = Point(1, 2)
 p2 = Point(1.3, 2.4)
 SQLite.Query(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p1])
@@ -276,3 +282,15 @@ GC.gc() # this MUST NOT garbage collect any of the bound values
 SQLite.clear!(stmt)
 GC.gc() # this will garbage collect the no longer bound values
 @test isempty(wkdict)
+
+db = SQLite.DB()
+SQLite.execute!(db, "CREATE TABLE T (a TEXT, PRIMARY KEY (a))")
+
+q = SQLite.Stmt(db, "INSERT INTO T VALUES(?)")
+SQLite.bind!(q, 1, "a")
+SQLite.execute!(q)
+
+SQLite.bind!(q, 1, "a")
+@test_throws SQLite.SQLiteException SQLite.execute!(q)
+
+end #@testset

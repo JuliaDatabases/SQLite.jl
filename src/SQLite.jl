@@ -13,6 +13,7 @@ include("api.jl")
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
+sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
 
 """
 represents an SQLite database, either backed by an on-disk file or in-memory
@@ -138,14 +139,14 @@ function bind!(stmt::Stmt,name::AbstractString, val)
     end
     return bind!(stmt, i, val)
 end
-bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (stmt.params[i] = val; sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
-bind!(stmt::Stmt, i::Int, val::Int32)          = (stmt.params[i] = val; sqlite3_bind_int(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::Int64)          = (stmt.params[i] = val; sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::Missing)        = (stmt.params[i] = val; sqlite3_bind_null(stmt.handle, i ); return nothing)
-bind!(stmt::Stmt, i::Int, val::AbstractString) = (stmt.params[i] = val; sqlite3_bind_text(stmt.handle, i ,val); return nothing)
-bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (stmt.params[i] = val; sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
-bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (stmt.params[i] = val; sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
-bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (stmt.params[i] = val; sqlite3_bind_blob(stmt.handle, i, val); return nothing)
+bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int32)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Int64)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::Missing)        = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_null(stmt.handle, i ); return nothing)
+bind!(stmt::Stmt, i::Int, val::AbstractString) = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i ,val); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt8})   = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
+bind!(stmt::Stmt, i::Int, val::WeakRefString{UInt16})  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
+bind!(stmt::Stmt, i::Int, val::Vector{UInt8})  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_blob(stmt.handle, i, val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
 
 # internal wrapper mutable struct to, in-effect, mark something which has been serialized
@@ -248,7 +249,9 @@ function execute!(stmt::Stmt)
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)
     elseif r != SQLITE_ROW
-        sqliteerror(stmt.db)
+        e = sqliteexception(stmt.db)
+        sqlite3_reset(stmt.handle)
+        throw(e)
     end
     return r
 end
