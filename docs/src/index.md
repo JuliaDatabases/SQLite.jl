@@ -106,6 +106,9 @@ re-execute the query and position the iterator back at the begining of the resul
 
   List the indices that have been created in `db`
 
+* `SQLite.enable_load_extensions(db::SQLite.DB, enable::Bool=true)`
+
+  Enables extension loading (off by default) on the sqlite database `db`. Pass `false` as the second argument to disable.
 
 * `SQLite.register(db::SQLite.DB, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)`
 
