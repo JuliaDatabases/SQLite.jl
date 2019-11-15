@@ -12,7 +12,7 @@ SQLite.load!
 ## Types/Functions
 * `SQLite.DB(file::AbstractString)`
 
-  `SQLite.DB` requires the `file` string argument as the name of either a pre-defined SQLite database to be opened, or if the file doesn't exist, a database will be created.
+  `SQLite.DB` requires the `file` string argument as the name of either a pre-defined SQLite database to be opened, or if the file doesn't exist, a database will be created. Note that only sqlite 3.x version files are supported.
 
   The `SQLite.DB` object represents a single connection to an SQLite database. All other SQLite.jl functions take an `SQLite.DB` as the first argument as context.
 
