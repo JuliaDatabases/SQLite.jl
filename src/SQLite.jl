@@ -106,23 +106,25 @@ Additional methods exist for working individual SQL parameters:
 """
 function bind! end
 
+bind!(stmt::Stmt, ::Nothing) = nothing
+
 function bind!(stmt::Stmt, values::Tuple)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all placeholders"
+    @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
         @inbounds bind!(stmt, i, values[i])
     end
 end
 function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all placeholders"
+    @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
         @inbounds bind!(stmt, i, values[i])
     end
 end
 function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all placeholders"
+    @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
@@ -243,7 +245,7 @@ Will bind `values` to any parameters in `stmt`.
 """
 function execute! end
 
-function execute!(stmt::Stmt; values=[])
+function execute!(stmt::Stmt; values=nothing)
     bind!(stmt, values)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
