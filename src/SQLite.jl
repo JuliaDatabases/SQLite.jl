@@ -235,16 +235,16 @@ sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
 """
-`SQLite.execute!(stmt::SQLite.Stmt)` => `Cvoid`
-
-`SQLite.execute!(db::DB, sql::String)` => `Cvoid`
-
+  `SQLite.execute!(stmt::SQLite.Stmt; values=[])` => `nothing`
+  `SQLite.execute!(db::DB, sql::String)` => `nothing`
 
 Execute a prepared SQLite statement, not checking for or returning any results.
+Will bind `values` to any parameters in `stmt`.
 """
 function execute! end
 
-function execute!(stmt::Stmt)
+function execute!(stmt::Stmt; values=[])
+    bind!(stmt, values)
     r = sqlite3_step(stmt.handle)
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)

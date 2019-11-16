@@ -49,12 +49,13 @@ SQLite.load!
   > In the examples above, NNN is an integer value and AAA is an identifier. A parameter initially has a value of NULL. Prior to calling sqlite3_step() for the first time or immediately after sqlite3_reset(), the application can invoke one of the sqlite3_bind() interfaces to attach values to the parameters. Each call to sqlite3_bind() overrides prior bindings on the same parameter.
 
 
-* `SQLite.execute!(stmt::SQLite.Stmt)`
+* `SQLite.execute!(stmt::SQLite.Stmt; values=[])`
 
   `SQLite.execute!(db::SQLite.DB, sql::String)`
 
 
-  Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below.
+  Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below. With a prepared `stmt`, you can also pass a `values` iterable or `Dict` that will bind to 
+  parameters in the prepared query.
 
 
 * `SQLite.Query(db::SQLite.DB, sql::String, values=[])`
