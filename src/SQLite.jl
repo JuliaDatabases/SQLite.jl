@@ -258,8 +258,9 @@ function execute!(stmt::Stmt; values=nothing)
     return r
 end
 
-function execute!(db::DB, sql::AbstractString)
+function execute!(db::DB, sql::AbstractString; values=nothing)
     stmt = Stmt(db, sql)
+    bind!(stmt, values)
     r = execute!(stmt)
     finalize(stmt)
     return r
