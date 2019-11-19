@@ -1,5 +1,5 @@
 using SQLite
-using Test, Dates, Random, WeakRefStrings, Tables, DataFrames
+using Test, Dates, Random, WeakRefStrings, Tables
 
 import Base: +, ==
 mutable struct Point{T}
@@ -292,3 +292,15 @@ SQLite.bind!(q, 1, "a")
 @test_throws SQLite.SQLiteException SQLite.execute!(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
+
+db = SQLite.DB()
+SQLite.execute!(db, "CREATE TABLE T (a INT, b REAL)")
+SQLite.execute!(db, "INSERT INTO T VALUES(10, 3.14)")
+
+struct AB
+    a::Int
+    b::Float64
+end
+StructTypes.StructType(::Type{AB}) = StructTypes.Struct()
+
+SQLite.select(db, "select * from T", AB)

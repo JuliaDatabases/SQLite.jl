@@ -1,7 +1,7 @@
 module SQLite
 
 using Random, Serialization
-using WeakRefStrings, DataFrames
+using WeakRefStrings, StructTypes
 
 struct SQLiteException <: Exception
     msg::AbstractString
@@ -513,27 +513,28 @@ function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) wh
  end
 
 include("tables.jl")
+include("structtypes.jl")
 
 """
-`SQLite.tables(db, sink=DataFrame)`
+`SQLite.tables(db, sink=columntable)`
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
+tables(db::DB, sink=columntable) = Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
 
 """
-`SQLite.indices(db, sink=DataFrame)`
+`SQLite.indices(db, sink=columntable)`
 
 returns a list of indices in `db`
 """
-indices(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
+indices(db::DB, sink=columntable) = Query(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
 
 """
-`SQLite.columns(db, table, sink=DataFrame)`
+`SQLite.columns(db, table, sink=columntable)`
 
 returns a list of columns in `table`
 """
-columns(db::DB, table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
+columns(db::DB, table::AbstractString, sink=columntable) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 """
 `SQLite.last_insert_rowid(db)`
