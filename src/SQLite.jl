@@ -124,12 +124,12 @@ function bind!(stmt::Stmt, values::Vector)
 end
 function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         name = name[2:end]
+        haskey(values, name) || throw(SQLiteException("`$name` not found in values Dict to bind to sql statement"))
         bind!(stmt, i, values[Symbol(name)])
     end
 end
