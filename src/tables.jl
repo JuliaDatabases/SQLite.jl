@@ -88,7 +88,7 @@ type errors when trying to query columns when a single type is expected.
 `nullable` controls whether `NULL` (`missing` in Julia) values are expected in a column.
 
 An `SQLite.Query` object will iterate NamedTuple rows by default, and also supports the Tables.jl interface for integrating with
-any other Tables.jl implementation. Due note however that iterating an sqlite result set is a forward-once-only operation. If you need
+any other Tables.jl implementation. Do note, however, that iterating an sqlite result set is a forward-once-only operation. If you need
 to iterate over an `SQLite.Query` multiple times, but can't store the iterated NamedTuples, call `SQLite.reset!(q::SQLite.Query)` to
 re-execute the query and position the iterator back at the begining of the result set.
 """
