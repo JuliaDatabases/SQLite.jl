@@ -128,9 +128,9 @@ function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
-        name = name[2:end]
-        haskey(values, name) || throw(SQLiteException("`$name` not found in values Dict to bind to sql statement"))
-        bind!(stmt, i, values[Symbol(name)])
+        sym = Symbol(name[2:end])
+        haskey(values, sym) || throw(SQLiteException("`$name` not found in values Dict to bind to sql statement"))
+        bind!(stmt, i, values[sym])
     end
 end
 # Binding parameters to SQL statements
