@@ -54,7 +54,7 @@ SQLite.load!
   `SQLite.execute!(db::SQLite.DB, sql::String)`
 
 
-  Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below. With a prepared `stmt`, you can also pass a `values` iterable or `Dict` that will bind to 
+  Used to execute a prepared `SQLite.Stmt`. The 2nd method is a convenience method to pass in an SQL statement as a string which gets prepared and executed in one call. This method does not check for or return any results, hence it is only useful for database manipulation methods (i.e. ALTER, CREATE, UPDATE, DROP). To return results, see `SQLite.query` below. With a prepared `stmt`, you can also pass a `values` iterable or `Dict` that will bind to
   parameters in the prepared query.
 
 
@@ -78,7 +78,7 @@ re-execute the query and position the iterator back at the begining of the resul
 * `SQLite.drop!(db::SQLite.DB,table::String;ifexists::Bool=false)`
 
   `SQLite.dropindex!(db::SQLite.DB,index::String;ifexists::Bool=false)`
-  
+
 
   These are pretty self-explanatory. They're really just a convenience methods to execute DROP TABLE/DROP INDEX commands, while also calling "VACUUM" to clean out freed memory from the database.
 
@@ -128,6 +128,47 @@ re-execute the query and position the iterator back at the begining of the resul
 
   This string literal is used to escape all special characters in the string, useful for using regex in a query.
 
+* `SQLite.esc_id(ids)`
+
+  Escape SQLite identifiers
+  (e.g. column, table or index names).
+  Can be either a string or a vector of strings
+  (note does not check for null characters).
+  A vector of identifiers will be separated by commas.
+
+  Example:
+
+  ```julia
+  julia> using SQLite, DataFrames
+
+  julia> df = DataFrame(label=string.(rand("abcdefg", 10)), value=rand(10));
+
+  julia> db = SQLite.DB(mktemp()[1]);
+
+  julia> tbl |> SQLite.load!(db, "temp");
+
+  julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN ('a','b','c')") |> DataFrame
+  4×2 DataFrame
+  │ Row │ label   │ value    │
+  │     │ String⍰ │ Float64⍰ │
+  ├─────┼─────────┼──────────┤
+  │ 1   │ c       │ 0.603739 │
+  │ 2   │ c       │ 0.429831 │
+  │ 3   │ b       │ 0.799696 │
+  │ 4   │ a       │ 0.603586 │
+
+  julia> q = ['a','b','c'];
+
+  julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN ($(SQLite.esc_id(q)))")
+  4×2 DataFrame
+  │ Row │ label   │ value    │
+  │     │ String⍰ │ Float64⍰ │
+  ├─────┼─────────┼──────────┤
+  │ 1   │ c       │ 0.603739 │
+  │ 2   │ c       │ 0.429831 │
+  │ 3   │ b       │ 0.799696 │
+  │ 4   │ a       │ 0.603586 │
+  ```
 
 * `SQLite.sqlreturn(contex, val)`
 
