@@ -267,7 +267,7 @@ function execute!(db::DB, sql::AbstractString; values=nothing)
 end
 
 """
-`SQLite.esc_id(x::Union{String,Vector{String}})`
+`SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})`
 
 Escape SQLite identifiers (e.g. column, table or index names). Can be either
 a string, or a vector of strings (note does not check for null characters).
