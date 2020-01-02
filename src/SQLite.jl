@@ -16,12 +16,28 @@ sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))
 sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
 
 """
-represents an SQLite database, either backed by an on-disk file or in-memory
+Represents an SQLite database, either backed by an on-disk file or in-memory
 
 Constructors:
 
 * `SQLite.DB()` => in-memory SQLite database
 * `SQLite.DB(file)` => file-based SQLite database
+
+`SQLite.DB(file::AbstractString)`
+
+`SQLite.DB` requires the `file` string argument
+as the name of either a pre-defined SQLite database to be opened,
+or if the file doesn't exist, a database will be created.
+Note that only sqlite 3.x version files are supported.
+
+The `SQLite.DB` object
+represents a single connection to an SQLite database.
+All other SQLite.jl functions take an `SQLite.DB` as the first argument as context.
+
+To create an in-memory temporary database, call `SQLite.DB()`.
+
+The `SQLite.DB` will automatically closed/shutdown when it goes out of scope
+(i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 """
 mutable struct DB
     file::String
@@ -53,7 +69,16 @@ end
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"", ")"))
 
 """
-`SQLite.Stmt(db::DB, sql::AbstractString)` creates and prepares an SQLite statement
+Constructs and prepares (compiled by the SQLite library)
+an SQL statement in the context of the provided `db`.
+Note the SQL statement is not actually executed,
+but only compiled
+(mainly for usage where the same statement
+is repeated with different parameters bound as values.
+See [`SQLite.bind!`](@ref) below).
+
+The `SQLite.Stmt` will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
+
 """
 mutable struct Stmt
     db::DB
@@ -94,7 +119,7 @@ end
 """
 `SQLite.bind!(stmt::SQLite.Stmt, values)`
 
-bind `values` to parameters in a prepared SQL statement. Values can be:
+bind `values` to parameters in a prepared [`SQLite.Stmt`](@ref). Values can be:
 
 * `Vector`; where each element will be bound to an SQL parameter by index order
 * `Dict`; where dict values will be bound to named SQL parameters by the dict key
@@ -103,6 +128,39 @@ Additional methods exist for working individual SQL parameters:
 
 * `SQLite.bind!(stmt, name, val)`: bind a single value to a named SQL parameter
 * `SQLite.bind!(stmt, index, val)`: bind a single value to a SQL parameter by index number
+
+From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
+
+> Usually, though,
+> it is not useful to evaluate exactly the same SQL statement more than once.
+> More often, one wants to evaluate similar statements.
+> For example, you might want to evaluate an INSERT statement
+> multiple times though with different values to insert.
+> To accommodate this kind of flexibility,
+> SQLite allows SQL statements to contain parameters
+> which are "bound" to values prior to being evaluated.
+> These values can later be changed and the same prepared statement
+> can be evaluated a second time using the new values.
+>
+> In SQLite,
+> wherever it is valid to include a string literal,
+> one can use a parameter in one of the following forms:
+>
+> - `?`
+> - `?NNN`
+> - `:AAA`
+> - `\$AAA`
+> - `@AAA`
+>
+> In the examples above,
+> `NNN` is an integer value and `AAA` is an identifier.
+> A parameter initially has a value of `NULL`.
+> Prior to calling `sqlite3_step()` for the first time
+> or immediately after `sqlite3_reset()``,
+> the application can invoke one of the `sqlite3_bind()` interfaces
+> to attach values to the parameters.
+> Each call to `sqlite3_bind()` overrides prior bindings on the same parameter.
+
 """
 function bind! end
 
@@ -237,11 +295,18 @@ sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
 """
-  `SQLite.execute!(stmt::SQLite.Stmt; values=[])` => `nothing`
-  `SQLite.execute!(db::DB, sql::String)` => `nothing`
+Used to execute a prepared `SQLite.Stmt`.
+The 2nd method is a convenience method to pass in an SQL statement as a string
+which gets prepared and executed in one call.
+This method does not check for or return any results,
+hence it is only useful for database manipulation methods
+(i.e. ALTER, CREATE, UPDATE, DROP).
+To return results, see [`SQLite.Query`](@ref) above.
 
-Execute a prepared SQLite statement, not checking for or returning any results.
-Will bind `values` to any parameters in `stmt`.
+With a prepared `stmt`,
+you can also pass a `values` iterable or `Dict`
+that will bind to parameters in the prepared query.
+
 """
 function execute! end
 
@@ -267,11 +332,47 @@ function execute!(db::DB, sql::AbstractString; values=nothing)
 end
 
 """
-`SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})`
+    SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})
 
-Escape SQLite identifiers (e.g. column, table or index names). Can be either
-a string, or a vector of strings (note does not check for null characters).
+Escape SQLite identifiers
+(e.g. column, table or index names).
+Can be either a string or a vector of strings
+(note does not check for null characters).
 A vector of identifiers will be separated by commas.
+
+Example:
+
+```julia
+julia> using SQLite, DataFrames
+
+julia> df = DataFrame(label=string.(rand("abcdefg", 10)), value=rand(10));
+
+julia> db = SQLite.DB(mktemp()[1]);
+
+julia> tbl |> SQLite.load!(db, "temp");
+
+julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN ('a','b','c')") |> DataFrame
+4×2 DataFrame
+│ Row │ label   │ value    │
+│     │ String⍰ │ Float64⍰ │
+├─────┼─────────┼──────────┤
+│ 1   │ c       │ 0.603739 │
+│ 2   │ c       │ 0.429831 │
+│ 3   │ b       │ 0.799696 │
+│ 4   │ a       │ 0.603586 │
+
+julia> q = ['a','b','c'];
+
+julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN (\$(SQLite.esc_id(q)))")
+4×2 DataFrame
+│ Row │ label   │ value    │
+│     │ String⍰ │ Float64⍰ │
+├─────┼─────────┼──────────┤
+│ 1   │ c       │ 0.603739 │
+│ 2   │ c       │ 0.429831 │
+│ 3   │ b       │ 0.799696 │
+│ 4   │ a       │ 0.603586 │
+```
 """
 function esc_id end
 
@@ -375,9 +476,8 @@ function dropindex!(db::DB, index::AbstractString; ifexists::Bool=false)
 end
 
 """
-`SQLite.createindex!(db, table, index, cols; unique::Bool=true, ifnotexists::Bool=false)`
-
-create the SQLite index `index` on the table `table` using `cols`, which may be a single column or vector of columns.
+create the SQLite index `index` on the table `table` using `cols`,
+which may be a single column or vector of columns.
 `unique` specifies whether the index will be unique or not.
 `ifnotexists=true` will not throw an error if the index already exists
 """
@@ -393,9 +493,11 @@ function createindex!(db::DB, table::AbstractString, index::AbstractString, cols
 end
 
 """
-`SQLite.removeduplicates!(db, table, cols::Vector)`
+Removes duplicate rows from `table`
+based on the values in `cols`, which is an array of column names.
 
-removes duplicate rows from `table` based on the values in `cols` which is an array of column names
+A convenience method for the common task of removing duplicate
+rows in a dataset according to some subset of columns that make up a "primary key".
 """
 function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) where {T <: AbstractString}
     colsstr = ""
