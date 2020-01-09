@@ -23,6 +23,13 @@ function sqlvalue(values, i)
     end
 end
 
+"""
+This function should never be called explicitly.
+Instead it is exported so that it can be overloaded when necessary,
+see [below](@ref regex).
+"""
+function sqlreturn end
+
 sqlreturn(context, ::Missing)           = sqlite3_result_null(context)
 sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
 sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
@@ -181,13 +188,20 @@ function finalfunc(init, func, fsym=Symbol(string(func)*"_final"))
     end
 end
 
-# User-facing macro for convenience in registering a simple function
-# with no configurations needed
+"""
+    @register db function
+
+User-facing macro for convenience in registering a simple function
+with no configurations needed
+"""
 macro register(db, func)
     :(register($(esc(db)), $(esc(func))))
 end
 
-# User-facing method for registering a Julia function to be used within SQLite
+"""
+Register a scalar (first method) or aggregate (second method) function
+with a [`SQLite.DB`](@ref).
+"""
 function register(db, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
@@ -231,5 +245,11 @@ end
 
 # annotate types because the MethodError makes more sense that way
 regexp(r::AbstractString, s::AbstractString) = occursin(Regex(r), s)
-# macro for preserving the special characters in a string
+
+"""
+    sr"..."
+
+This string literal is used to escape all special characters in the string,
+useful for using regex in a query.
+"""
 macro sr_str(s) s end

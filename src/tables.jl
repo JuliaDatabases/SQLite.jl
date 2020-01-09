@@ -76,21 +76,27 @@ function Base.iterate(q::Query, ::Nothing)
 end
 
 """
-`SQLite.Query(db, sql::String; values=[]; stricttypes::Bool=true, nullable::Bool=true)`
-
-Constructs a `SQLite.Query` object by executing the SQL query `sql` against the sqlite database `db` and querying
-the columns names and types of the result set, if any.
+Constructs a `SQLite.Query` object by executing the SQL query `sql`
+against the sqlite database `db`
+and querying the columns names and types of the result set, if any.
 
 Will bind `values` to any parameters in `sql`.
-`stricttypes=false` will remove strict column typing in the result set, making each column effectively `Vector{Any}`; in sqlite, individual
-column values are only loosely associated with declared column types, and instead each carry their own type information. This can lead to
-type errors when trying to query columns when a single type is expected.
+`stricttypes=false` will remove strict column typing in the result set,
+making each column effectively `Vector{Any}`;
+in sqlite, individual column values are only loosely associated with declared column types,
+and instead each carry their own type information.
+This can lead to type errors when trying to query columns when a single type is expected.
 `nullable` controls whether `NULL` (`missing` in Julia) values are expected in a column.
 
-An `SQLite.Query` object will iterate NamedTuple rows by default, and also supports the Tables.jl interface for integrating with
-any other Tables.jl implementation. Do note, however, that iterating an sqlite result set is a forward-once-only operation. If you need
-to iterate over an `SQLite.Query` multiple times, but can't store the iterated NamedTuples, call `SQLite.reset!(q::SQLite.Query)` to
-re-execute the query and position the iterator back at the begining of the result set.
+An `SQLite.Query` object will iterate NamedTuple rows by default,
+and also supports the Tables.jl interface
+for integrating with any other Tables.jl implementation.
+Do note, however,
+that iterating an sqlite result set is a forward-once-only operation.
+If you need to iterate over an `SQLite.Query` multiple times,
+but can't store the iterated NamedTuples,
+call `[SQLite.reset!](@ref)` to re-execute the query
+and position the iterator back at the begining of the result set.
 """
 function Query(db::DB, sql::AbstractString; values=[], stricttypes::Bool=true, nullable::Bool=true)
     stmt = Stmt(db, sql)
