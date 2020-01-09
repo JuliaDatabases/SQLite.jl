@@ -116,7 +116,15 @@ function Query(db::DB, sql::AbstractString; values=[], stricttypes::Bool=true, n
     return Query(stmt, Ref(status), header, types, Dict(x=>i for (i, x) in enumerate(header)))
 end
 
-# as a sink
+"""
+    SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true)
+
+Create a table in `db` with name `table_name`, according to `schema`, which is a set of column names and types, constructed like `Tables.Schema(names, types)`
+where `names` can be a vector or tuple of String/Symbol column names, and `types` is a vector or tuple of sqlite-compatible types (`Int`, `Float64`, `String`, or unions of `Missing`).
+
+If `temp=true`, the table will be created temporarily, which means it will be deleted when the `db` is closed.
+If `ifnotexists=true`, no error will be thrown if the table already exists.
+"""
 function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types}; temp::Bool=false, ifnotexists::Bool=true) where {names, types}
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""

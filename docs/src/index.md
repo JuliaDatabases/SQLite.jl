@@ -16,6 +16,7 @@ SQLite.DB
 SQLite.Stmt
 SQLite.bind!
 SQLite.execute!
+SQLite.createtable!
 SQLite.drop!
 SQLite.dropindex!
 SQLite.createindex!
