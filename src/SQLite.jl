@@ -1,7 +1,7 @@
 module SQLite
 
 using Random, Serialization
-using WeakRefStrings, StructTypes
+using WeakRefStrings, StructTypes, DBInterface
 
 struct SQLiteException <: Exception
     msg::AbstractString
@@ -39,7 +39,7 @@ To create an in-memory temporary database, call `SQLite.DB()`.
 The `SQLite.DB` will automatically closed/shutdown when it goes out of scope
 (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 """
-mutable struct DB
+mutable struct DB <: DBInterface.Connection
     file::String
     handle::Ptr{Cvoid}
     changes::Int
@@ -66,7 +66,7 @@ function _close(db::DB)
     return
 end
 
-Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"", ")"))
+Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 
 """
 Constructs and prepares (compiled by the SQLite library)
@@ -80,15 +80,16 @@ See [`SQLite.bind!`](@ref) below).
 The `SQLite.Stmt` will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 
 """
-mutable struct Stmt
+mutable struct Stmt <: DBInterface.Statement
     db::DB
     handle::Ptr{Cvoid}
     params::Dict{Int, Any}
+    status::Int
 
     function Stmt(db::DB,sql::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
-        stmt = new(db, handle[], Dict{Int, Any}())
+        stmt = new(db, handle[], Dict{Int, Any}(), 0)
         finalizer(_close, stmt)
         return stmt
     end
@@ -166,6 +167,26 @@ function bind! end
 
 bind!(stmt::Stmt, ::Nothing) = nothing
 
+function bind!(stmt::Stmt, args...; kw...)
+    if !isempty(args)
+        nparams = sqlite3_bind_parameter_count(stmt.handle)
+        @assert nparams == length(values) "you must provide values for all query placeholders"
+        for i in 1:nparams
+            @inbounds bind!(stmt, i, values[i])
+        end
+    elseif !isempty(kw)
+        nparams = sqlite3_bind_parameter_count(stmt.handle)
+        for i in 1:nparams
+            name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
+            @assert !isempty(name) "nameless parameters should be passed as a Vector"
+            # name is returned with the ':', '@' or '$' at the start
+            sym = Symbol(name[2:end])
+            haskey(kw, sym) || throw(SQLiteException("`$name` not found in values keyword arguments to bind to sql statement"))
+            bind!(stmt, i, kw[sym])
+        end
+    end
+end
+
 function bind!(stmt::Stmt, values::Tuple)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all query placeholders"
@@ -173,6 +194,7 @@ function bind!(stmt::Stmt, values::Tuple)
         @inbounds bind!(stmt, i, values[i])
     end
 end
+
 function bind!(stmt::Stmt, values::Vector)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all query placeholders"
@@ -180,6 +202,7 @@ function bind!(stmt::Stmt, values::Vector)
         @inbounds bind!(stmt, i, values[i])
     end
 end
+
 function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     for i in 1:nparams
@@ -191,14 +214,16 @@ function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
         bind!(stmt, i, values[sym])
     end
 end
+
 # Binding parameters to SQL statements
-function bind!(stmt::Stmt,name::AbstractString, val)
+function bind!(stmt::Stmt, name::AbstractString, val)
     i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
     return bind!(stmt, i, val)
 end
+
 bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int32)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(stmt.handle, i ,val); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int64)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
@@ -294,25 +319,11 @@ sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
 sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
-"""
-Used to execute a prepared `SQLite.Stmt`.
-The 2nd method is a convenience method to pass in an SQL statement as a string
-which gets prepared and executed in one call.
-This method does not check for or return any results,
-hence it is only useful for database manipulation methods
-(i.e. ALTER, CREATE, UPDATE, DROP).
-To return results, see [`SQLite.Query`](@ref) above.
 
-With a prepared `stmt`,
-you can also pass a `values` iterable or `Dict`
-that will bind to parameters in the prepared query.
-
-"""
-function execute! end
-
-function execute!(stmt::Stmt; values=nothing)
-    bind!(stmt, values)
+function execute!(stmt::Stmt, args...; kw...)
+    bind!(stmt, args...; kw...)
     r = sqlite3_step(stmt.handle)
+    stmt.status = r
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)
     elseif r != SQLITE_ROW
@@ -323,10 +334,10 @@ function execute!(stmt::Stmt; values=nothing)
     return r
 end
 
-function execute!(db::DB, sql::AbstractString; values=nothing)
+function execute!(db::DB, sql::AbstractString, args...; kw...)
     stmt = Stmt(db, sql)
-    bind!(stmt, values)
-    r = execute!(stmt)
+    r = execute!(stmt, args...; kw...)
+    stmt.status = r
     finalize(stmt)
     return r
 end
@@ -513,7 +524,6 @@ function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) wh
  end
 
 include("tables.jl")
-include("structtypes.jl")
 
 """
 `SQLite.tables(db, sink=columntable)`
