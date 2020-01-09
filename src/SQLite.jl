@@ -1,7 +1,7 @@
 module SQLite
 
 using Random, Serialization
-using WeakRefStrings, StructTypes, DBInterface
+using WeakRefStrings, DBInterface
 
 struct SQLiteException <: Exception
     msg::AbstractString
@@ -59,6 +59,8 @@ mutable struct DB <: DBInterface.Connection
     end
 end
 DB() = DB(":memory:")
+DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
+DBInterface.close!(db::DB) = _close(db)
 
 function _close(db::DB)
     db.handle == C_NULL || sqlite3_close_v2(db.handle)
