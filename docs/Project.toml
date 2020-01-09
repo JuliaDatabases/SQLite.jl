@@ -1,6 +1,2 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
-
-[compat]
-Documenter = "~0.22"
