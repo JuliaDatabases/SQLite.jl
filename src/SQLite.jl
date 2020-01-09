@@ -321,6 +321,16 @@ sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
 sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
+"""
+    SQLite.execute!(db::SQLite.DB, sql, args... ; kw...)
+    SQLite.execute!(stmt::SQLite.Stmt, args...; kw...)
+
+An internal method that takes a `db` and `sql` arguments, or an already prepared `stmt` (2nd method),
+any positional parameters `args...` or named parameters `kw...`, binds any parameters, and executes the query.
+
+The sqlite return status code is returned. To return results from a query, please see [`DBInterface.execute!`](@ref).
+"""
+function execute! end
 
 function execute!(stmt::Stmt, args...; kw...)
     bind!(stmt, args...; kw...)
@@ -336,13 +346,7 @@ function execute!(stmt::Stmt, args...; kw...)
     return r
 end
 
-function execute!(db::DB, sql::AbstractString, args...; kw...)
-    stmt = Stmt(db, sql)
-    r = execute!(stmt, args...; kw...)
-    stmt.status = r
-    finalize(stmt)
-    return r
-end
+execute!(db::DB, sql::AbstractString, args...; kw...) = execute!(Stmt(db, sql), args...; kw...)
 
 """
     SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})
