@@ -5,7 +5,7 @@
 
 ## High-level interface
 ```@docs
-SQLite.Query
+DBInterface.execute!
 SQLite.load!
 ```
 

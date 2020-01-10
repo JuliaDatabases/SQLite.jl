@@ -42,17 +42,16 @@ The `SQLite.DB` will automatically closed/shutdown when it goes out of scope
 mutable struct DB <: DBInterface.Connection
     file::String
     handle::Ptr{Cvoid}
-    changes::Int
 
     function DB(f::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f, handle)
-            db = new(f, handle[], 0)
+            db = new(f, handle[])
             finalizer(_close, db)
             return db
         else # error
-            db = new(f, handle[], 0)
+            db = new(f, handle[])
             finalizer(_close, db)
             sqliteerror(db)
         end
@@ -106,7 +105,7 @@ end
 sqliteprepare(db, sql, stmt, null) = @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
 
 include("UDF.jl")
-export @sr_str, @register, register
+export @sr_str
 
 """
 `SQLite.clear!(stmt::SQLite.Stmt)`
@@ -172,12 +171,13 @@ bind!(stmt::Stmt, ::Nothing) = nothing
 function bind!(stmt::Stmt, args...; kw...)
     if !isempty(args)
         nparams = sqlite3_bind_parameter_count(stmt.handle)
-        @assert nparams == length(values) "you must provide values for all query placeholders"
+        @assert nparams == length(args) "you must provide values for all query placeholders"
         for i in 1:nparams
-            @inbounds bind!(stmt, i, values[i])
+            @inbounds bind!(stmt, i, args[i])
         end
     elseif !isempty(kw)
         nparams = sqlite3_bind_parameter_count(stmt.handle)
+        @assert nparams == length(kw) "you must provide values for all query placeholders"
         for i in 1:nparams
             name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
             @assert !isempty(name) "nameless parameters should be passed as a Vector"
@@ -536,21 +536,21 @@ include("tables.jl")
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=columntable) = Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
+tables(db::DB, sink=columntable) = DBInterface.execute!(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
 
 """
 `SQLite.indices(db, sink=columntable)`
 
 returns a list of indices in `db`
 """
-indices(db::DB, sink=columntable) = Query(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
+indices(db::DB, sink=columntable) = DBInterface.execute!(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
 
 """
 `SQLite.columns(db, table, sink=columntable)`
 
 returns a list of columns in `table`
 """
-columns(db::DB, table::AbstractString, sink=columntable) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
+columns(db::DB, table::AbstractString, sink=columntable) = DBInterface.execute!(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 """
 `SQLite.last_insert_rowid(db)`

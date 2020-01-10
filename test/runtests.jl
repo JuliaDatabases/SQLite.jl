@@ -1,5 +1,5 @@
 using SQLite
-using Test, Dates, Random, WeakRefStrings, Tables
+using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
 
 import Base: +, ==
 mutable struct Point{T}
@@ -17,121 +17,86 @@ end
 +(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
 
 
-dbfile = joinpath(dirname(pathof(SQLite)),"../test/Chinook_Sqlite.sqlite")
+dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(tempdir(), "test.sqlite")
 cp(dbfile, dbfile2; force=true)
 chmod(dbfile2, 0o777)
-db = SQLite.DB(dbfile2)
 
+@testset "basics" begin
+
+db = SQLite.DB(dbfile2)
 # regular SQLite tests
-ds = SQLite.Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
+ds = DBInterface.execute!(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
 @test keys(ds) == (:name,)
 @test length(ds.name) == 11
 
-results1 = SQLite.tables(db, columntable)
+results1 = SQLite.tables(db)
 @test isequal(ds, results1)
 
-results = SQLite.Query(db,"SELECT * FROM Employee;") |> DataFrame
-@test size(results) == (8, 15)
+results = DBInterface.execute!(db, "SELECT * FROM Employee;") |> columntable
+@test length(results) == 15
+@test length(results[1]) == 8
 
-SQLite.Query(db,"SELECT * FROM Album;")
-SQLite.Query(db,"SELECT a.*, b.AlbumId
-	FROM Artist a
-	LEFT OUTER JOIN Album b ON b.ArtistId = a.ArtistId
-	ORDER BY name;")
-
-r = SQLite.execute!(db,"create table temp as select * from album")
-r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test size(r) == (10,3)
-SQLite.execute!(db,"alter table temp add column colyear int")
-SQLite.execute!(db,"update temp set colyear = 2014")
-r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test size(r) == (10,4)
+DBInterface.execute!(db, "create table temp as select * from album")
+DBInterface.execute!(db, "alter table temp add column colyear int")
+DBInterface.execute!(db, "update temp set colyear = 2014")
+r = DBInterface.execute!(db, "select * from temp limit 10") |> columntable
+@test length(r) == 4 && length(r[1]) == 10
 @test all(Bool[x == 2014 for x in r[4]])
-SQLite.execute!(db,"alter table temp add column dates blob")
-stmt = SQLite.Stmt(db,"update temp set dates = ?")
-SQLite.bind!(stmt,1,Dates.Date(2014,1,1))
-SQLite.execute!(stmt)
-finalize(stmt); stmt = nothing; GC.gc()
-r = SQLite.Query(db,"select * from temp limit 10") |> DataFrame
-@test size(r) == (10,5)
+
+DBInterface.execute!(db, "alter table temp add column dates blob")
+stmt = DBInterface.prepare(db, "update temp set dates = ?")
+DBInterface.execute!(stmt, Date(2014,1,1))
+
+r = DBInterface.execute!(db, "select * from temp limit 10") |> columntable
+@test length(r) == 5 && length(r[1]) == 10
 @test typeof(r[5][1]) == Date
 @test all(Bool[x == Date(2014,1,1) for x in r[5]])
-SQLite.execute!(db,"drop table temp")
-
-dt = DataFrame([1.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0; 0.0 0.0 0.0 0.0 1.0])
-tablename = dt |> SQLite.load!(db, "temp")
-r = SQLite.Query(db,"select * from $tablename") |> DataFrame
-@test size(r) == (5, 5)
-@test names(r) == [:x1, :x2, :x3, :x4, :x5]
-SQLite.drop!(db,"$tablename")
-
-dt = DataFrame(zeros(5, 5))
-tablename = dt |> SQLite.load!(db, "temp")
-r = SQLite.Query(db, "select * from $tablename") |> DataFrame
-@test size(r) == (5,5)
-@test all([i for i in r[1]] .== 0.0)
-@test all([typeof(i) for i in r[1]] .== Float64)
-SQLite.drop!(db, "$tablename")
-
-dt = DataFrame(zeros(5, 5))
-tablename = dt |> SQLite.load!(db, "temp")
-r = SQLite.Query(db, "select * from $tablename") |> DataFrame
-@test size(r) == (5,5)
-@test all([i for i in r[1]] .== 0)
-@test all([typeof(i) for i in r[1]] .== Float64)
-
-dt = DataFrame(ones(Int, 5, 5))
-tablename = dt |> SQLite.load!(db, "temp")
-r = SQLite.Query(db, "select * from $tablename") |> DataFrame
-@test size(r) == (10,5)
-@test r[1] == [0,0,0,0,0,1,1,1,1,1]
-@test all([typeof(i) for i in r[1]] .== Float64)
-SQLite.drop!(db, "$tablename")
+DBInterface.execute!(db, "drop table temp")
 
 rng = Dates.Date(2013):Dates.Day(1):Dates.Date(2013,1,5)
-dt = DataFrame(i=collect(rng), j=collect(rng))
+dt = (i=collect(rng), j=collect(rng))
 tablename = dt |> SQLite.load!(db, "temp")
-r = SQLite.Query(db, "select * from $tablename") |> DataFrame
-@test size(r) == (5,2)
+r = DBInterface.execute!(db, "select * from $tablename") |> columntable
+@test length(r) == 2 && length(r[1]) == 5
 @test all([i for i in r[1]] .== collect(rng))
 @test all([typeof(i) for i in r[1]] .== Dates.Date)
 SQLite.drop!(db, "$tablename")
 
-SQLite.execute!(db, "CREATE TABLE temp AS SELECT * FROM Album")
-r = SQLite.Query(db, "SELECT * FROM temp LIMIT ?"; values=[3]) |> DataFrame
-@test size(r) == (3,3)
-r = SQLite.Query(db, "SELECT * FROM temp WHERE Title LIKE ?"; values=["%time%"]) |> DataFrame
+DBInterface.execute!(db, "CREATE TABLE temp AS SELECT * FROM Album")
+r = DBInterface.execute!(db, "SELECT * FROM temp LIMIT ?", 3) |> columntable
+@test length(r) == 3 && length(r[1]) == 3
+r = DBInterface.execute!(db, "SELECT * FROM temp WHERE Title LIKE ?", "%time%") |> columntable
 @test r[1] == [76, 111, 187]
-SQLite.execute!(db, "INSERT INTO temp VALUES (?1, ?3, ?2)"; values=[0,0,"Test Album"])
-r = SQLite.Query(db, "SELECT * FROM temp WHERE AlbumId = 0") |> DataFrame
+DBInterface.execute!(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", 0,0, "Test Album")
+r = DBInterface.execute!(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
 @test r[1][1] === 0
 @test r[2][1] == "Test Album"
 @test r[3][1] === 0
 SQLite.drop!(db, "temp")
 
-SQLite.execute!(db, "CREATE TABLE temp AS SELECT * FROM Album")
-r = SQLite.Query(db, "SELECT * FROM temp LIMIT :a"; values=Dict(:a => 3)) |> DataFrame
-@test size(r) == (3,3)
-r = SQLite.Query(db, "SELECT * FROM temp WHERE Title LIKE @word"; values=Dict(:word => "%time%")) |> DataFrame
+DBInterface.execute!(db, "CREATE TABLE temp AS SELECT * FROM Album")
+r = DBInterface.execute!(db, "SELECT * FROM temp LIMIT :a"; a=3) |> columntable
+@test length(r) == 3 && length(r[1]) == 3
+r = DBInterface.execute!(db, "SELECT * FROM temp WHERE Title LIKE @word"; word="%time%") |> columntable
 @test r[1] == [76, 111, 187]
-SQLite.execute!(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)"; values=Dict(:rid => 0, :lid => 0, :title => "Test Album"))
-r = SQLite.Query(db, "SELECT * FROM temp WHERE AlbumId = 0") |> DataFrame
+DBInterface.execute!(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)"; rid=0, lid=0, title="Test Album")
+r = DBInterface.execute!(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
 @test r[1][1] === 0
 @test r[2][1] == "Test Album"
 @test r[3][1] === 0
 SQLite.drop!(db, "temp")
 
-register(db, SQLite.regexp, nargs=2, name="regexp")
-r = SQLite.Query(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'")) |> DataFrame
+SQLite.register(db, SQLite.regexp, nargs=2, name="regexp")
+r = DBInterface.execute!(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'")) |> columntable
 @test r[1][1] == "Peacock"
 
 triple(x) = 3x
 @test_throws AssertionError SQLite.register(db, triple, nargs=186)
 SQLite.register(db, triple, nargs=1)
-r = SQLite.Query(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5") |> DataFrame
-s = SQLite.Query(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5") |> DataFrame
+r = DBInterface.execute!(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5") |> columntable
+s = DBInterface.execute!(db, "SELECT Total FROM Invoice ORDER BY InvoiceId LIMIT 5") |> columntable
 for (i, j) in zip(r[1], s[1])
     @test abs(i - 3*j) < 0.02
 end
@@ -139,65 +104,66 @@ end
 SQLite.@register db function add4(q)
     q+4
 end
-r = SQLite.Query(db, "SELECT add4(AlbumId) FROM Album") |> DataFrame
-s = SQLite.Query(db, "SELECT AlbumId FROM Album") |> DataFrame
+r = DBInterface.execute!(db, "SELECT add4(AlbumId) FROM Album") |> columntable
+s = DBInterface.execute!(db, "SELECT AlbumId FROM Album") |> columntable
 @test r[1][1] == s[1][1] + 4
 
 SQLite.@register db mult(args...) = *(args...)
-r = SQLite.Query(db, "SELECT Milliseconds, Bytes FROM Track") |> DataFrame
-s = SQLite.Query(db, "SELECT mult(Milliseconds, Bytes) FROM Track") |> DataFrame
+r = DBInterface.execute!(db, "SELECT Milliseconds, Bytes FROM Track") |> columntable
+s = DBInterface.execute!(db, "SELECT mult(Milliseconds, Bytes) FROM Track") |> columntable
 @test (r[1][1] * r[2][1]) == s[1][1]
-t = SQLite.Query(db, "SELECT mult(Milliseconds, Bytes, 3, 4) FROM Track") |> DataFrame
+t = DBInterface.execute!(db, "SELECT mult(Milliseconds, Bytes, 3, 4) FROM Track") |> columntable
 @test (r[1][1] * r[2][1] * 3 * 4) == t[1][1]
 
 SQLite.@register db sin
-u = SQLite.Query(db, "select sin(milliseconds) from track limit 5") |> DataFrame
+u = DBInterface.execute!(db, "select sin(milliseconds) from track limit 5") |> columntable
 @test all(-1 .< convert(Vector{Float64},u[1]) .< 1)
 
 SQLite.register(db, hypot; nargs=2, name="hypotenuse")
-v = SQLite.Query(db, "select hypotenuse(Milliseconds,bytes) from track limit 5") |> DataFrame
+v = DBInterface.execute!(db, "select hypotenuse(Milliseconds,bytes) from track limit 5") |> columntable
 @test [round(Int,i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
 SQLite.@register db str2arr(s) = Vector{UInt8}(s)
-r = SQLite.Query(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2") |> DataFrame
+r = DBInterface.execute!(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2") |> columntable
 @test r[1][2] == UInt8[0x45,0x64,0x77,0x61,0x72,0x64,0x73]
 
 SQLite.@register db big
-r = SQLite.Query(db, "SELECT big(5)") |> DataFrame
+r = DBInterface.execute!(db, "SELECT big(5)") |> columntable
 @test r[1][1] == big(5)
+@test typeof(r[1][1]) == BigInt
 
 doublesum_step(persist, current) = persist + current
 doublesum_final(persist) = 2 * persist
 SQLite.register(db, 0, doublesum_step, doublesum_final, name="doublesum")
-r = SQLite.Query(db, "SELECT doublesum(UnitPrice) FROM Track") |> DataFrame
-s = SQLite.Query(db, "SELECT UnitPrice FROM Track") |> DataFrame
+r = DBInterface.execute!(db, "SELECT doublesum(UnitPrice) FROM Track") |> columntable
+s = DBInterface.execute!(db, "SELECT UnitPrice FROM Track") |> columntable
 @test abs(r[1][1] - 2*sum(convert(Vector{Float64},s[1]))) < 0.02
 
 mycount(p, c) = p + 1
 SQLite.register(db, 0, mycount)
-r = SQLite.Query(db, "SELECT mycount(TrackId) FROM PlaylistTrack") |> DataFrame
-s = SQLite.Query(db, "SELECT count(TrackId) FROM PlaylistTrack") |> DataFrame
+r = DBInterface.execute!(db, "SELECT mycount(TrackId) FROM PlaylistTrack") |> columntable
+s = DBInterface.execute!(db, "SELECT count(TrackId) FROM PlaylistTrack") |> columntable
 @test r[1][1] == s[1][1]
 
 bigsum(p, c) = p + big(c)
 SQLite.register(db, big(0), bigsum)
-r = SQLite.Query(db, "SELECT bigsum(TrackId) FROM PlaylistTrack") |> DataFrame
-s = SQLite.Query(db, "SELECT TrackId FROM PlaylistTrack") |> DataFrame
-# @test r[1][1] == big(sum(convert(Vector{Int},s[1])))
+r = DBInterface.execute!(db, "SELECT bigsum(TrackId) FROM PlaylistTrack") |> columntable
+s = DBInterface.execute!(db, "SELECT TrackId FROM PlaylistTrack") |> columntable
+@test r[1][1] == big(sum(convert(Vector{Int},s[1])))
 
-SQLite.execute!(db, "CREATE TABLE points (x INT, y INT, z INT)")
-SQLite.execute!(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[1, 2, 3])
-SQLite.execute!(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[4, 5, 6])
-SQLite.execute!(db, "INSERT INTO points VALUES (?, ?, ?)"; values=[7, 8, 9])
+DBInterface.execute!(db, "CREATE TABLE points (x INT, y INT, z INT)")
+DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 1, 2, 3)
+DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 4, 5, 6)
+DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 7, 8, 9)
 
 sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 SQLite.register(db, Point3D(0, 0, 0), sumpoint)
-r = SQLite.Query(db, "SELECT sumpoint(x, y, z) FROM points") |> DataFrame
+r = DBInterface.execute!(db, "SELECT sumpoint(x, y, z) FROM points") |> columntable
 @test r[1][1] == Point3D(12, 15, 18)
 SQLite.drop!(db, "points")
 
 db2 = SQLite.DB()
-SQLite.execute!(db2, "CREATE TABLE tab1 (r REAL, s INT)")
+DBInterface.execute!(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
 @test_throws SQLite.SQLiteException SQLite.drop!(db2, "nonexistant")
 # should not throw anything
@@ -207,18 +173,15 @@ SQLite.drop!(db2, "tab2", ifexists=true)
 @test !in("tab2", SQLite.tables(db2)[1])
 
 SQLite.drop!(db, "sqlite_stat1")
-@test size(SQLite.tables(db)) == (11,1)
-
-finalize(db); db = nothing; GC.gc(); GC.gc();
+tables = SQLite.tables(db)
+@test length(tables[1]) == 11
 
 #Test removeduplicates!
 db = SQLite.DB() #In case the order of tests is changed
-ints = Int64[1,1,2,2,3]
-strs = String["A", "A", "B", "C", "C"]
-dt = DataFrame(ints=ints, strs=strs)
+dt = (ints=Int64[1,1,2,2,3], strs=["A", "A", "B", "C", "C"])
 tablename = dt |> SQLite.load!(db, "temp")
 SQLite.removeduplicates!(db, "temp", ["ints", "strs"]) #New format
-dt3 = SQLite.Query(db, "Select * from temp") |> DataFrame
+dt3 = DBInterface.execute!(db, "Select * from temp") |> columntable
 @test dt3[1][1] == 1
 @test dt3[2][1] == "A"
 @test dt3[1][2] == 2
@@ -228,33 +191,20 @@ dt3 = SQLite.Query(db, "Select * from temp") |> DataFrame
 
 # issue #104
 db = SQLite.DB() #In case the order of tests is changed
-SQLite.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
-stmt = SQLite.Stmt(db, "INSERT INTO tbl (a) VALUES (@a);")
+DBInterface.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
+stmt = DBInterface.prepare(db, "INSERT INTO tbl (a) VALUES (@a);")
 SQLite.bind!(stmt, "@a", 1)
 
 binddb = SQLite.DB()
-SQLite.execute!(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-SQLite.execute!(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)"; values=Any[missing, convert(Int64,6), 6.4, "some text", b"bytearray"])
-r = SQLite.Query(binddb, "SELECT * FROM temp") |> DataFrame
+DBInterface.execute!(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
+DBInterface.execute!(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", missing, Int64(6), 6.4, "some text", b"bytearray")
+r = DBInterface.execute!(binddb, "SELECT * FROM temp") |> columntable
 @test isa(r[1][1], Missing)
 @test isa(r[2][1], Int)
 @test isa(r[3][1], Float64)
 @test isa(r[4][1], AbstractString)
 @test isa(r[5][1], Base.CodeUnits)
-SQLite.execute!(binddb, "CREATE TABLE blobtest (a BLOB, b BLOB)")
-SQLite.execute!(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", b"b"])
-SQLite.execute!(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", BigInt(2)])
 
-p1 = Point(1, 2)
-p2 = Point(1.3, 2.4)
-SQLite.execute!(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p1])
-SQLite.execute!(binddb, "INSERT INTO blobtest VALUES (?1, ?2)"; values=Any[b"a", p2])
-r = SQLite.Query(binddb, "SELECT * FROM blobtest"; stricttypes=false) |> DataFrame
-for value in r[1]
-    @test value == b"a"
-end
-@test r[2][3] == p1
-@test r[2][4] == p2
 ############################################
 
 #test for #158
@@ -262,33 +212,23 @@ end
 
 #test for #180 (Query)
 param = "Hello!"
-query = SQLite.Query(SQLite.DB(), "SELECT ?1 UNION ALL SELECT ?1", values = Any[param])
+query = DBInterface.execute!(SQLite.DB(), "SELECT ?1 UNION ALL SELECT ?1", param)
 param = "x"
 for row in query
     @test row[1] == "Hello!"
     GC.gc() # this must NOT garbage collect the "Hello!" bound value
 end
 
-#test for #180 (bind! and clear!)
-params = tuple("string", UInt8[1, 2, 3]) # parameter types that can be finalized
-wkdict = WeakKeyDict{Any, Any}(param => 1 for param in params)
-stmt = SQLite.Stmt(SQLite.DB(), "SELECT ?, ?")
-SQLite.bind!(stmt, params)
-params = "x"
-GC.gc() # this MUST NOT garbage collect any of the bound values
-@test length(wkdict) == 2
-SQLite.clear!(stmt)
-GC.gc() # this will garbage collect the no longer bound values
-@test isempty(wkdict)
-
 db = SQLite.DB()
-SQLite.execute!(db, "CREATE TABLE T (a TEXT, PRIMARY KEY (a))")
+DBInterface.execute!(db, "CREATE TABLE T (a TEXT, PRIMARY KEY (a))")
 
-q = SQLite.Stmt(db, "INSERT INTO T VALUES(?)")
+q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
 SQLite.bind!(q, 1, "a")
-SQLite.execute!(q)
+DBInterface.execute!(q)
 
 SQLite.bind!(q, 1, "a")
-@test_throws SQLite.SQLiteException SQLite.execute!(q)
+@test_throws SQLite.SQLiteException DBInterface.execute!(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
+
+end # @testset
