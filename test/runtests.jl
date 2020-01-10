@@ -16,6 +16,7 @@ end
 ==(a::Point3D, b::Point3D) = a.x == b.x && a.y == b.y && a.z == b.z
 +(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
 
+triple(x) = 3x
 
 dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(tempdir(), "test.sqlite")
@@ -92,7 +93,6 @@ SQLite.register(db, SQLite.regexp, nargs=2, name="regexp")
 r = DBInterface.execute!(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'")) |> columntable
 @test r[1][1] == "Peacock"
 
-triple(x) = 3x
 @test_throws AssertionError SQLite.register(db, triple, nargs=186)
 SQLite.register(db, triple, nargs=1)
 r = DBInterface.execute!(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5") |> columntable
