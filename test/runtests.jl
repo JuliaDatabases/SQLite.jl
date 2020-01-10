@@ -17,6 +17,16 @@ end
 +(a::Point3D, b::Point3D) = Point3D(a.x + b.x, a.y + b.y, a.z + b.z)
 
 triple(x) = 3x
+function add4(q)
+    q+4
+end
+mult(args...) = *(args...)
+str2arr(s) = Vector{UInt8}(s)
+doublesum_step(persist, current) = persist + current
+doublesum_final(persist) = 2 * persist
+mycount(p, c) = p + 1
+bigsum(p, c) = p + big(c)
+sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 
 dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
 dbfile2 = joinpath(tempdir(), "test.sqlite")
@@ -101,14 +111,12 @@ for (i, j) in zip(r[1], s[1])
     @test abs(i - 3*j) < 0.02
 end
 
-SQLite.@register db function add4(q)
-    q+4
-end
+SQLite.@register db add4
 r = DBInterface.execute!(db, "SELECT add4(AlbumId) FROM Album") |> columntable
 s = DBInterface.execute!(db, "SELECT AlbumId FROM Album") |> columntable
 @test r[1][1] == s[1][1] + 4
 
-SQLite.@register db mult(args...) = *(args...)
+SQLite.@register db mult
 r = DBInterface.execute!(db, "SELECT Milliseconds, Bytes FROM Track") |> columntable
 s = DBInterface.execute!(db, "SELECT mult(Milliseconds, Bytes) FROM Track") |> columntable
 @test (r[1][1] * r[2][1]) == s[1][1]
@@ -123,7 +131,7 @@ SQLite.register(db, hypot; nargs=2, name="hypotenuse")
 v = DBInterface.execute!(db, "select hypotenuse(Milliseconds,bytes) from track limit 5") |> columntable
 @test [round(Int,i) for i in v[1]] == [11175621,5521062,3997652,4339106,6301714]
 
-SQLite.@register db str2arr(s) = Vector{UInt8}(s)
+SQLite.@register db str2arr
 r = DBInterface.execute!(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2") |> columntable
 @test r[1][2] == UInt8[0x45,0x64,0x77,0x61,0x72,0x64,0x73]
 
@@ -132,20 +140,17 @@ r = DBInterface.execute!(db, "SELECT big(5)") |> columntable
 @test r[1][1] == big(5)
 @test typeof(r[1][1]) == BigInt
 
-doublesum_step(persist, current) = persist + current
-doublesum_final(persist) = 2 * persist
 SQLite.register(db, 0, doublesum_step, doublesum_final, name="doublesum")
 r = DBInterface.execute!(db, "SELECT doublesum(UnitPrice) FROM Track") |> columntable
 s = DBInterface.execute!(db, "SELECT UnitPrice FROM Track") |> columntable
 @test abs(r[1][1] - 2*sum(convert(Vector{Float64},s[1]))) < 0.02
 
-mycount(p, c) = p + 1
+
 SQLite.register(db, 0, mycount)
 r = DBInterface.execute!(db, "SELECT mycount(TrackId) FROM PlaylistTrack") |> columntable
 s = DBInterface.execute!(db, "SELECT count(TrackId) FROM PlaylistTrack") |> columntable
 @test r[1][1] == s[1][1]
 
-bigsum(p, c) = p + big(c)
 SQLite.register(db, big(0), bigsum)
 r = DBInterface.execute!(db, "SELECT bigsum(TrackId) FROM PlaylistTrack") |> columntable
 s = DBInterface.execute!(db, "SELECT TrackId FROM PlaylistTrack") |> columntable
@@ -156,7 +161,6 @@ DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 1, 2, 3)
 DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 4, 5, 6)
 DBInterface.execute!(db, "INSERT INTO points VALUES (?, ?, ?)", 7, 8, 9)
 
-sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 SQLite.register(db, Point3D(0, 0, 0), sumpoint)
 r = DBInterface.execute!(db, "SELECT sumpoint(x, y, z) FROM points") |> columntable
 @test r[1][1] == Point3D(12, 15, 18)
