@@ -191,7 +191,7 @@ function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; 
             end
             sqlite3_step(stmt.handle)
             sqlite3_reset(stmt.handle)
-            state = iterate(rows)
+            state = iterate(rows, st)
             state === nothing && break
             row, st = state
         end

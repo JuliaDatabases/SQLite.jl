@@ -58,6 +58,7 @@ mutable struct DB <: DBInterface.Connection
     end
 end
 DB() = DB(":memory:")
+DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
 DBInterface.close!(db::DB) = _close(db)
 

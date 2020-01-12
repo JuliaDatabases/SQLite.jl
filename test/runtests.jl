@@ -36,6 +36,7 @@ chmod(dbfile2, 0o777)
 @testset "basics" begin
 
 db = SQLite.DB(dbfile2)
+db = DBInterface.connect(SQLite.DB, dbfile2)
 # regular SQLite tests
 ds = DBInterface.execute!(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
@@ -166,7 +167,7 @@ r = DBInterface.execute!(db, "SELECT sumpoint(x, y, z) FROM points") |> columnta
 @test r[1][1] == Point3D(12, 15, 18)
 SQLite.drop!(db, "points")
 
-db2 = SQLite.DB()
+db2 = DBInterface.connect(SQLite.DB)
 DBInterface.execute!(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
 @test_throws SQLite.SQLiteException SQLite.drop!(db2, "nonexistant")
@@ -198,6 +199,7 @@ db = SQLite.DB() #In case the order of tests is changed
 DBInterface.execute!(db, "CREATE TABLE IF NOT EXISTS tbl(a  INTEGER);")
 stmt = DBInterface.prepare(db, "INSERT INTO tbl (a) VALUES (@a);")
 SQLite.bind!(stmt, "@a", 1)
+SQLite.clear!(stmt)
 
 binddb = SQLite.DB()
 DBInterface.execute!(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
@@ -234,5 +236,61 @@ SQLite.bind!(q, 1, "a")
 @test_throws SQLite.SQLiteException DBInterface.execute!(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
+show(db)
+DBInterface.close!(db)
+
+db = SQLite.DB()
+DBInterface.execute!(db, "CREATE TABLE T (x INT UNIQUE)")
+
+q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
+SQLite.bind!(q, (1,))
+SQLite.execute!(q)
+r = DBInterface.execute!(db, "SELECT * FROM T") |> columntable
+@test r[1][1] == 1
+
+SQLite.bind!(q, [2])
+SQLite.execute!(q)
+r = DBInterface.execute!(db, "SELECT * FROM T") |> columntable
+@test r[1][1] == 1
+@test r[1][2] == 2
+
+q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
+SQLite.bind!(q, Dict(:x => 3))
+SQLite.execute!(q)
+r = DBInterface.execute!(db, "SELECT * FROM T") |> columntable
+@test r[1][1] == 1
+@test r[1][2] == 2
+@test r[1][3] == 3
+
+@test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
+
+SQLite.createindex!(db, "T", "x", "x_index"; unique=false)
+inds = SQLite.indices(db)
+@test inds.name[2] == "x"
+SQLite.dropindex!(db, "x")
+@test length(SQLite.indices(db).name) == 1
+
+cols = SQLite.columns(db, "T")
+@test cols.name[1] == "x"
+
+@test SQLite.last_insert_rowid(db) == 3
+
+r = DBInterface.execute!(db, "SELECT * FROM T")
+@test Tables.istable(r)
+@test Tables.rowaccess(r)
+@test Tables.rows(r) === r
+@test Base.IteratorSize(typeof(r)) ==  Base.SizeUnknown()
+@test eltype(r) == SQLite.Row
+row = first(r)
+SQLite.reset!(r)
+row2 = first(r)
+@test row[:x] == row2[:x]
+@test propertynames(row) == [:x]
+@test DBInterface.lastrowid(r) == 3
+
+r = DBInterface.execute!(db, "SELECT * FROM T") |> columntable
+SQLite.load!(nothing, Tables.rows(r), db, "T2", "T2", true)
+r2 = DBInterface.execute!(db, "SELECT * FROM T2") |> columntable
+@test r == r2
 
 end # @testset
