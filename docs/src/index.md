@@ -5,7 +5,7 @@
 
 ## High-level interface
 ```@docs
-DBInterface.execute!
+DBInterface.execute
 SQLite.load!
 ```
 
@@ -15,7 +15,6 @@ SQLite.load!
 SQLite.DB
 SQLite.Stmt
 SQLite.bind!
-SQLite.execute!
 SQLite.createtable!
 SQLite.drop!
 SQLite.dropindex!
