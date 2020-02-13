@@ -66,22 +66,23 @@ function Base.iterate(q::Query, ::Nothing)
     return Row(q), nothing
 end
 
-"Return the last row insert id from the sqlite database"
+"Return the last row insert id from the executed statement"
 DBInterface.lastrowid(q::Query) = last_insert_rowid(q.stmt.db)
+
 """
     DBInterface.prepare(db::SQLite.DB, sql::String)
 
 Prepare an SQL statement given as a string in the sqlite database; returns an `SQLite.Stmt` compiled object.
 See `DBInterface.execute`(@ref) for information on executing a prepared statement and passing parameters to bind.
-A `SQLite.Stmt` object can be closed (resourced freed) using `DBInterface.close!`(@ref).
+A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
 """
 DBInterface.prepare(db::DB, sql::String) = Stmt(db, sql)
 
 """
-    DBInterface.execute(db::SQLite.DB, sql::String, params)
-    DBInterface.execute(stmt::SQLite.Stmt, params)
+    DBInterface.execute(db::SQLite.DB, sql::String, [params])
+    DBInterface.execute(stmt::SQLite.Stmt, [params])
 
-Bind any positional (`params` as `Vector` or `Tuple`) or named (`params` as `NamedTuple`) parameters to an SQL statement, given by `db` and `sql` or
+Bind any positional (`params` as `Vector` or `Tuple`) or named (`params` as `NamedTuple` or `Dict`) parameters to an SQL statement, given by `db` and `sql` or
 as an already prepared statement `stmt`, execute the query and return an iterator of result rows.
 
 Note that the returned result row iterator only supports a single-pass, forward-only iteration of the result rows.
@@ -89,10 +90,6 @@ Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator
 
 The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tables.jl) interface, so results can be collected in any Tables.jl-compatible sink,
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
-
-Note that with DBInterface.jl support, results can also be managed via the ORM functionality in the [Strapping.jl](https://github.com/JuliaDatabases/Strapping.jl) package,
-which allows Julia object/struct deserialization from query results, like `Strapping.select(db, sql, T)` or `Strapping.select(db, sql, Vector{T})` to transform the resultset
-columns into instances of `T`. See Strapping.jl's documentation for additional details on this kind of deserialization.
 """
 function DBInterface.execute(stmt::Stmt, params=())
     status = execute(stmt, params)

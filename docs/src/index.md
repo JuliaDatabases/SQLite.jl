@@ -30,21 +30,16 @@ SQLite.@sr_str
 SQLite.sqlreturn
 ```
 
-* `SQLite.sqlreturn(contex, val)`
-
-  This function should never be called explicitly. Instead it is exported so that it can be overloaded when necessary, see below.
-
-
 ## User Defined Functions
 
 ### [SQLite Regular Expressions](@id regex)
 
 SQLite provides syntax for calling
 the [`regexp` function](http://sqlite.org/lang_expr.html#regexp)
-from inside `WHERE` clauses.
-Unfortunately, however,
-SQLite does not provide a default implementation of the `regexp` function,
-so SQLite.jl creates one automatically when you open a database.
+from inside `WHERE` clauses. Unfortunately, however, sqlite does not provide
+a default implementation of the `regexp` function. It can be easily added,
+however, by calling `SQLite.@register db SQLite.regexp`
+
 The function can be called in the following ways
 (examples using the [Chinook Database](http://chinookdatabase.codeplex.com/))
 
@@ -55,7 +50,7 @@ julia> db = SQLite.DB("Chinook_Sqlite.sqlite")
 
 julia> # using SQLite's in-built syntax
 
-julia> SQLite.Query(db, "SELECT FirstName, LastName FROM Employee WHERE LastName REGEXP 'e(?=a)'") |> DataFrame
+julia> DBInterface.execute(db, "SELECT FirstName, LastName FROM Employee WHERE LastName REGEXP 'e(?=a)'") |> DataFrame
 1x2 ResultSet
 | Row | "FirstName" | "LastName" |
 |-----|-------------|------------|
@@ -63,7 +58,7 @@ julia> SQLite.Query(db, "SELECT FirstName, LastName FROM Employee WHERE LastName
 
 julia> # explicitly calling the regexp() function
 
-julia> SQLite.Query(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)") |> DataFrame
 6x2 ResultSet
 | Row | "GenreId" | "Name"               |
 |-----|-----------|----------------------|
@@ -76,20 +71,20 @@ julia> SQLite.Query(db, "SELECT * FROM Genre WHERE regexp('e[trs]', Name)") |> D
 
 julia> # you can even do strange things like this if you really want
 
-julia> SQLite.Query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
 2x2 ResultSet
 | Row | "GenreId" | "Name" |
 |-----|-----------|--------|
 | 1   | 1         | "Rock" |
 | 2   | 2         | "Jazz" |
 
-julia> SQLite.Query(db, "INSERT INTO Genre VALUES (regexp('^word', 'this is a string'), 'My Genre')") |> DataFrame
+julia> DBInterface.execute(db, "INSERT INTO Genre VALUES (regexp('^word', 'this is a string'), 'My Genre')") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
 | 1   | 0               |
 
-julia> SQLite.Query(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM Genre ORDER BY GenreId LIMIT 2") |> DataFrame
 2x2 ResultSet
 | Row | "GenreId" | "Name"     |
 |-----|-----------|------------|
@@ -103,13 +98,13 @@ for example `"\y"` simply becomes `"y"`.
 For example, the following two queries are identical:
 
 ```julia
-julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
 | 1   | 0               |
 
-julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-d'") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM MediaType WHERE Name REGEXP '-d'") |> DataFrame
 1x1 ResultSet
 | Row | "Rows Affected" |
 |-----|-----------------|
@@ -124,7 +119,7 @@ The previous query can then successfully be run like so:
 ```julia
 julia> # manually escaping backslashes
 
-julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'") |> DataFrame
+julia> DBInterface.execute(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'") |> DataFrame
 1x2 ResultSet
 | Row | "MediaTypeId" | "Name"                        |
 |-----|---------------|-------------------------------|
@@ -132,7 +127,7 @@ julia> SQLite.Query(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'") |> D
 
 julia> # using sr"..."
 
-julia> SQLite.Query(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
+julia> DBInterface.execute(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
 1x2 ResultSet
 | Row | "MediaTypeId" | "Name"                        |
 |-----|---------------|-------------------------------|
@@ -147,13 +142,13 @@ but it may be changed in the future to escape only characters which are part of 
 
 SQLite.jl also provides a way
 that you can implement your own [Scalar Functions](https://www.sqlite.org/lang_corefunc.html).
-This is done using the [`register`](@ref) function and  macro.
+This is done using the [`SQLite.register`](@ref) function and  macro.
 
-[`@register`](@ref) takes a [`SQLite.DB`](@ref) and a function.
+[`SQLite.@register`](@ref) takes a [`SQLite.DB`](@ref) and a function.
 The function can be in block syntax:
 
 ```julia
-julia> @register db function add3(x)
+julia> SQLite.@register db function add3(x)
        x + 3
        end
 ```
@@ -161,13 +156,13 @@ julia> @register db function add3(x)
 inline function syntax:
 
 ```julia
-julia> @register db mult3(x) = 3 * x
+julia> SQLite.@register db mult3(x) = 3 * x
 ```
 
 and previously defined functions:
 
 ```julia
-julia> @register db sin
+julia> SQLite.@register db sin
 ```
 
 The [`SQLite.register`](@ref) function takes optional arguments;
@@ -213,8 +208,7 @@ For this reason the following method was defined:
 sqlreturn(context, val::Bool) = sqlreturn(context, int(val))
 ```
 
-Any new method defined for `sqlreturn`
-must take two arguments
+Any new method defined for `sqlreturn` must take two arguments
 and must pass the first argument straight through as the first argument.
 
 ### Custom Aggregate Functions

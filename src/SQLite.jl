@@ -16,27 +16,22 @@ sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))
 sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
 
 """
-Represents an SQLite database, either backed by an on-disk file or in-memory
+    `SQLite.DB()` => in-memory SQLite database
+    `SQLite.DB(file)` => file-based SQLite database
 
-Constructors:
+Constructors for a representation of an sqlite database, either backed by an on-disk file or in-memory.
 
-* `SQLite.DB()` => in-memory SQLite database
-* `SQLite.DB(file)` => file-based SQLite database
-
-`SQLite.DB(file::AbstractString)`
-
-`SQLite.DB` requires the `file` string argument
+`SQLite.DB` requires the `file` string argument in the 2nd definition
 as the name of either a pre-defined SQLite database to be opened,
 or if the file doesn't exist, a database will be created.
 Note that only sqlite 3.x version files are supported.
 
-The `SQLite.DB` object
-represents a single connection to an SQLite database.
+The `SQLite.DB` object represents a single connection to an SQLite database.
 All other SQLite.jl functions take an `SQLite.DB` as the first argument as context.
 
 To create an in-memory temporary database, call `SQLite.DB()`.
 
-The `SQLite.DB` will automatically closed/shutdown when it goes out of scope
+The `SQLite.DB` will be automatically closed/shutdown when it goes out of scope
 (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 """
 mutable struct DB <: DBInterface.Connection
@@ -71,6 +66,8 @@ end
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 
 """
+    SQLite.Stmt(db, sql) => SQL.Stmt
+
 Constructs and prepares (compiled by the SQLite library)
 an SQL statement in the context of the provided `db`.
 Note the SQL statement is not actually executed,
@@ -88,7 +85,7 @@ mutable struct Stmt <: DBInterface.Statement
     params::Dict{Int, Any}
     status::Int
 
-    function Stmt(db::DB,sql::AbstractString)
+    function Stmt(db::DB, sql::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
         stmt = new(db, handle[], Dict{Int, Any}(), 0)
@@ -111,9 +108,9 @@ include("UDF.jl")
 export @sr_str
 
 """
-`SQLite.clear!(stmt::SQLite.Stmt)`
+    SQLite.clear!(stmt::SQLite.Stmt)
 
-clears any bound values to a prepared SQL statement.
+Clears any bound values to a prepared SQL statement
 """
 function clear!(stmt::Stmt)
     sqlite3_clear_bindings(stmt.handle)
@@ -122,12 +119,12 @@ function clear!(stmt::Stmt)
 end
 
 """
-`SQLite.bind!(stmt::SQLite.Stmt, values)`
+    SQLite.bind!(stmt::SQLite.Stmt, values)
 
 bind `values` to parameters in a prepared [`SQLite.Stmt`](@ref). Values can be:
 
-* `Vector`; where each element will be bound to an SQL parameter by index order
-* `Dict`; where dict values will be bound to named SQL parameters by the dict key
+* `Vector` or `Tuple`: where each element will be bound to an SQL parameter by index order
+* `Dict` or `NamedTuple`; where values will be bound to named SQL parameters by the `Dict`/`NamedTuple` key
 
 Additional methods exist for working individual SQL parameters:
 
@@ -342,7 +339,7 @@ julia> db = SQLite.DB(mktemp()[1]);
 
 julia> tbl |> SQLite.load!(db, "temp");
 
-julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN ('a','b','c')") |> DataFrame
+julia> DBInterface.execute(db,"SELECT * FROM temp WHERE label IN ('a','b','c')") |> DataFrame
 4×2 DataFrame
 │ Row │ label   │ value    │
 │     │ String⍰ │ Float64⍰ │
@@ -354,7 +351,7 @@ julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN ('a','b','c')") |> Dat
 
 julia> q = ['a','b','c'];
 
-julia> SQLite.Query(db,"SELECT * FROM temp WHERE label IN (\$(SQLite.esc_id(q)))")
+julia> DBInterface.execute(db,"SELECT * FROM temp WHERE label IN (\$(SQLite.esc_id(q)))") |> DataFrame
 4×2 DataFrame
 │ Row │ label   │ value    │
 │     │ String⍰ │ Float64⍰ │
@@ -372,10 +369,8 @@ esc_id(X::AbstractVector{S}) where {S <: AbstractString} = join(map(esc_id, X), 
 
 # Transaction-based commands
 """
-`SQLite.transaction(db, mode="DEFERRED")`
-
-`SQLite.transaction(func, db)`
-
+    SQLite.transaction(db, mode="DEFERRED")
+    SQLite.transaction(func, db)
 
 Begin a transaction in the specified `mode`, default = "DEFERRED".
 
@@ -414,10 +409,8 @@ end
 end
 
 """
-`SQLite.commit(db)`
-
-`SQLite.commit(db, name)`
-
+    SQLite.commit(db)
+    SQLite.commit(db, name)
 
 commit a transaction or named savepoint
 """
@@ -427,10 +420,8 @@ commit(db) = execute(db, "COMMIT TRANSACTION;")
 commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 
 """
-`SQLite.rollback(db)`
-
-`SQLite.rollback(db, name)`
-
+    SQLite.rollback(db)
+    SQLite.rollback(db, name)
 
 rollback transaction or named savepoint
 """
@@ -440,7 +431,7 @@ rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
 rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
 """
-`SQLite.drop!(db, table; ifexists::Bool=true)`
+    SQLite.drop!(db, table; ifexists::Bool=true)
 
 drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist
 """
@@ -454,7 +445,7 @@ function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
 end
 
 """
-`SQLite.dropindex!(db, index; ifexists::Bool=true)`
+    SQLite.dropindex!(db, index; ifexists::Bool=true)
 
 drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist
 """
@@ -467,6 +458,8 @@ function dropindex!(db::DB, index::AbstractString; ifexists::Bool=false)
 end
 
 """
+    SQLite.createindex!(db, table, index, cols; unique=true, ifnotexists=false)
+
 create the SQLite index `index` on the table `table` using `cols`,
 which may be a single column or vector of columns.
 `unique` specifies whether the index will be unique or not.
@@ -484,8 +477,9 @@ function createindex!(db::DB, table::AbstractString, index::AbstractString, cols
 end
 
 """
-Removes duplicate rows from `table`
-based on the values in `cols`, which is an array of column names.
+    SQLite.removeduplicates!(db, table, cols)
+
+Removes duplicate rows from `table` based on the values in `cols`, which is an array of column names.
 
 A convenience method for the common task of removing duplicate
 rows in a dataset according to some subset of columns that make up a "primary key".
@@ -506,35 +500,35 @@ function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) wh
 include("tables.jl")
 
 """
-`SQLite.tables(db, sink=columntable)`
+    SQLite.tables(db, sink=columntable)
 
 returns a list of tables in `db`
 """
 tables(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
 
 """
-`SQLite.indices(db, sink=columntable)`
+    SQLite.indices(db, sink=columntable)
 
 returns a list of indices in `db`
 """
 indices(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
 
 """
-`SQLite.columns(db, table, sink=columntable)`
+    SQLite.columns(db, table, sink=columntable)
 
 returns a list of columns in `table`
 """
 columns(db::DB, table::AbstractString, sink=columntable) = DBInterface.execute(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 """
-`SQLite.last_insert_rowid(db)`
+    SQLite.last_insert_rowid(db)
 
 returns the auto increment id of the last row
 """
 last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
 
 """
-`SQLite.enable_load_extension(db, enable::Bool=true)`
+    SQLite.enable_load_extension(db, enable::Bool=true)
 
 Enables extension loading (off by default) on the sqlite database `db`. Pass `false` as the second argument to disable.
 """
