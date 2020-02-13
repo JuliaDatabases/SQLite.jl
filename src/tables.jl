@@ -141,7 +141,11 @@ function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5
     return load!(sch, rows, db, nm, name, status == SQLITE_DONE; kwargs...)
 end
 
+checkdupnames(names) = length(unique(map(x->lowercase(String(x)), names))) == length(names) || error("duplicate case-insensitive column names detected; sqlite doesn't allow duplicate column names and treats them case insensitive")
+
 function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false)
+    # check for case-insensitive duplicate column names (sqlite doesn't allow)
+    checkdupnames(sch.names)
     # create table if needed
     shouldcreate && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
     # build insert statement
@@ -168,6 +172,7 @@ function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; 
     row, st = state
     names = propertynames(row)
     sch = Tables.Schema(names, nothing)
+    checkdupnames(sch.names)
     # create table if needed
     shouldcreate && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
     # build insert statement
