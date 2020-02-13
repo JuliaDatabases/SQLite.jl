@@ -17,7 +17,6 @@ end
 getquery(r::Row) = getfield(r, :q)
 
 Tables.isrowtable(::Type{Query}) = true
-Tables.schema(q::Query) = Tables.Schema(q.names, q.types)
 
 Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
