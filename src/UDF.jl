@@ -189,7 +189,7 @@ function finalfunc(init, func, fsym=Symbol(string(func)*"_final"))
 end
 
 """
-    @register db function
+    SQLite.@register db function
 
 User-facing macro for convenience in registering a simple function
 with no configurations needed
@@ -199,6 +199,9 @@ macro register(db, func)
 end
 
 """
+    SQLite.register(db, func)
+    SQLite.register(db, init, step_func, final_func; nargs=-1, name=string(step), isdeterm=true)
+
 Register a scalar (first method) or aggregate (second method) function
 with a [`SQLite.DB`](@ref).
 """
