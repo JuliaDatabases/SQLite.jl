@@ -1,7 +1,7 @@
 module SQLite
 
 using Random, Serialization
-using WeakRefStrings, DataFrames
+using WeakRefStrings, DBInterface
 
 struct SQLiteException <: Exception
     msg::AbstractString
@@ -39,26 +39,28 @@ To create an in-memory temporary database, call `SQLite.DB()`.
 The `SQLite.DB` will automatically closed/shutdown when it goes out of scope
 (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
 """
-mutable struct DB
+mutable struct DB <: DBInterface.Connection
     file::String
     handle::Ptr{Cvoid}
-    changes::Int
 
     function DB(f::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f, handle)
-            db = new(f, handle[], 0)
+            db = new(f, handle[])
             finalizer(_close, db)
             return db
         else # error
-            db = new(f, handle[], 0)
+            db = new(f, handle[])
             finalizer(_close, db)
             sqliteerror(db)
         end
     end
 end
 DB() = DB(":memory:")
+DBInterface.connect(::Type{DB}) = DB()
+DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
+DBInterface.close!(db::DB) = _close(db)
 
 function _close(db::DB)
     db.handle == C_NULL || sqlite3_close_v2(db.handle)
@@ -66,7 +68,7 @@ function _close(db::DB)
     return
 end
 
-Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", db.file == ":memory:" ? "in-memory" : "\"$(db.file)\"", ")"))
+Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 
 """
 Constructs and prepares (compiled by the SQLite library)
@@ -75,24 +77,27 @@ Note the SQL statement is not actually executed,
 but only compiled
 (mainly for usage where the same statement
 is repeated with different parameters bound as values.
-See [`SQLite.bind!`](@ref) below).
 
-The `SQLite.Stmt` will automatically closed/shutdown when it goes out of scope (i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
-
+The `SQLite.Stmt` will be automatically closed/shutdown when it goes out of scope
+(i.e. the end of the Julia session, end of a function call wherein it was created, etc.),
+but you can close `DBInterface.close!(stmt)` to explicitly and immediately close the statement.
 """
-mutable struct Stmt
+mutable struct Stmt <: DBInterface.Statement
     db::DB
     handle::Ptr{Cvoid}
     params::Dict{Int, Any}
+    status::Int
 
     function Stmt(db::DB,sql::AbstractString)
         handle = Ref{Ptr{Cvoid}}()
         sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
-        stmt = new(db, handle[], Dict{Int, Any}())
+        stmt = new(db, handle[], Dict{Int, Any}(), 0)
         finalizer(_close, stmt)
         return stmt
     end
 end
+
+DBInterface.close!(stmt::Stmt) = _close(stmt)
 
 function _close(stmt::Stmt)
     stmt.handle == C_NULL || sqlite3_finalize(stmt.handle)
@@ -103,7 +108,7 @@ end
 sqliteprepare(db, sql, stmt, null) = @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
 
 include("UDF.jl")
-export @sr_str, @register, register
+export @sr_str
 
 """
 `SQLite.clear!(stmt::SQLite.Stmt)`
@@ -164,41 +169,36 @@ From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
 """
 function bind! end
 
-bind!(stmt::Stmt, ::Nothing) = nothing
-
-function bind!(stmt::Stmt, values::Tuple)
+function bind!(stmt::Stmt, params::Union{NamedTuple, Dict})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all query placeholders"
-    for i in 1:nparams
-        @inbounds bind!(stmt, i, values[i])
-    end
-end
-function bind!(stmt::Stmt, values::Vector)
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all query placeholders"
-    for i in 1:nparams
-        @inbounds bind!(stmt, i, values[i])
-    end
-end
-function bind!(stmt::Stmt, values::Dict{Symbol, V}) where {V}
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(params) "you must provide values for all query placeholders"
     for i in 1:nparams
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         @assert !isempty(name) "nameless parameters should be passed as a Vector"
         # name is returned with the ':', '@' or '$' at the start
         sym = Symbol(name[2:end])
-        haskey(values, sym) || throw(SQLiteException("`$name` not found in values Dict to bind to sql statement"))
-        bind!(stmt, i, values[sym])
+        haskey(params, sym) || throw(SQLiteException("`$name` not found in values keyword arguments to bind to sql statement"))
+        bind!(stmt, i, params[sym])
     end
 end
+
+function bind!(stmt::Stmt, values::Union{Vector, Tuple})
+    nparams = sqlite3_bind_parameter_count(stmt.handle)
+    @assert nparams == length(values) "you must provide values for all query placeholders"
+    for i in 1:nparams
+        @inbounds bind!(stmt, i, values[i])
+    end
+end
+
 # Binding parameters to SQL statements
-function bind!(stmt::Stmt,name::AbstractString, val)
+function bind!(stmt::Stmt, name::AbstractString, val)
     i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
     return bind!(stmt, i, val)
 end
+
 bind!(stmt::Stmt, i::Int, val::AbstractFloat)  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_double(stmt.handle, i ,Float64(val)); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int32)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(stmt.handle, i ,val); return nothing)
 bind!(stmt::Stmt, i::Int, val::Int64)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int64(stmt.handle, i ,val); return nothing)
@@ -295,24 +295,21 @@ sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
 """
-Used to execute a prepared `SQLite.Stmt`.
-The 2nd method is a convenience method to pass in an SQL statement as a string
-which gets prepared and executed in one call.
-This method does not check for or return any results,
-hence it is only useful for database manipulation methods
-(i.e. ALTER, CREATE, UPDATE, DROP).
-To return results, see [`SQLite.Query`](@ref) above.
+    SQLite.execute(db::SQLite.DB, sql, [params])
+    SQLite.execute(stmt::SQLite.Stmt, [params])
 
-With a prepared `stmt`,
-you can also pass a `values` iterable or `Dict`
-that will bind to parameters in the prepared query.
+An internal method that takes a `db` and `sql` arguments, or an already prepared `stmt` (2nd method),
+any positional parameters (`params` given as `Vector` or `Tuple`) or named parameters (`params` given as `Dict` or `NamedTuple`),
+binds any parameters, and executes the query.
 
+The sqlite return status code is returned. To return results from a query, please see [`DBInterface.execute`](@ref).
 """
-function execute! end
+function execute end
 
-function execute!(stmt::Stmt; values=nothing)
-    bind!(stmt, values)
+function execute(stmt::Stmt, params=())
+    bind!(stmt, params)
     r = sqlite3_step(stmt.handle)
+    stmt.status = r
     if r == SQLITE_DONE
         sqlite3_reset(stmt.handle)
     elseif r != SQLITE_ROW
@@ -323,13 +320,7 @@ function execute!(stmt::Stmt; values=nothing)
     return r
 end
 
-function execute!(db::DB, sql::AbstractString; values=nothing)
-    stmt = Stmt(db, sql)
-    bind!(stmt, values)
-    r = execute!(stmt)
-    finalize(stmt)
-    return r
-end
+execute(db::DB, sql::AbstractString, params=()) = execute(Stmt(db, sql), params)
 
 """
     SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})
@@ -397,18 +388,18 @@ In the second method, `func` is executed within a transaction (the transaction b
 function transaction end
 
 function transaction(db, mode="DEFERRED")
-    execute!(db, "PRAGMA temp_store=MEMORY;")
+    execute(db, "PRAGMA temp_store=MEMORY;")
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
-        execute!(db, "BEGIN $(mode) TRANSACTION;")
+        execute(db, "BEGIN $(mode) TRANSACTION;")
     else
-        execute!(db, "SAVEPOINT $(mode);")
+        execute(db, "SAVEPOINT $(mode);")
     end
 end
 
 @inline function transaction(f::Function, db)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
-    execute!(db, "PRAGMA synchronous = OFF;")
+    execute(db, "PRAGMA synchronous = OFF;")
     transaction(db, name)
     try
         f()
@@ -418,7 +409,7 @@ end
     finally
         # savepoints are not released on rollback
         commit(db, name)
-        execute!(db, "PRAGMA synchronous = ON;")
+        execute(db, "PRAGMA synchronous = ON;")
     end
 end
 
@@ -432,8 +423,8 @@ commit a transaction or named savepoint
 """
 function commit end
 
-commit(db) = execute!(db, "COMMIT TRANSACTION;")
-commit(db, name) = execute!(db, "RELEASE SAVEPOINT $(name);")
+commit(db) = execute(db, "COMMIT TRANSACTION;")
+commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
 
 """
 `SQLite.rollback(db)`
@@ -445,8 +436,8 @@ rollback transaction or named savepoint
 """
 function rollback end
 
-rollback(db) = execute!(db, "ROLLBACK TRANSACTION;")
-rollback(db, name) = execute!(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
+rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
+rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
 """
 `SQLite.drop!(db, table; ifexists::Bool=true)`
@@ -456,9 +447,9 @@ drop the SQLite table `table` from the database `db`; `ifexists=true` will preve
 function drop!(db::DB, table::AbstractString; ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db, "DROP TABLE $exists $(esc_id(table))")
+        execute(db, "DROP TABLE $exists $(esc_id(table))")
     end
-    execute!(db, "VACUUM")
+    execute(db, "VACUUM")
     return
 end
 
@@ -470,7 +461,7 @@ drop the SQLite index `index` from the database `db`; `ifexists=true` will not r
 function dropindex!(db::DB, index::AbstractString; ifexists::Bool=false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
-        execute!(db, "DROP INDEX $exists $(esc_id(index))")
+        execute(db, "DROP INDEX $exists $(esc_id(index))")
     end
     return
 end
@@ -486,9 +477,9 @@ function createindex!(db::DB, table::AbstractString, index::AbstractString, cols
     u = unique ? "UNIQUE" : ""
     exists = ifnotexists ? "IF NOT EXISTS" : ""
     transaction(db) do
-        execute!(db, "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))")
+        execute(db, "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))")
     end
-    execute!(db, "ANALYZE $index")
+    execute(db, "ANALYZE $index")
     return
 end
 
@@ -506,34 +497,34 @@ function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) wh
     end
     colsstr = chop(colsstr)
     transaction(db) do
-        execute!(db, "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
+        execute(db, "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));")
     end
-    execute!(db, "ANALYZE $table")
+    execute(db, "ANALYZE $table")
     return
  end
 
 include("tables.jl")
 
 """
-`SQLite.tables(db, sink=DataFrame)`
+`SQLite.tables(db, sink=columntable)`
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
+tables(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
 
 """
-`SQLite.indices(db, sink=DataFrame)`
+`SQLite.indices(db, sink=columntable)`
 
 returns a list of indices in `db`
 """
-indices(db::DB, sink=DataFrame) = Query(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
+indices(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
 
 """
-`SQLite.columns(db, table, sink=DataFrame)`
+`SQLite.columns(db, table, sink=columntable)`
 
 returns a list of columns in `table`
 """
-columns(db::DB, table::AbstractString, sink=DataFrame) = Query(db, "PRAGMA table_info($(esc_id(table)))") |> sink
+columns(db::DB, table::AbstractString, sink=columntable) = DBInterface.execute(db, "PRAGMA table_info($(esc_id(table)))") |> sink
 
 """
 `SQLite.last_insert_rowid(db)`
