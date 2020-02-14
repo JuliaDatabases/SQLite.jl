@@ -9,3 +9,4 @@ CMakeLists.txt.user
 /test/test.sqlite
 /test/test2.sqlite
 /docs/build
+.vscode
