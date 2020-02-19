@@ -69,13 +69,13 @@ end
 DBInterface.lastrowid(q::Query) = last_insert_rowid(q.stmt.db)
 
 """
-    DBInterface.prepare(db::SQLite.DB, sql::String)
+    DBInterface.prepare(db::SQLite.DB, sql::AbstractString)
 
 Prepare an SQL statement given as a string in the sqlite database; returns an `SQLite.Stmt` compiled object.
 See `DBInterface.execute`(@ref) for information on executing a prepared statement and passing parameters to bind.
 A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
 """
-DBInterface.prepare(db::DB, sql::String) = Stmt(db, sql)
+DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
 
 """
     DBInterface.execute(db::SQLite.DB, sql::String, [params])

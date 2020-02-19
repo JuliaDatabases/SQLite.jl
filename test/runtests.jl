@@ -258,6 +258,12 @@ r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
 @test r[1][2] == 2
 @test r[1][3] == 3
 
+
+r = DBInterface.execute(db, strip("   SELECT * FROM T  ")) |> columntable
+@test r[1][1] == 1
+@test r[1][2] == 2
+@test r[1][3] == 3
+
 @test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
 
 SQLite.createindex!(db, "T", "x", "x_index"; unique=false)
