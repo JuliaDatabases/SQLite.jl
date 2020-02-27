@@ -120,13 +120,14 @@ function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types};
 end
 
 """
-    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false)
-    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false)
+    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, analyze::Bool=false)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
 
 `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
 `ifnotexists=false` will throw an error if `tablename` already exists in `db`
+`analyze=true` will execute `ANALYZE` at the end of the insert
 """
 function load! end
 
@@ -143,7 +144,7 @@ end
 
 checkdupnames(names) = length(unique(map(x->lowercase(String(x)), names))) == length(names) || error("duplicate case-insensitive column names detected; sqlite doesn't allow duplicate column names and treats them case insensitive")
 
-function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false)
+function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
     # create table if needed
@@ -161,12 +162,12 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shoul
             sqlite3_reset(stmt.handle)
         end
     end
-    execute(db, "ANALYZE $nm")
+    analyze && execute(db, "ANALYZE $nm")
     return name
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false)
+function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     state = iterate(rows)
     state === nothing && return nm
     row, st = state
@@ -191,6 +192,7 @@ function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; 
             row, st = state
         end
     end
-    execute(db, "ANALYZE $nm")
+    analyze && execute(db, "ANALYZE $nm")
+
     return name
 end

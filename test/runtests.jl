@@ -177,7 +177,7 @@ SQLite.drop!(db2, "nonexistant", ifexists=true)
 SQLite.drop!(db2, "tab2", ifexists=true)
 @test !in("tab2", SQLite.tables(db2)[1])
 
-SQLite.drop!(db, "sqlite_stat1")
+SQLite.drop!(db, "sqlite_stat1", ifexists=true)
 tables = SQLite.tables(db)
 @test length(tables[1]) == 11
 
