@@ -315,3 +315,6 @@ const SQLITE_TESTCTRL_LAST =                     19 #
 
 #Virtual Table Configuration Options
 const SQLITE_VTAB_CONSTRAINT_SUPPORT =  1 #
+
+# Error code for errors that did not come directly from SQLite
+const NON_SQLITE_ERROR =                         -1

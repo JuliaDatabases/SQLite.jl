@@ -8,6 +8,16 @@ export DBInterface
 
 struct SQLiteException <: Exception
     msg::AbstractString
+    errcode::Int64
+    SQLiteException(msg::AbstractString, code::Integer) = new(msg, code)
+    SQLiteException(msg::AbstractString) = new(msg, -1) # See consts.jl/NON_SQLITE_ERROR
+end
+function Base.show(io::IO, ex::SQLiteException)
+    if ex.errcode < 0
+        print(io, ex.msg)
+    else
+        print(io, string("(", ex.errcode, ") ", ex.msg))
+    end
 end
 
 include("consts.jl")
@@ -15,8 +25,8 @@ include("api.jl")
 
 # Normal constructor from filename
 sqliteopen(file, handle) = sqlite3_open(file, handle)
-sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
-sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
+sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)), sqlite3_errcode(db.handle)))
+sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)), sqlite3_errcode(db.handle))
 
 """
     `SQLite.DB()` => in-memory SQLite database
@@ -565,11 +575,10 @@ macro lockretry(timeout, ex)
                 $(esc(ex))
                 succeeded = true
             catch e
-                if isa(e, SQLite.SQLiteException) && e.msg == "database is locked"
+                if isa(e, SQLite.SQLiteException) && (e.errcode == SQLITE_BUSY || e.errcode == SQLITE_LOCKED)
                     if dotimeout
                         local elapsedtime::Millisecond = now() - starttime
                         if elapsedtime > Millisecond(timeoutmillis)
-                            println("ELAPSED TIME EXPIRED")
                             rethrow(e)
                         end
                     end
