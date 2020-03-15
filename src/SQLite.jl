@@ -573,7 +573,6 @@ macro lockretry(timeout, ex)
                             rethrow(e)
                         end
                     end
-                    println("LOCKRETRY SLEEPING")
                     sleep(rand()/1000)
                 else
                     rethrow(e)
