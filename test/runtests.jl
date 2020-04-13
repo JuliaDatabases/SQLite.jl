@@ -342,7 +342,7 @@ end
 # database is locked for too long
 #
 # Returns true if the update succeeded, or false if it timed out
-@everywhere function shortupdate(timeout::Int64)::Bool
+@everywhere function shortupdate(timeout::Number)::Bool
   local result::Bool = true
 
   local db::SQLite.DB = SQLite.DB(LOCKDBFILE)
@@ -357,7 +357,7 @@ end
 end
 
 # Run a lock test with a given timeout.
-function runlocktest(timeout::Int64)::Bool
+function runlocktest(timeout::Number)::Bool
 
   # Kick off the long update
   longfuture = @spawnat 2 longupdate()
@@ -384,8 +384,10 @@ end
 initlockdb()
 
 @test runlocktest(1) === false # Will time out
+@test runlocktest(0.75) === false # Decimal number (will time out)
 @test runlocktest(60) === true # Long timeout passes
 @test runlocktest(0) === true # Indefinite timeout passes
+@test runlocktest(-1) === true # Negative (indefinite) timeout passes
 
 # Clean up
 if isfile(LOCKDBFILE)
