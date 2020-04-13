@@ -563,9 +563,8 @@ If `timeout ≤ 0`, the expression will be retried forever until it succeeds.
 """
 macro lockretry(timeout, ex)
     return quote
-
-        local timeoutmillis::Millisecond = Millisecond($timeout * 1000)
-        local dotimeout::Bool = $timeout > 0
+        local timeoutmillis::Millisecond = Millisecond($(esc(timeout)) * 1000)
+        local dotimeout::Bool = $(esc(timeout)) > 0
 
         local succeeded::Bool = false
         local starttime::Millisecond = now()

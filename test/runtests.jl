@@ -1,5 +1,5 @@
 using SQLite
-using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
+using Test, Dates, Random, WeakRefStrings, Tables, DBInterface, Distributed
 
 import Base: +, ==
 mutable struct Point{T}
@@ -298,4 +298,98 @@ r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
 # throw informative error on duplicate column names #193
 @test_throws ErrorException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
 
-end # @testset
+end # basics @testset
+
+
+# Test set for lockretry macro
+@testset "lockretry" begin
+
+addprocs(2)
+
+@everywhere using SQLite
+@everywhere LOCKDBFILE = joinpath(tempdir(), "lockretry.sqlite")
+
+# Initialise the database used for lock testing
+function initlockdb()
+  local db::SQLite.DB = SQLite.DB(LOCKDBFILE)
+  local createtablesql::String = "CREATE TABLE 'numbers' ('value' INTEGER)"
+  DBInterface.execute(db, createtablesql)
+
+  DBInterface.execute(db, "BEGIN TRANSACTION")
+
+  local numbersql::String = "INSERT INTO numbers (value) VALUES ($(rand(1:10000)))"
+  for i in 1:1000000
+    DBInterface.execute(db, numbersql)
+  end
+
+  DBInterface.execute(db, "COMMIT")
+end
+
+# Perform a long-running transaction
+@everywhere function longupdate()
+  local db::SQLite.DB = SQLite.DB(LOCKDBFILE)
+
+  DBInterface.execute(db, "BEGIN TRANSACTION")
+
+  for i in 1:50
+    DBInterface.execute(db, "UPDATE numbers SET value = $(rand(1:10000))")
+  end
+
+  DBInterface.execute(db, "COMMIT")
+end
+
+# Perform a short transaction that can time out if the
+# database is locked for too long
+#
+# Returns true if the update succeeded, or false if it timed out
+@everywhere function shortupdate(timeout::Int64)::Bool
+  local result::Bool = true
+
+  local db::SQLite.DB = SQLite.DB(LOCKDBFILE)
+
+  try
+    @SQLite.lockretry timeout DBInterface.execute(db, "UPDATE numbers SET value = $(rand(1:10000))")
+  catch e
+    result = false
+  end
+
+  return result
+end
+
+# Run a lock test with a given timeout.
+function runlocktest(timeout::Int64)::Bool
+
+  # Kick off the long update
+  longfuture = @spawnat 2 longupdate()
+  sleep(0.5)
+
+  # Attempt to run the short update
+  shortfuture = @spawnat 3 shortupdate(timeout)
+
+  # Get the result of the short update
+  local testresult::Bool = fetch(shortfuture)
+
+  # Wait for the long update to finish
+  fetch(longfuture)
+
+  return testresult
+end
+
+# Delete the DB file if it exists
+if isfile(LOCKDBFILE)
+  rm(LOCKDBFILE)
+end
+
+# Initialise the test database
+initlockdb()
+
+@test runlocktest(1) === false # Will time out
+@test runlocktest(60) === true # Long timeout passes
+@test runlocktest(0) === true # Indefinite timeout passes
+
+# Clean up
+if isfile(LOCKDBFILE)
+  rm(LOCKDBFILE)
+end
+
+end # lockretry @testset
