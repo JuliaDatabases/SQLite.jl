@@ -389,9 +389,4 @@ initlockdb()
 @test runlocktest(0) === true # Indefinite timeout passes
 @test runlocktest(-1) === true # Negative (indefinite) timeout passes
 
-# Clean up
-if isfile(LOCKDBFILE)
-  rm(LOCKDBFILE)
-end
-
 end # lockretry @testset
