@@ -181,7 +181,7 @@ function bind!(stmt::Stmt, params::Union{NamedTuple, Dict})
     end
 end
 
-function bind!(stmt::Stmt, values::Union{Vector, Tuple})
+function bind!(stmt::Stmt, values::Union{AbstractVector, Tuple})
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
@@ -306,6 +306,7 @@ The sqlite return status code is returned. To return results from a query, pleas
 function execute end
 
 function execute(stmt::Stmt, params=())
+    sqlite3_reset(stmt.handle)
     bind!(stmt, params)
     r = sqlite3_step(stmt.handle)
     stmt.status = r
