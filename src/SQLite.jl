@@ -58,6 +58,8 @@ DB() = DB(":memory:")
 DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
 DBInterface.close!(db::DB) = _close(db)
+Base.close(db::DB) = _close(db)
+Base.isopen(db::DB) = db.handle != C_NULL
 
 function _close(db::DB)
     db.handle == C_NULL || sqlite3_close_v2(db.handle)
