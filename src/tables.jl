@@ -119,6 +119,20 @@ function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types};
     return execute(db, "CREATE $temp TABLE $ifnotexists $nm ($(join(columns, ',')))")
 end
 
+struct TableInfo
+    exists::Bool
+    names::Vector{String}
+end
+function tableinfo(db::DB, name::AbstractString)
+    table_info = Tables.columntable(DBInterface.execute(db, "pragma table_info($name)"))
+    exists = table_info !== NamedTuple()
+    if exists
+        return TableInfo(exists, table_info.name)
+    else
+        return TableInfo(exists, String[])
+    end
+end
+
 """
     source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, analyze::Bool=false)
@@ -136,22 +150,36 @@ load!(db::DB, table::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
 function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
     # check if table exists
     nm = esc_id(name)
-    status = execute(db, "pragma table_info($nm)")
+    db_tableinfo = tableinfo(db, nm)
     rows = Tables.rows(itr)
     sch = Tables.schema(rows)
-    return load!(sch, rows, db, nm, name, status == SQLITE_DONE; kwargs...)
+    return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
 end
 
 checkdupnames(names) = length(unique(map(x->lowercase(String(x)), names))) == length(names) || error("duplicate case-insensitive column names detected; sqlite doesn't allow duplicate column names and treats them case insensitive")
 
-function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function checknames(::Tables.Schema{names}, db_names::Vector{String}) where {names}
+    table_names = Set(string.(names))
+    db_names = Set(db_names)
+
+    if table_names != db_names
+        error("Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))")
+    end
+end
+
+function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
     # create table if needed
-    shouldcreate && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+    if db_tableinfo.exists
+        checknames(sch, db_tableinfo.names)
+    else
+        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+    end
     # build insert statement
+    columns = join(sch.names, ",")
     params = chop(repeat("?,", length(sch.names)))
-    stmt = Stmt(db, "INSERT INTO $nm VALUES ($params)")
+    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         for row in rows
@@ -167,7 +195,7 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, shoul
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     state = iterate(rows)
     state === nothing && return nm
     row, st = state
@@ -175,7 +203,7 @@ function load!(::Nothing, rows, db::DB, nm::AbstractString, name, shouldcreate; 
     sch = Tables.Schema(names, nothing)
     checkdupnames(sch.names)
     # create table if needed
-    shouldcreate && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+    !db_tableinfo.exists && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
     # build insert statement
     params = chop(repeat("?,", length(names)))
     stmt = Stmt(db, "INSERT INTO $nm VALUES ($params)")
