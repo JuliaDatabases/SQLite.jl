@@ -10,3 +10,5 @@ CMakeLists.txt.user
 /test/test2.sqlite
 /docs/build
 .vscode
+
+Manifest.toml
