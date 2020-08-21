@@ -203,10 +203,15 @@ function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::
     sch = Tables.Schema(names, nothing)
     checkdupnames(sch.names)
     # create table if needed
-    !db_tableinfo.exists && createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+    if db_tableinfo.exists
+        checknames(sch, db_tableinfo.names)
+    else
+        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+    end
     # build insert statement
     params = chop(repeat("?,", length(names)))
-    stmt = Stmt(db, "INSERT INTO $nm VALUES ($params)")
+    columns = join(sch.names, ",")
+    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         while true

@@ -290,10 +290,10 @@ row2 = first(r)
 @test propertynames(row) == [:x]
 @test DBInterface.lastrowid(r) == 3
 
-# r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-# SQLite.load!(nothing, Tables.rows(r), db, "T2", "T2", true)
-# r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
-# @test r == r2
+r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
+SQLite.load!(nothing, Tables.rows(r), db, "T2", "T2", SQLite.tableinfo(db, "T2"))
+r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
+@test r == r2
 
 # throw informative error on duplicate column names #193
 @test_throws ErrorException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
