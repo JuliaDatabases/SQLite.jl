@@ -114,6 +114,15 @@ end
 # SQLITE_API int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
 # SQLITE_API int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
+
+# SQLITE_API int sqlite3_busy_timeout(sqlite3*, int ms);
+function sqlite3_busy_timeout(db::Ptr{Cvoid}, ms)
+    @NULLCHECK db
+    return ccall( (:sqlite3_busy_timeout, libsqlite),
+        Cint, (Ptr{Cvoid}, Cint), 
+        db, ms)
+end
+
 function sqlite3_clear_bindings(stmt::Ptr{Cvoid})
     return ccall( (:sqlite3_clear_bindings, libsqlite),
         Cint, (Ptr{Cvoid},),
