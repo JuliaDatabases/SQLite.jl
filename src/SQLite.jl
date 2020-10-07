@@ -541,4 +541,15 @@ function enable_load_extension(db, enable::Bool=true)
    ccall((:sqlite3_enable_load_extension, SQLite.libsqlite), Cint, (Ptr{Cvoid}, Cint), db.handle, enable)
 end
 
+"""
+    SQLite.busy_timeout(db, ms::Integer=0)
+
+Set a busy handler that sleeps for a specified amount of milliseconds  when a table is locked. After at least ms milliseconds of sleeping, the handler will return 0, causing sqlite to return SQLITE_BUSY.
+"""
+function busy_timeout(db, ms::Integer=0)
+    sqlite3_busy_timeout(db.handle, ms)
+end
+
+
+
 end # module

@@ -314,4 +314,7 @@ tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
 @test_throws ErrorException SQLite.load!(tbl3, db, "data")
 
 
+# Test busy_timeout
+@test SQLite.busy_timeout(db, 300) == 0
+
 end # @testset
