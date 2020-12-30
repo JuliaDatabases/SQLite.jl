@@ -195,7 +195,7 @@ function bind!(stmt::Stmt, values::Union{AbstractVector, Tuple})
 end
 
 # Binding parameters to SQL statements
-function bind!(stmt::Stmt, name::AbstractString, val)
+function bind!(stmt::Stmt, name::AbstractString, val::Any)
     i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
@@ -390,7 +390,7 @@ In the second method, `func` is executed within a transaction (the transaction b
 """
 function transaction end
 
-function transaction(db, mode="DEFERRED")
+function transaction(db::DB, mode="DEFERRED")
     execute(db, "PRAGMA temp_store=MEMORY;")
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
         execute(db, "BEGIN $(mode) TRANSACTION;")
@@ -399,7 +399,7 @@ function transaction(db, mode="DEFERRED")
     end
 end
 
-@inline function transaction(f::Function, db)
+@inline function transaction(f::Function, db::DB)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
     execute(db, "PRAGMA synchronous = OFF;")
@@ -424,8 +424,8 @@ commit a transaction or named savepoint
 """
 function commit end
 
-commit(db) = execute(db, "COMMIT TRANSACTION;")
-commit(db, name) = execute(db, "RELEASE SAVEPOINT $(name);")
+commit(db::DB) = execute(db, "COMMIT TRANSACTION;")
+commit(db::DB, name::AbstractString) = execute(db, "RELEASE SAVEPOINT $(name);")
 
 """
     SQLite.rollback(db)
@@ -435,8 +435,8 @@ rollback transaction or named savepoint
 """
 function rollback end
 
-rollback(db) = execute(db, "ROLLBACK TRANSACTION;")
-rollback(db, name) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
+rollback(db::DB) = execute(db, "ROLLBACK TRANSACTION;")
+rollback(db::DB, name::AbstractString) = execute(db, "ROLLBACK TRANSACTION TO SAVEPOINT $(name);")
 
 """
     SQLite.drop!(db, table; ifexists::Bool=true)
@@ -492,7 +492,7 @@ Removes duplicate rows from `table` based on the values in `cols`, which is an a
 A convenience method for the common task of removing duplicate
 rows in a dataset according to some subset of columns that make up a "primary key".
 """
-function removeduplicates!(db, table::AbstractString, cols::AbstractArray{T}) where {T <: AbstractString}
+function removeduplicates!(db::DB, table::AbstractString, cols::AbstractArray{T}) where {T <: AbstractString}
     colsstr = ""
     for c in cols
        colsstr = colsstr * esc_id(c) * ","
@@ -540,7 +540,7 @@ last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
 
 Enables extension loading (off by default) on the sqlite database `db`. Pass `false` as the second argument to disable.
 """
-function enable_load_extension(db, enable::Bool=true)
+function enable_load_extension(db::DB, enable::Bool=true)
    ccall((:sqlite3_enable_load_extension, SQLite.libsqlite), Cint, (Ptr{Cvoid}, Cint), db.handle, enable)
 end
 
@@ -549,7 +549,7 @@ end
 
 Set a busy handler that sleeps for a specified amount of milliseconds  when a table is locked. After at least ms milliseconds of sleeping, the handler will return 0, causing sqlite to return SQLITE_BUSY.
 """
-function busy_timeout(db, ms::Integer=0)
+function busy_timeout(db::DB, ms::Integer=0)
     sqlite3_busy_timeout(db.handle, ms)
 end
 
