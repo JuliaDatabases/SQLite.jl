@@ -17,6 +17,9 @@ sqliteopen(file, handle) = sqlite3_open(file, handle)
 sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
 sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
 
+const DBHandle = Ptr{Cvoid}   # SQLite3 DB connection handle
+const StmtHandle = Ptr{Cvoid} # SQLite3 prepared statement handle
+
 """
     `SQLite.DB()` => in-memory SQLite database
     `SQLite.DB(file)` => file-based SQLite database
@@ -38,10 +41,10 @@ The `SQLite.DB` will be automatically closed/shutdown when it goes out of scope
 """
 mutable struct DB <: DBInterface.Connection
     file::String
-    handle::Ptr{Cvoid}
+    handle::DBHandle
 
     function DB(f::AbstractString)
-        handle = Ref{Ptr{Cvoid}}()
+        handle = Ref{DBHandle}()
         f = isempty(f) ? f : expanduser(f)
         if @OK sqliteopen(f, handle)
             db = new(f, handle[])
@@ -85,13 +88,13 @@ but you can close `DBInterface.close!(stmt)` to explicitly and immediately close
 """
 mutable struct Stmt <: DBInterface.Statement
     db::DB
-    handle::Ptr{Cvoid}
+    handle::StmtHandle
     params::Dict{Int, Any}
     status::Int
 
     function Stmt(db::DB, sql::AbstractString)
-        handle = Ref{Ptr{Cvoid}}()
-        sqliteprepare(db, sql, handle, Ref{Ptr{Cvoid}}())
+        handle = Ref{StmtHandle}()
+        sqliteprepare(db, sql, handle, Ref{StmtHandle}())
         stmt = new(db, handle[], Dict{Int, Any}(), 0)
         finalizer(_close, stmt)
         return stmt
