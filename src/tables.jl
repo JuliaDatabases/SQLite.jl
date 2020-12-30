@@ -208,37 +208,11 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; kwargs...)
     state = iterate(rows)
     state === nothing && return nm
     row, st = state
     names = propertynames(row)
     sch = Tables.Schema(names, nothing)
-    checkdupnames(sch.names)
-    # create table if needed
-    if db_tableinfo.exists
-        checknames(sch, db_tableinfo.names)
-    else
-        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
-    end
-    # build insert statement
-    params = chop(repeat("?,", length(names)))
-    columns = join(sch.names, ",")
-    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
-    # start a transaction for inserting rows
-    transaction(db) do
-        while true
-            Tables.eachcolumn(sch, row) do val, col, _
-                bind!(stmt, col, val)
-            end
-            sqlite3_step(stmt.handle)
-            sqlite3_reset(stmt.handle)
-            state = iterate(rows, st)
-            state === nothing && break
-            row, st = state
-        end
-    end
-    analyze && execute(db, "ANALYZE $nm")
-
-    return name
+    return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
 end
