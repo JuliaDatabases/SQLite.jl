@@ -232,7 +232,7 @@ q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
 DBInterface.execute(q, ["a"])
 
 SQLite.bind!(q, 1, "a")
-@test_throws AssertionError DBInterface.execute(q)
+@test_throws SQLiteException DBInterface.execute(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
 show(db)

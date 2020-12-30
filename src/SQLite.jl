@@ -175,10 +175,10 @@ function bind! end
 
 function bind!(stmt::Stmt, params::DBInterface.NamedStatementParams)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(params) "you must provide values for all query placeholders"
+    (nparams == length(params)) || throw(SQLiteException("values should be provided for all query placeholders"))
     for i in 1:nparams
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
-        @assert !isempty(name) "nameless parameters should be passed as a Vector"
+        isempty(name) && throw(SQLiteException("nameless parameters should be passed as a Vector"))
         # name is returned with the ':', '@' or '$' at the start
         sym = Symbol(name[2:end])
         haskey(params, sym) || throw(SQLiteException("`$name` not found in values keyword arguments to bind to sql statement"))
@@ -188,7 +188,7 @@ end
 
 function bind!(stmt::Stmt, values::DBInterface.PositionalStatementParams)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    @assert nparams == length(values) "you must provide values for all query placeholders"
+    (nparams == length(values)) || throw(SQLiteException("values should be provided for all query placeholders"))
     for i in 1:nparams
         @inbounds bind!(stmt, i, values[i])
     end
