@@ -3,7 +3,7 @@ module SQLite
 using Random, Serialization
 using WeakRefStrings, DBInterface
 
-export DBInterface
+export DBInterface, SQLiteException
 
 struct SQLiteException <: Exception
     msg::AbstractString

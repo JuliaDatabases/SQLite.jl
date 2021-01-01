@@ -170,7 +170,7 @@ SQLite.drop!(db, "points")
 db2 = DBInterface.connect(SQLite.DB)
 DBInterface.execute(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
-@test_throws SQLite.SQLiteException SQLite.drop!(db2, "nonexistant")
+@test_throws SQLiteException SQLite.drop!(db2, "nonexistant")
 # should not throw anything
 SQLite.drop!(db2, "nonexistant", ifexists=true)
 # should drop "tab2"
@@ -214,7 +214,7 @@ r = DBInterface.execute(binddb, "SELECT * FROM temp") |> columntable
 ############################################
 
 #test for #158
-@test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")
+@test_throws SQLiteException SQLite.DB("nonexistentdir/not_there.db")
 
 #test for #180 (Query)
 param = "Hello!"
