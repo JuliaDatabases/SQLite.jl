@@ -296,7 +296,7 @@ r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
 @test r == r2
 
 # throw informative error on duplicate column names #193
-@test_throws ErrorException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
+@test_throws SQLiteException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
 
 db = SQLite.DB()
 # Table should map by name #216
@@ -311,7 +311,7 @@ expected = (a=[1, 2, 3, 4, 5, 6], b=[4, 5, 6, 7, 8, 9])
 
 # Table should error if names don't match #216
 tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
-@test_throws ErrorException SQLite.load!(tbl3, db, "data")
+@test_throws SQLiteException SQLite.load!(tbl3, db, "data")
 
 
 # Test busy_timeout

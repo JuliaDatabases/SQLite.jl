@@ -156,15 +156,28 @@ function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5
     return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
 end
 
-checkdupnames(names) = length(unique(map(x->lowercase(String(x)), names))) == length(names) || error("duplicate case-insensitive column names detected; sqlite doesn't allow duplicate column names and treats them case insensitive")
+# case-insensitive check for duplicate column names
+function checkdupnames(names::Union{AbstractVector, Tuple})
+    checkednames = Set{String}()
+    for name in names
+        lcname = lowercase(string(name))
+        if lcname in checkednames
+            throw(SQLiteException("Duplicate case-insensitive column name $lcname detected. SQLite doesn't allow duplicate column names and treats them case insensitive"))
+        end
+        push!(checkednames, lcname)
+    end
+    return true
+end
 
-function checknames(::Tables.Schema{names}, db_names::Vector{String}) where {names}
+# check if schema names match column names in DB
+function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) where {names}
     table_names = Set(string.(names))
     db_names = Set(db_names)
 
     if table_names != db_names
-        error("Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))")
+        throw(SQLiteException("Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))"))
     end
+    return true
 end
 
 function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
