@@ -317,4 +317,12 @@ tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
 # Test busy_timeout
 @test SQLite.busy_timeout(db, 300) == 0
 
+@testset "load!() column names escaping" begin
+    tbl = NamedTuple{(:a, Symbol("50.0%"))}(([1, 2, 3], ["a", "b", "c"]))
+    SQLite.load!(tbl, db, "escape_colnames")
+    r = DBInterface.execute(db, "SELECT * FROM escape_colnames") |> columntable
+    @test r == tbl
+    SQLite.drop!(db, "escape_colnames");
+end
+
 end # @testset

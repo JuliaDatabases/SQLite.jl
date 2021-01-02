@@ -190,7 +190,7 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
         createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
     end
     # build insert statement
-    columns = join(sch.names, ",")
+    columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
     stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
     # start a transaction for inserting rows
