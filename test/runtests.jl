@@ -238,7 +238,11 @@ SQLite.bind!(q, 1, "a")
 @test_throws SQLiteException DBInterface.execute(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
-show(db)
+@testset "show(DB)" begin
+    io = IOBuffer()
+    show(io, db)
+    @test String(take!(io)) == "SQLite.DB(\":memory:\")"
+end
 DBInterface.close!(db)
 
 db = SQLite.DB()
