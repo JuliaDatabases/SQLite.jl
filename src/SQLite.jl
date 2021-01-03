@@ -210,6 +210,7 @@ bind!(stmt::Stmt, i::Integer, val::Missing)        = (stmt.params[i] = val; @CHE
 bind!(stmt::Stmt, i::Integer, val::AbstractString) = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i, val); return nothing)
 bind!(stmt::Stmt, i::Integer, val::WeakRefString{UInt8})   = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
 bind!(stmt::Stmt, i::Integer, val::WeakRefString{UInt16})  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
+bind!(stmt::Stmt, i::Integer, val::Bool)           = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(stmt.handle, i, Int32(val)); return nothing)
 bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_blob(stmt.handle, i, val); return nothing)
 # Fallback is BLOB and defaults to serializing the julia value
 
@@ -295,6 +296,8 @@ sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL NOT NULL"
 sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractFloat}} = "REAL"
 sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT NOT NULL"
 sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
+sqlitetype(::Type{T}) where {T<:Union{Missing, Bool}} = "INT"
+sqlitetype(::Type{T}) where {T<:Bool} = "INT NOT NULL"
 sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 

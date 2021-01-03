@@ -333,4 +333,12 @@ end
     SQLite.drop!(db, "escape_colnames");
 end
 
+@testset "Bool column data" begin
+    tbl = (a = [true, false, false], b = [false, missing, true])
+    SQLite.load!(tbl, db, "bool_data")
+    r = DBInterface.execute(db, "SELECT * FROM bool_data") |> columntable
+    @test isequal(r, (a = [1, 0, 0], b = [0, missing, 1]))
+    SQLite.drop!(db, "bool_data");
+end
+
 end # @testset
