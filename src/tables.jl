@@ -111,12 +111,13 @@ where `names` can be a vector or tuple of String/Symbol column names, and `types
 If `temp=true`, the table will be created temporarily, which means it will be deleted when the `db` is closed.
 If `ifnotexists=true`, no error will be thrown if the table already exists.
 """
-function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types}; temp::Bool=false, ifnotexists::Bool=true) where {names, types}
+function createtable!(db::DB, name::AbstractString, ::Tables.Schema{names, types};
+                      temp::Bool=false, ifnotexists::Bool=true) where {names, types}
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
     typs = [types === nothing ? "BLOB" : sqlitetype(fieldtype(types, i)) for i = 1:length(names)]
     columns = [string(esc_id(String(names[i])), ' ', typs[i]) for i = 1:length(names)]
-    return execute(db, "CREATE $temp TABLE $ifnotexists $nm ($(join(columns, ',')))")
+    return execute(db, "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))")
 end
 
 # table info for load!():
@@ -146,15 +147,15 @@ Load a Tables.jl input `source` into an SQLite table that will be named `tablena
 """
 function load! end
 
-load!(db::DB, table::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...) = x->load!(x, db, table; kwargs...)
+load!(db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...) =
+    x -> load!(x, db, name; kwargs...)
 
 function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
     # check if table exists
-    nm = esc_id(name)
     db_tableinfo = tableinfo(db, name)
     rows = Tables.rows(itr)
     sch = Tables.schema(rows)
-    return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
+    return load!(sch, rows, db, name, db_tableinfo; kwargs...)
 end
 
 # case-insensitive check for duplicate column names
@@ -181,7 +182,7 @@ function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) wh
     return true
 end
 
-function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::Union{NamedTuple, Nothing};
+function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tableinfo::Union{NamedTuple, Nothing};
                temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
@@ -189,12 +190,12 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
     if db_tableinfo !== nothing
         checknames(sch, db_tableinfo.name)
     else
-        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+        createtable!(db, name, sch; temp=temp, ifnotexists=ifnotexists)
     end
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
+    stmt = Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         for row in rows
@@ -210,12 +211,12 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name,
+function load!(::Nothing, rows, db::DB, name::AbstractString,
                db_tableinfo::Union{NamedTuple, Nothing}; kwargs...)
     state = iterate(rows)
-    state === nothing && return nm
+    state === nothing && return name
     row, st = state
     names = propertynames(row)
     sch = Tables.Schema(names, nothing)
-    return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
+    return load!(sch, rows, db, name, db_tableinfo; kwargs...)
 end

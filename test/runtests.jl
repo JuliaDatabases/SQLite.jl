@@ -291,7 +291,7 @@ row2 = first(r)
 @test DBInterface.lastrowid(r) == 3
 
 r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-SQLite.load!(nothing, Tables.rows(r), db, "T2", "T2", SQLite.tableinfo(db, "T2"))
+SQLite.load!(nothing, Tables.rows(r), db, "T2", SQLite.tableinfo(db, "T2"))
 r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
 @test r == r2
 
@@ -316,6 +316,14 @@ tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
 
 # Test busy_timeout
 @test SQLite.busy_timeout(db, 300) == 0
+
+@testset "load!()/drop!() table name escaping" begin
+    tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
+    SQLite.load!(tbl, db, "escape 10.0%")
+    r = DBInterface.execute(db, "SELECT * FROM $(SQLite.esc_id("escape 10.0%"))") |> columntable
+    @test r == tbl
+    SQLite.drop!(db, "escape 10.0%");
+end
 
 @testset "load!() column names escaping" begin
     tbl = NamedTuple{(:a, Symbol("50.0%"))}(([1, 2, 3], ["a", "b", "c"]))
