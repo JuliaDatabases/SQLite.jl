@@ -38,6 +38,11 @@ chmod(dbfile2, 0o777)
 db = SQLite.DB(dbfile2)
 db = DBInterface.connect(SQLite.DB, dbfile2)
 # regular SQLite tests
+
+@test_throws SQLiteException DBInterface.execute(db, "just some syntax error")
+# syntax correct, table missing
+@test_throws SQLiteException DBInterface.execute(db, "SELECT name FROM sqlite_nomaster WHERE type='table';")
+
 ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
 @test keys(ds) == (:name,)
