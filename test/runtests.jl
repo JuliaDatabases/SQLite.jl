@@ -35,6 +35,15 @@ chmod(dbfile2, 0o777)
 
 @testset "basics" begin
 
+@testset "Julia to SQLite3 type conversion" begin
+    @test SQLite.sqlitetype(Int) == "INT NOT NULL"
+    @test SQLite.sqlitetype(Union{Float64, Missing}) == "REAL"
+    @test SQLite.sqlitetype(String) == "TEXT NOT NULL"
+    @test SQLite.sqlitetype(Symbol) == "BLOB NOT NULL"
+    @test SQLite.sqlitetype(Missing) == "NULL"
+    @test SQLite.sqlitetype(Any) == "BLOB"
+end
+
 db = SQLite.DB(dbfile2)
 db = DBInterface.connect(SQLite.DB, dbfile2)
 # regular SQLite tests

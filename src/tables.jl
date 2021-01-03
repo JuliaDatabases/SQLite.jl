@@ -116,8 +116,9 @@ function createtable!(db::DB, name::AbstractString, ::Tables.Schema{names, types
                       temp::Bool=false, ifnotexists::Bool=true) where {names, types}
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
-    typs = [types === nothing ? "BLOB" : sqlitetype(fieldtype(types, i)) for i = 1:length(names)]
-    columns = [string(esc_id(String(names[i])), ' ', typs[i]) for i = 1:length(names)]
+    columns = [string(esc_id(String(names[i])), ' ',
+                      sqlitetype(types !== nothing ? fieldtype(types, i) : Any))
+               for i in eachindex(names)]
     return execute(db, "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))")
 end
 

@@ -376,16 +376,16 @@ function sqlitevalue(::Type{T}, handle, col) where {T}
     return r
 end
 
-sqlitetype(::Type{T}) where {T<:Integer} = "INT NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, Integer}} = "INT"
-sqlitetype(::Type{T}) where {T<:AbstractFloat} = "REAL NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractFloat}} = "REAL"
-sqlitetype(::Type{T}) where {T<:AbstractString} = "TEXT NOT NULL"
-sqlitetype(::Type{T}) where {T<:Union{Missing, AbstractString}} = "TEXT"
-sqlitetype(::Type{T}) where {T<:Union{Missing, Bool}} = "INT"
-sqlitetype(::Type{T}) where {T<:Bool} = "INT NOT NULL"
+# conversion from Julia to SQLite3 types
+sqlitetype_(::Type{<:Integer}) = "INT"
+sqlitetype_(::Type{<:AbstractFloat}) = "REAL"
+sqlitetype_(::Type{<:AbstractString}) = "TEXT"
+sqlitetype_(::Type{Bool}) = "INT"
+sqlitetype_(::Type) = "BLOB" # fallback
+
 sqlitetype(::Type{Missing}) = "NULL"
-sqlitetype(x) = "BLOB"
+sqlitetype(::Type{Union{T, Missing}}) where T = sqlitetype_(T)
+sqlitetype(::Type{T}) where T = string(sqlitetype_(T), " NOT NULL")
 
 """
     SQLite.execute(db::SQLite.DB, sql::AbstractString, [params]) -> Int
