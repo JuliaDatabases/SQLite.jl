@@ -60,7 +60,24 @@ DBInterface.execute(db, "alter table temp add column colyear int")
 DBInterface.execute(db, "update temp set colyear = 2014")
 r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
 @test length(r) == 4 && length(r[1]) == 10
-@test all(Bool[x == 2014 for x in r[4]])
+@test all(==(2014), r[4])
+
+@testset "commit/rollback tests" begin
+    @test_throws SQLiteException SQLite.rollback(db)
+    @test_throws SQLiteException SQLite.commit(db)
+
+    SQLite.transaction(db)
+    DBInterface.execute(db, "update temp set colyear = 2015")
+    SQLite.rollback(db)
+    r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+    @test all(==(2014), r[4])
+
+    SQLite.transaction(db)
+    DBInterface.execute(db, "update temp set colyear = 2015")
+    SQLite.commit(db)
+    r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+    @test all(==(2015), r[4])
+end
 
 DBInterface.execute(db, "alter table temp add column dates blob")
 stmt = DBInterface.prepare(db, "update temp set dates = ?")
