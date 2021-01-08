@@ -513,21 +513,21 @@ include("tables.jl")
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> sink
+tables(db::DB, sink=columntable) = DBInterface.execute(sink, db, "SELECT name FROM sqlite_master WHERE type='table';")
 
 """
     SQLite.indices(db, sink=columntable)
 
 returns a list of indices in `db`
 """
-indices(db::DB, sink=columntable) = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='index';") |> sink
+indices(db::DB, sink=columntable) = DBInterface.execute(sink, db, "SELECT name FROM sqlite_master WHERE type='index';")
 
 """
     SQLite.columns(db, table, sink=columntable)
 
 returns a list of columns in `table`
 """
-columns(db::DB, table::AbstractString, sink=columntable) = DBInterface.execute(db, "PRAGMA table_info($(esc_id(table)))") |> sink
+columns(db::DB, table::AbstractString, sink=columntable) = DBInterface.execute(sink, db, "PRAGMA table_info($(esc_id(table)))")
 
 """
     SQLite.last_insert_rowid(db)
