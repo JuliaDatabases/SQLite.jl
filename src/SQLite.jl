@@ -12,13 +12,12 @@ end
 include("consts.jl")
 include("api.jl")
 
-# Normal constructor from filename
-sqliteopen(file, handle) = sqlite3_open(file, handle)
-sqliteerror(db) = throw(SQLiteException(unsafe_string(sqlite3_errmsg(db.handle))))
-sqliteexception(db) = SQLiteException(unsafe_string(sqlite3_errmsg(db.handle)))
-
 const DBHandle = Ptr{Cvoid}   # SQLite3 DB connection handle
 const StmtHandle = Ptr{Cvoid} # SQLite3 prepared statement handle
+
+# Normal constructor from filename
+sqliteexception(handle::DBHandle) = SQLiteException(unsafe_string(sqlite3_errmsg(handle)))
+sqliteerror(handle::DBHandle) = throw(sqliteexception(handle))
 
 """
 Internal wrapper that holds the handle to SQLite3 prepared statement.
@@ -80,14 +79,12 @@ mutable struct DB <: DBInterface.Connection
     function DB(f::AbstractString)
         handle = Ref{DBHandle}()
         f = isempty(f) ? f : expanduser(f)
-        if @OK sqliteopen(f, handle)
-            db = new(f, handle[], Dict{StmtHandle, _Stmt}())
+        if @OK sqlite3_open(f, handle)
+            db = new(f, handle[], Dict{StmtHandle, _Stmt}(), 0)
             finalizer(_close, db)
             return db
         else # error
-            db = new(f, handle[], Dict{StmtHandle, _Stmt}())
-            finalizer(_close, db)
-            sqliteerror(db)
+            sqliteerror(handle[])
         end
     end
 end
@@ -113,6 +110,9 @@ function _close(db::DB)
     db.handle = C_NULL
     return
 end
+
+sqliteerror(db::DB) = sqliteerror(db.handle)
+sqliteexception(db::DB) = sqliteexception(db.handle)
 
 Base.show(io::IO, db::SQLite.DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 
