@@ -187,7 +187,8 @@ function DBInterface.close!(stmt::Stmt)
     return stmt
 end
 
-sqliteprepare(db, sql, stmt, null) = @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
+sqliteprepare(db::DB, sql::AbstractString, stmt::Ref{StmtHandle}, null::Ref{StmtHandle}) =
+    @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
 
 include("UDF.jl")
 export @sr_str
