@@ -119,19 +119,20 @@ function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types};
     return execute(db, "CREATE $temp TABLE $ifnotexists $nm ($(join(columns, ',')))")
 end
 
-struct TableInfo
-    exists::Bool
-    names::Vector{String}
-end
-function tableinfo(db::DB, name::AbstractString)
-    table_info = Tables.columntable(DBInterface.execute(db, "pragma table_info($name)"))
-    exists = table_info !== NamedTuple()
-    if exists
-        return TableInfo(exists, table_info.name)
-    else
-        return TableInfo(exists, String[])
+# table info for load!():
+# returns NamedTuple with columns information,
+# or nothing if table does not exist
+tableinfo(db::DB, name::AbstractString) =
+    DBInterface.execute(db, "pragma table_info($(esc_id(name)))") do qry
+        st = qry.status[]
+        if st == SQLITE_ROW
+            return Tables.columntable(qry)
+        elseif st == SQLITE_DONE
+            return nothing
+        else
+            sqliteerror(q.stmt.db)
+        end
     end
-end
 
 """
     source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
@@ -150,7 +151,7 @@ load!(db::DB, table::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
 function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
     # check if table exists
     nm = esc_id(name)
-    db_tableinfo = tableinfo(db, nm)
+    db_tableinfo = tableinfo(db, name)
     rows = Tables.rows(itr)
     sch = Tables.schema(rows)
     return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
@@ -180,12 +181,13 @@ function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) wh
     return true
 end
 
-function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::Union{NamedTuple, Nothing};
+               temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
-    # create table if needed
-    if db_tableinfo.exists
-        checknames(sch, db_tableinfo.names)
+    # check if `rows` column names match the existing table, or create the new one
+    if db_tableinfo !== nothing
+        checknames(sch, db_tableinfo.name)
     else
         createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
     end
@@ -208,7 +210,8 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; kwargs...)
+function load!(::Nothing, rows, db::DB, nm::AbstractString, name,
+               db_tableinfo::Union{NamedTuple, Nothing}; kwargs...)
     state = iterate(rows)
     state === nothing && return nm
     row, st = state
