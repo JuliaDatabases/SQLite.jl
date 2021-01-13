@@ -91,13 +91,16 @@ SQLite.drop!(db, "temp")
 DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
 r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", (a=3,)) |> columntable
 @test length(r) == 3 && length(r[1]) == 3
+r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", a=3) |> columntable
+@test length(r) == 3 && length(r[1]) == 3
 r = DBInterface.execute(db, "SELECT * FROM temp WHERE Title LIKE @word", (word="%time%",)) |> columntable
 @test r[1] == [76, 111, 187]
-DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", (rid=0, lid=0, title="Test Album"))
-r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
-@test r[1][1] === 0
-@test r[2][1] == "Test Album"
-@test r[3][1] === 0
+DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", (rid=1, lid=0, title="Test Album"))
+DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", rid=3, lid=400, title="Test2 Album")
+r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId IN (0, 400)") |> columntable
+@test r[1] == [0, 400]
+@test r[2] == ["Test Album", "Test2 Album"]
+@test r[3] == [1, 3]
 SQLite.drop!(db, "temp")
 
 SQLite.register(db, SQLite.regexp, nargs=2, name="regexp")
