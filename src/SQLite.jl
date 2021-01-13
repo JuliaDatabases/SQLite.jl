@@ -173,7 +173,7 @@ From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
 """
 function bind! end
 
-function bind!(stmt::Stmt, params::Union{NamedTuple, Dict})
+function bind!(stmt::Stmt, params::DBInterface.NamedStatementParams)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(params) "you must provide values for all query placeholders"
     for i in 1:nparams
@@ -186,7 +186,7 @@ function bind!(stmt::Stmt, params::Union{NamedTuple, Dict})
     end
 end
 
-function bind!(stmt::Stmt, values::Union{AbstractVector, Tuple})
+function bind!(stmt::Stmt, values::DBInterface.PositionalStatementParams)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
     @assert nparams == length(values) "you must provide values for all query placeholders"
     for i in 1:nparams
@@ -310,7 +310,7 @@ The sqlite return status code is returned. To return results from a query, pleas
 """
 function execute end
 
-function execute(stmt::Stmt, params=())
+function execute(stmt::Stmt, params::DBInterface.StatementParams=())
     sqlite3_reset(stmt.handle)
     bind!(stmt, params)
     r = sqlite3_step(stmt.handle)
@@ -325,7 +325,8 @@ function execute(stmt::Stmt, params=())
     return r
 end
 
-execute(db::DB, sql::AbstractString, params=()) = execute(Stmt(db, sql), params)
+execute(db::DB, sql::AbstractString, params::DBInterface.StatementParams=()) =
+    execute(Stmt(db, sql), params)
 
 """
     SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})
