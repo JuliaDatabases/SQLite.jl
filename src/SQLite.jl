@@ -194,6 +194,8 @@ function bind!(stmt::Stmt, values::DBInterface.PositionalStatementParams)
     end
 end
 
+bind!(stmt::Stmt; kwargs...) = bind!(stmt, kwargs.data)
+
 # Binding parameters to SQL statements
 function bind!(stmt::Stmt, name::AbstractString, val::Any)
     i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
@@ -302,18 +304,22 @@ sqlitetype(::Type{Missing}) = "NULL"
 sqlitetype(x) = "BLOB"
 
 """
-    SQLite.execute(db::SQLite.DB, sql, [params])
-    SQLite.execute(stmt::SQLite.Stmt, [params])
+    SQLite.execute(db::SQLite.DB, sql::AbstractString, [params]) -> Int
+    SQLite.execute(stmt::SQLite.Stmt, [params]) -> Int
 
-An internal method that takes a `db` and `sql` arguments, or an already prepared `stmt` (2nd method),
-any positional parameters (`params` given as `Vector` or `Tuple`) or named parameters (`params` given as `Dict` or `NamedTuple`),
-binds any parameters, and executes the query.
+An internal method that executes the SQL statement (provided either as a `db` connection and `sql` command,
+or as an already prepared `stmt` (see [`SQLite.Stmt`](@ref))) with given `params` parameters
+(either positional (`Vector` or `Tuple`), named (`Dict` or `NamedTuple`), or specified as keyword arguments).
 
-The sqlite return status code is returned. To return results from a query, please see [`DBInterface.execute`](@ref).
+Returns the SQLite status code of operation.
+
+*Note*: this is a low-level method that just executes the SQL statement,
+but does not retrieve any data from `db`.
+To get the results of a SQL query, it is recommended to use [`DBInterface.execute`](@ref).
 """
 function execute end
 
-function execute(stmt::Stmt, params::DBInterface.StatementParams=())
+function execute(stmt::Stmt, params::DBInterface.StatementParams)
     sqlite3_reset(stmt.handle)
     bind!(stmt, params)
     r = sqlite3_step(stmt.handle)
@@ -328,8 +334,10 @@ function execute(stmt::Stmt, params::DBInterface.StatementParams=())
     return r
 end
 
-execute(db::DB, sql::AbstractString, params::DBInterface.StatementParams=()) =
-    execute(Stmt(db, sql), params)
+execute(stmt::Stmt; kwargs...) = execute(stmt, kwargs.data)
+
+execute(db::DB, sql::AbstractString, params::DBInterface.StatementParams) = execute(Stmt(db, sql), params)
+execute(db::DB, sql::AbstractString; kwargs...) = execute(db, sql, kwargs.data)
 
 """
     SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})

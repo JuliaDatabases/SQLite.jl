@@ -239,43 +239,48 @@ show(db)
 DBInterface.close!(db)
 
 db = SQLite.DB()
-DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
 
-q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
-SQLite.execute(q, (1,))
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
+@testset "SQLite.execute()" begin
+    DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
 
-SQLite.execute(q, [2])
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
+    q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
+    SQLite.execute(q, (1,))
+    r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
+    @test r[1] == [1]
 
-q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
-SQLite.execute(q, Dict(:x => 3))
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
-@test r[1][3] == 3
+    SQLite.execute(q, [2])
+    r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
+    @test r[1] == [1, 2]
 
+    q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
+    SQLite.execute(q, Dict(:x => 3))
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3]
+
+    SQLite.execute(q, x=4)
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3, 4]
+
+    SQLite.execute(db, "INSERT INTO T VALUES(:x)", x=5)
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3, 4, 5]
+end
 
 r = DBInterface.execute(db, strip("   SELECT * FROM T  ")) |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
-@test r[1][3] == 3
+@test r[1] == [1, 2, 3, 4, 5]
 
 @test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
 
 SQLite.createindex!(db, "T", "x", "x_index"; unique=false)
 inds = SQLite.indices(db)
-@test inds.name[2] == "x"
+@test last(inds.name) == "x"
 SQLite.dropindex!(db, "x")
 @test length(SQLite.indices(db).name) == 1
 
 cols = SQLite.columns(db, "T")
-@test cols.name[1] == "x"
+@test cols.name == ["x"]
 
-@test SQLite.last_insert_rowid(db) == 3
+@test SQLite.last_insert_rowid(db) == 5
 
 r = DBInterface.execute(db, "SELECT * FROM T")
 @test Tables.istable(r)
@@ -288,7 +293,7 @@ SQLite.reset!(r)
 row2 = first(r)
 @test row[:x] == row2[:x]
 @test propertynames(row) == [:x]
-@test DBInterface.lastrowid(r) == 3
+@test DBInterface.lastrowid(r) == 5
 
 r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
 SQLite.load!(nothing, Tables.rows(r), db, "T2", SQLite.tableinfo(db, "T2"))
