@@ -22,7 +22,7 @@ Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
-    sqlite3_reset(q.stmt.handle)
+    sqlite3_reset(_stmt(q.stmt).handle)
     q.status[] = execute(q.stmt)
     return
 end
@@ -30,7 +30,7 @@ end
 function done(q::Query)
     st = q.status[]
     if st == SQLITE_DONE
-        sqlite3_reset(q.stmt.handle)
+        sqlite3_reset(_stmt(q.stmt).handle)
         return true
     end
     st == SQLITE_ROW || sqliteerror(q.stmt.db)
@@ -38,7 +38,7 @@ function done(q::Query)
 end
 
 function getvalue(q::Query, col::Int, ::Type{T}) where {T}
-    handle = q.stmt.handle
+    handle = _stmt(q.stmt).handle
     t = sqlite3_column_type(handle, col)
     if t == SQLITE_NULL
         return missing
@@ -60,7 +60,7 @@ function Base.iterate(q::Query)
 end
 
 function Base.iterate(q::Query, ::Nothing)
-    q.status[] = sqlite3_step(q.stmt.handle)
+    q.status[] = sqlite3_step(_stmt(q.stmt).handle)
     done(q) && return nothing
     return Row(q), nothing
 end
@@ -92,12 +92,13 @@ like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
 """
 function DBInterface.execute(stmt::Stmt, params::DBInterface.StatementParams)
     status = execute(stmt, params)
-    cols = sqlite3_column_count(stmt.handle)
+    _st = _stmt(stmt)
+    cols = sqlite3_column_count(_st.handle)
     header = Vector{Symbol}(undef, cols)
     types = Vector{Type}(undef, cols)
     for i = 1:cols
-        header[i] = sym(sqlite3_column_name(stmt.handle, i))
-        types[i] = Union{juliatype(stmt.handle, i), Missing}
+        header[i] = sym(sqlite3_column_name(_st.handle, i))
+        types[i] = Union{juliatype(_st.handle, i), Missing}
     end
     return Query(stmt, Ref(status), header, types, Dict(x=>i for (i, x) in enumerate(header)))
 end
@@ -195,7 +196,7 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    stmt = Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
+    stmt = _Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         for row in rows
@@ -206,6 +207,7 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
             sqlite3_reset(stmt.handle)
         end
     end
+    _close!(stmt)
     analyze && execute(db, "ANALYZE $nm")
     return name
 end

@@ -349,4 +349,56 @@ end
     SQLite.drop!(db, "bool_data");
 end
 
+@testset "Stmt scope" begin
+    dbfile = joinpath(tempdir(), "test_stmt_scope.sqlite")
+    db = SQLite.DB(dbfile)
+    tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
+
+    @testset "explicit finalization by finalize_statements!(db)" begin
+        SQLite.load!(tbl, db, "test_table")
+        stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table")
+        @test SQLite.isready(stmt)
+        @test SQLite.execute(stmt) == 100
+        # test cannot drop the table locked by the statement
+        @test_throws SQLiteException SQLite.drop!(db, "test_table")
+        SQLite.finalize_statements!(db)
+        @test !SQLite.isready(stmt)
+        SQLite.drop!(db, "test_table")
+        DBInterface.close!(stmt) # test can call close!() 2nd time
+    end
+
+    @testset "explicit finalization by close!(stmt)" begin
+        SQLite.load!(tbl, db, "test_table2")
+        stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table2")
+        @test SQLite.isready(stmt)
+        @test SQLite.execute(stmt) == 100
+        # test cannot drop the table locked by the statement
+        @test_throws SQLiteException SQLite.drop!(db, "test_table2")
+        DBInterface.close!(stmt)
+        @test !SQLite.isready(stmt)
+        SQLite.drop!(db, "test_table2")
+        DBInterface.close!(stmt) # test can call close!() 2nd time
+    end
+
+    @testset "automatic close of implicit prepared statement" begin
+        @testset "SQLite.execute() call" begin
+            SQLite.load!(tbl, db, "test_table3")
+            @test SQLite.execute(db, "SELECT a, b FROM test_table3") == 100
+            # test can immediately drop the table, since no locks by the statement
+            SQLite.drop!(db, "test_table3")
+        end
+
+        @testset "DBInterface.execute() call" begin
+            SQLite.load!(tbl, db, "test_table4")
+            @test SQLite.execute(db, "SELECT a, b FROM test_table4") == 100
+            GC.gc() # close implicitly created statement
+            # test can immediately drop the table, since no locks by the GC-ed statement
+            SQLite.drop!(db, "test_table4")
+        end
+    end
+
+    close(db)
+    rm(dbfile)
+end
+
 end # @testset
