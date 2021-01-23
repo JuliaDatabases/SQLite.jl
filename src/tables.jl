@@ -22,7 +22,7 @@ Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
-    sqlite3_reset(q.stmt.handle)
+    sqlite3_reset(_stmt(q.stmt).handle)
     q.status[] = execute(q.stmt)
     return
 end
@@ -30,7 +30,7 @@ end
 function done(q::Query)
     st = q.status[]
     if st == SQLITE_DONE
-        sqlite3_reset(q.stmt.handle)
+        sqlite3_reset(_stmt(q.stmt).handle)
         return true
     end
     st == SQLITE_ROW || sqliteerror(q.stmt.db)
@@ -38,7 +38,7 @@ function done(q::Query)
 end
 
 function getvalue(q::Query, col::Int, ::Type{T}) where {T}
-    handle = q.stmt.handle
+    handle = _stmt(q.stmt).handle
     t = sqlite3_column_type(handle, col)
     if t == SQLITE_NULL
         return missing
@@ -60,7 +60,7 @@ function Base.iterate(q::Query)
 end
 
 function Base.iterate(q::Query, ::Nothing)
-    q.status[] = sqlite3_step(q.stmt.handle)
+    q.status[] = sqlite3_step(_stmt(q.stmt).handle)
     done(q) && return nothing
     return Row(q), nothing
 end
@@ -90,14 +90,15 @@ Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator
 The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tables.jl) interface, so results can be collected in any Tables.jl-compatible sink,
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
 """
-function DBInterface.execute(stmt::Stmt, params=())
+function DBInterface.execute(stmt::Stmt, params::DBInterface.StatementParams)
     status = execute(stmt, params)
-    cols = sqlite3_column_count(stmt.handle)
+    _st = _stmt(stmt)
+    cols = sqlite3_column_count(_st.handle)
     header = Vector{Symbol}(undef, cols)
     types = Vector{Type}(undef, cols)
     for i = 1:cols
-        header[i] = sym(sqlite3_column_name(stmt.handle, i))
-        types[i] = Union{juliatype(stmt.handle, i), Missing}
+        header[i] = sym(sqlite3_column_name(_st.handle, i))
+        types[i] = Union{juliatype(_st.handle, i), Missing}
     end
     return Query(stmt, Ref(status), header, types, Dict(x=>i for (i, x) in enumerate(header)))
 end
@@ -111,27 +112,30 @@ where `names` can be a vector or tuple of String/Symbol column names, and `types
 If `temp=true`, the table will be created temporarily, which means it will be deleted when the `db` is closed.
 If `ifnotexists=true`, no error will be thrown if the table already exists.
 """
-function createtable!(db::DB, nm::AbstractString, ::Tables.Schema{names, types}; temp::Bool=false, ifnotexists::Bool=true) where {names, types}
+function createtable!(db::DB, name::AbstractString, ::Tables.Schema{names, types};
+                      temp::Bool=false, ifnotexists::Bool=true) where {names, types}
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
-    typs = [types === nothing ? "BLOB" : sqlitetype(fieldtype(types, i)) for i = 1:length(names)]
-    columns = [string(esc_id(String(names[i])), ' ', typs[i]) for i = 1:length(names)]
-    return execute(db, "CREATE $temp TABLE $ifnotexists $nm ($(join(columns, ',')))")
+    columns = [string(esc_id(String(names[i])), ' ',
+                      sqlitetype(types !== nothing ? fieldtype(types, i) : Any))
+               for i in eachindex(names)]
+    return execute(db, "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))")
 end
 
-struct TableInfo
-    exists::Bool
-    names::Vector{String}
-end
-function tableinfo(db::DB, name::AbstractString)
-    table_info = Tables.columntable(DBInterface.execute(db, "pragma table_info($name)"))
-    exists = table_info !== NamedTuple()
-    if exists
-        return TableInfo(exists, table_info.name)
-    else
-        return TableInfo(exists, String[])
+# table info for load!():
+# returns NamedTuple with columns information,
+# or nothing if table does not exist
+tableinfo(db::DB, name::AbstractString) =
+    DBInterface.execute(db, "pragma table_info($(esc_id(name)))") do qry
+        st = qry.status[]
+        if st == SQLITE_ROW
+            return Tables.columntable(qry)
+        elseif st == SQLITE_DONE
+            return nothing
+        else
+            sqliteerror(q.stmt.db)
+        end
     end
-end
 
 """
     source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
@@ -145,41 +149,55 @@ Load a Tables.jl input `source` into an SQLite table that will be named `tablena
 """
 function load! end
 
-load!(db::DB, table::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...) = x->load!(x, db, table; kwargs...)
+load!(db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...) =
+    x -> load!(x, db, name; kwargs...)
 
 function load!(itr, db::DB, name::AbstractString="sqlitejl_"*Random.randstring(5); kwargs...)
     # check if table exists
-    nm = esc_id(name)
-    db_tableinfo = tableinfo(db, nm)
+    db_tableinfo = tableinfo(db, name)
     rows = Tables.rows(itr)
     sch = Tables.schema(rows)
-    return load!(sch, rows, db, nm, name, db_tableinfo; kwargs...)
+    return load!(sch, rows, db, name, db_tableinfo; kwargs...)
 end
 
-checkdupnames(names) = length(unique(map(x->lowercase(String(x)), names))) == length(names) || error("duplicate case-insensitive column names detected; sqlite doesn't allow duplicate column names and treats them case insensitive")
+# case-insensitive check for duplicate column names
+function checkdupnames(names::Union{AbstractVector, Tuple})
+    checkednames = Set{String}()
+    for name in names
+        lcname = lowercase(string(name))
+        if lcname in checkednames
+            throw(SQLiteException("Duplicate case-insensitive column name $lcname detected. SQLite doesn't allow duplicate column names and treats them case insensitive"))
+        end
+        push!(checkednames, lcname)
+    end
+    return true
+end
 
-function checknames(::Tables.Schema{names}, db_names::Vector{String}) where {names}
+# check if schema names match column names in DB
+function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) where {names}
     table_names = Set(string.(names))
     db_names = Set(db_names)
 
     if table_names != db_names
-        error("Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))")
+        throw(SQLiteException("Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))"))
     end
+    return true
 end
 
-function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tableinfo::Union{NamedTuple, Nothing};
+               temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
-    # create table if needed
-    if db_tableinfo.exists
-        checknames(sch, db_tableinfo.names)
+    # check if `rows` column names match the existing table, or create the new one
+    if db_tableinfo !== nothing
+        checknames(sch, db_tableinfo.name)
     else
-        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
+        createtable!(db, name, sch; temp=temp, ifnotexists=ifnotexists)
     end
     # build insert statement
-    columns = join(sch.names, ",")
+    columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
+    stmt = _Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         for row in rows
@@ -190,42 +208,18 @@ function load!(sch::Tables.Schema, rows, db::DB, nm::AbstractString, name, db_ta
             sqlite3_reset(stmt.handle)
         end
     end
+    _close!(stmt)
     analyze && execute(db, "ANALYZE $nm")
     return name
 end
 
 # unknown schema case
-function load!(::Nothing, rows, db::DB, nm::AbstractString, name, db_tableinfo::TableInfo; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+function load!(::Nothing, rows, db::DB, name::AbstractString,
+               db_tableinfo::Union{NamedTuple, Nothing}; kwargs...)
     state = iterate(rows)
-    state === nothing && return nm
+    state === nothing && return name
     row, st = state
     names = propertynames(row)
     sch = Tables.Schema(names, nothing)
-    checkdupnames(sch.names)
-    # create table if needed
-    if db_tableinfo.exists
-        checknames(sch, db_tableinfo.names)
-    else
-        createtable!(db, nm, sch; temp=temp, ifnotexists=ifnotexists)
-    end
-    # build insert statement
-    params = chop(repeat("?,", length(names)))
-    columns = join(sch.names, ",")
-    stmt = Stmt(db, "INSERT INTO $nm ($columns) VALUES ($params)")
-    # start a transaction for inserting rows
-    transaction(db) do
-        while true
-            Tables.eachcolumn(sch, row) do val, col, _
-                bind!(stmt, col, val)
-            end
-            sqlite3_step(stmt.handle)
-            sqlite3_reset(stmt.handle)
-            state = iterate(rows, st)
-            state === nothing && break
-            row, st = state
-        end
-    end
-    analyze && execute(db, "ANALYZE $nm")
-
-    return name
+    return load!(sch, rows, db, name, db_tableinfo; kwargs...)
 end

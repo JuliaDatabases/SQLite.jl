@@ -35,9 +35,23 @@ chmod(dbfile2, 0o777)
 
 @testset "basics" begin
 
+@testset "Julia to SQLite3 type conversion" begin
+    @test SQLite.sqlitetype(Int) == "INT NOT NULL"
+    @test SQLite.sqlitetype(Union{Float64, Missing}) == "REAL"
+    @test SQLite.sqlitetype(String) == "TEXT NOT NULL"
+    @test SQLite.sqlitetype(Symbol) == "BLOB NOT NULL"
+    @test SQLite.sqlitetype(Missing) == "NULL"
+    @test SQLite.sqlitetype(Any) == "BLOB"
+end
+
 db = SQLite.DB(dbfile2)
 db = DBInterface.connect(SQLite.DB, dbfile2)
 # regular SQLite tests
+
+@test_throws SQLiteException DBInterface.execute(db, "just some syntax error")
+# syntax correct, table missing
+@test_throws SQLiteException DBInterface.execute(db, "SELECT name FROM sqlite_nomaster WHERE type='table';")
+
 ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
 @test keys(ds) == (:name,)
@@ -55,7 +69,24 @@ DBInterface.execute(db, "alter table temp add column colyear int")
 DBInterface.execute(db, "update temp set colyear = 2014")
 r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
 @test length(r) == 4 && length(r[1]) == 10
-@test all(Bool[x == 2014 for x in r[4]])
+@test all(==(2014), r[4])
+
+@testset "commit/rollback tests" begin
+    @test_throws SQLiteException SQLite.rollback(db)
+    @test_throws SQLiteException SQLite.commit(db)
+
+    SQLite.transaction(db)
+    DBInterface.execute(db, "update temp set colyear = 2015")
+    SQLite.rollback(db)
+    r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+    @test all(==(2014), r[4])
+
+    SQLite.transaction(db)
+    DBInterface.execute(db, "update temp set colyear = 2015")
+    SQLite.commit(db)
+    r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+    @test all(==(2015), r[4])
+end
 
 DBInterface.execute(db, "alter table temp add column dates blob")
 stmt = DBInterface.prepare(db, "update temp set dates = ?")
@@ -91,13 +122,16 @@ SQLite.drop!(db, "temp")
 DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
 r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", (a=3,)) |> columntable
 @test length(r) == 3 && length(r[1]) == 3
+r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", a=3) |> columntable
+@test length(r) == 3 && length(r[1]) == 3
 r = DBInterface.execute(db, "SELECT * FROM temp WHERE Title LIKE @word", (word="%time%",)) |> columntable
 @test r[1] == [76, 111, 187]
-DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", (rid=0, lid=0, title="Test Album"))
-r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
-@test r[1][1] === 0
-@test r[2][1] == "Test Album"
-@test r[3][1] === 0
+DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", (rid=1, lid=0, title="Test Album"))
+DBInterface.execute(db, "INSERT INTO temp VALUES (@lid, :title, \$rid)", rid=3, lid=400, title="Test2 Album")
+r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId IN (0, 400)") |> columntable
+@test r[1] == [0, 400]
+@test r[2] == ["Test Album", "Test2 Album"]
+@test r[3] == [1, 3]
 SQLite.drop!(db, "temp")
 
 SQLite.register(db, SQLite.regexp, nargs=2, name="regexp")
@@ -170,7 +204,7 @@ SQLite.drop!(db, "points")
 db2 = DBInterface.connect(SQLite.DB)
 DBInterface.execute(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 
-@test_throws SQLite.SQLiteException SQLite.drop!(db2, "nonexistant")
+@test_throws SQLiteException SQLite.drop!(db2, "nonexistant")
 # should not throw anything
 SQLite.drop!(db2, "nonexistant", ifexists=true)
 # should drop "tab2"
@@ -214,7 +248,7 @@ r = DBInterface.execute(binddb, "SELECT * FROM temp") |> columntable
 ############################################
 
 #test for #158
-@test_throws SQLite.SQLiteException SQLite.DB("nonexistentdir/not_there.db")
+@test_throws SQLiteException SQLite.DB("nonexistentdir/not_there.db")
 
 #test for #180 (Query)
 param = "Hello!"
@@ -232,50 +266,59 @@ q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
 DBInterface.execute(q, ["a"])
 
 SQLite.bind!(q, 1, "a")
-@test_throws AssertionError DBInterface.execute(q)
+@test_throws SQLiteException DBInterface.execute(q)
 
 @test SQLite.@OK SQLite.enable_load_extension(db)
-show(db)
+@testset "show(DB)" begin
+    io = IOBuffer()
+    show(io, db)
+    @test String(take!(io)) == "SQLite.DB(\":memory:\")"
+end
 DBInterface.close!(db)
 
 db = SQLite.DB()
-DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
 
-q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
-SQLite.execute(q, (1,))
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
+@testset "SQLite.execute()" begin
+    DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
 
-SQLite.execute(q, [2])
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
+    q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
+    SQLite.execute(q, (1,))
+    r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
+    @test r[1] == [1]
 
-q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
-SQLite.execute(q, Dict(:x => 3))
-r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
-@test r[1][3] == 3
+    SQLite.execute(q, [2])
+    r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
+    @test r[1] == [1, 2]
 
+    q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
+    SQLite.execute(q, Dict(:x => 3))
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3]
+
+    SQLite.execute(q, x=4)
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3, 4]
+
+    SQLite.execute(db, "INSERT INTO T VALUES(:x)", x=5)
+    r = DBInterface.execute(columntable, db, "SELECT * FROM T")
+    @test r[1] == [1, 2, 3, 4, 5]
+end
 
 r = DBInterface.execute(db, strip("   SELECT * FROM T  ")) |> columntable
-@test r[1][1] == 1
-@test r[1][2] == 2
-@test r[1][3] == 3
+@test r[1] == [1, 2, 3, 4, 5]
 
 @test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
 
 SQLite.createindex!(db, "T", "x", "x_index"; unique=false)
 inds = SQLite.indices(db)
-@test inds.name[2] == "x"
+@test last(inds.name) == "x"
 SQLite.dropindex!(db, "x")
 @test length(SQLite.indices(db).name) == 1
 
 cols = SQLite.columns(db, "T")
-@test cols.name[1] == "x"
+@test cols.name == ["x"]
 
-@test SQLite.last_insert_rowid(db) == 3
+@test SQLite.last_insert_rowid(db) == 5
 
 r = DBInterface.execute(db, "SELECT * FROM T")
 @test Tables.istable(r)
@@ -288,15 +331,15 @@ SQLite.reset!(r)
 row2 = first(r)
 @test row[:x] == row2[:x]
 @test propertynames(row) == [:x]
-@test DBInterface.lastrowid(r) == 3
+@test DBInterface.lastrowid(r) == 5
 
 r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-SQLite.load!(nothing, Tables.rows(r), db, "T2", "T2", SQLite.tableinfo(db, "T2"))
+SQLite.load!(nothing, Tables.rows(r), db, "T2", SQLite.tableinfo(db, "T2"))
 r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
 @test r == r2
 
 # throw informative error on duplicate column names #193
-@test_throws ErrorException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
+@test_throws SQLiteException SQLite.load!((a=[1,2,3], A=[1,2,3]), db)
 
 db = SQLite.DB()
 # Table should map by name #216
@@ -311,10 +354,86 @@ expected = (a=[1, 2, 3, 4, 5, 6], b=[4, 5, 6, 7, 8, 9])
 
 # Table should error if names don't match #216
 tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
-@test_throws ErrorException SQLite.load!(tbl3, db, "data")
+@test_throws SQLiteException SQLite.load!(tbl3, db, "data")
 
 
 # Test busy_timeout
 @test SQLite.busy_timeout(db, 300) == 0
+
+@testset "load!()/drop!() table name escaping" begin
+    tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
+    SQLite.load!(tbl, db, "escape 10.0%")
+    r = DBInterface.execute(db, "SELECT * FROM $(SQLite.esc_id("escape 10.0%"))") |> columntable
+    @test r == tbl
+    SQLite.drop!(db, "escape 10.0%");
+end
+
+@testset "load!() column names escaping" begin
+    tbl = NamedTuple{(:a, Symbol("50.0%"))}(([1, 2, 3], ["a", "b", "c"]))
+    SQLite.load!(tbl, db, "escape_colnames")
+    r = DBInterface.execute(db, "SELECT * FROM escape_colnames") |> columntable
+    @test r == tbl
+    SQLite.drop!(db, "escape_colnames");
+end
+
+@testset "Bool column data" begin
+    tbl = (a = [true, false, false], b = [false, missing, true])
+    SQLite.load!(tbl, db, "bool_data")
+    r = DBInterface.execute(db, "SELECT * FROM bool_data") |> columntable
+    @test isequal(r, (a = [1, 0, 0], b = [0, missing, 1]))
+    SQLite.drop!(db, "bool_data");
+end
+
+@testset "Stmt scope" begin
+    dbfile = joinpath(tempdir(), "test_stmt_scope.sqlite")
+    db = SQLite.DB(dbfile)
+    tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
+
+    @testset "explicit finalization by finalize_statements!(db)" begin
+        SQLite.load!(tbl, db, "test_table")
+        stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table")
+        @test SQLite.isready(stmt)
+        @test SQLite.execute(stmt) == 100
+        # test cannot drop the table locked by the statement
+        @test_throws SQLiteException SQLite.drop!(db, "test_table")
+        SQLite.finalize_statements!(db)
+        @test !SQLite.isready(stmt)
+        SQLite.drop!(db, "test_table")
+        DBInterface.close!(stmt) # test can call close!() 2nd time
+    end
+
+    @testset "explicit finalization by close!(stmt)" begin
+        SQLite.load!(tbl, db, "test_table2")
+        stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table2")
+        @test SQLite.isready(stmt)
+        @test SQLite.execute(stmt) == 100
+        # test cannot drop the table locked by the statement
+        @test_throws SQLiteException SQLite.drop!(db, "test_table2")
+        DBInterface.close!(stmt)
+        @test !SQLite.isready(stmt)
+        SQLite.drop!(db, "test_table2")
+        DBInterface.close!(stmt) # test can call close!() 2nd time
+    end
+
+    @testset "automatic close of implicit prepared statement" begin
+        @testset "SQLite.execute() call" begin
+            SQLite.load!(tbl, db, "test_table3")
+            @test SQLite.execute(db, "SELECT a, b FROM test_table3") == 100
+            # test can immediately drop the table, since no locks by the statement
+            SQLite.drop!(db, "test_table3")
+        end
+
+        @testset "DBInterface.execute() call" begin
+            SQLite.load!(tbl, db, "test_table4")
+            @test SQLite.execute(db, "SELECT a, b FROM test_table4") == 100
+            GC.gc() # close implicitly created statement
+            # test can immediately drop the table, since no locks by the GC-ed statement
+            SQLite.drop!(db, "test_table4")
+        end
+    end
+
+    close(db)
+    rm(dbfile)
+end
 
 end # @testset
