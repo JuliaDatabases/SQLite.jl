@@ -27,6 +27,11 @@ function reset!(q::Query)
     return
 end
 
+function DBInterface.close!(q::Query)
+    _st = _stmt_safe(q.stmt)
+    (_st !== nothing) && sqlite3_reset(_st.handle)
+end
+
 function done(q::Query)
     st = q.status[]
     if st == SQLITE_DONE

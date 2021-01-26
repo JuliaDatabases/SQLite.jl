@@ -52,6 +52,12 @@ db = DBInterface.connect(SQLite.DB, dbfile2)
 # syntax correct, table missing
 @test_throws SQLiteException DBInterface.execute(db, "SELECT name FROM sqlite_nomaster WHERE type='table';")
 
+@testset "close!(query)" begin
+    qry = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';")
+    DBInterface.close!(qry)
+    DBInterface.close!(qry) # test it doesn't throw on double-close
+end
+
 ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |> columntable
 @test length(ds) == 1
 @test keys(ds) == (:name,)
