@@ -66,9 +66,23 @@ ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';
 results1 = SQLite.tables(db)
 @test isequal(ds, results1)
 
-results = DBInterface.execute(db, "SELECT * FROM Employee;") |> columntable
-@test length(results) == 15
-@test length(results[1]) == 8
+@testset "DBInterface.execute([f])" begin
+    # pipe approach
+    results = DBInterface.execute(db, "SELECT * FROM Employee;") |> columntable
+    @test length(results) == 15
+    @test length(results[1]) == 8
+    # callable approach
+    @test isequal(DBInterface.execute(columntable, db, "SELECT * FROM Employee"), results)
+    employees_stmt = DBInterface.prepare(db, "SELECT * FROM Employee")
+    @test isequal(columntable(DBInterface.execute(employees_stmt)), results)
+    @test isequal(DBInterface.execute(columntable, employees_stmt), results)
+    @testset "throwing from f()" begin
+        f(::SQLite.Query) = error("I'm throwing!")
+        @test_throws ErrorException DBInterface.execute(f, employees_stmt)
+        @test_throws ErrorException DBInterface.execute(f, db, "SELECT * FROM Employee")
+    end
+    DBInterface.close!(employees_stmt)
+end
 
 DBInterface.execute(db, "create table temp as select * from album")
 DBInterface.execute(db, "alter table temp add column colyear int")
