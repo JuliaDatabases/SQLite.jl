@@ -360,8 +360,33 @@ function juliatype(handle, col)
     end
 end
 
-juliatype(x::Integer) = x == SQLITE_INTEGER ? Int : x == SQLITE_FLOAT ? Float64 : x == SQLITE_TEXT ? String : Any
-juliatype(x::String) = x == "INTEGER" ? Int : x in ("NUMERIC","REAL") ? Float64 : x == "TEXT" ? String : Any
+juliatype(x::Integer) =
+    x == SQLITE_INTEGER ? Int :
+    x == SQLITE_FLOAT ? Float64 :
+    x == SQLITE_TEXT ? String :
+    Any
+
+function juliatype(typestr::AbstractString)
+    typeuc = uppercase(typestr)
+    if typeuc in ("INTEGER", "INT")
+        return Int
+    elseif typeuc in ("NUMERIC", "REAL")
+        return Float64
+    elseif typeuc == "TEXT"
+        return String
+    elseif typeuc == "BLOB"
+        return Any
+    elseif typeuc == "DATETIME"
+        return Any # FIXME
+    elseif occursin(r"^NVARCHAR\(\d+\)$", typeuc)
+        return String
+    elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
+        return Float64
+    else
+        @warn "Unsupported SQLite type $typestr"
+        return Any
+    end
+end
 
 sqlitevalue(::Type{T}, handle, col) where {T <: Union{Base.BitSigned, Base.BitUnsigned}} = convert(T, sqlite3_column_int64(handle, col))
 const FLOAT_TYPES = Union{Float16, Float32, Float64} # exclude BigFloat
