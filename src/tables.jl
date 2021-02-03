@@ -10,6 +10,9 @@ struct Query
     lookup::Dict{Symbol, Int}
 end
 
+# check if the query has no (more) rows
+Base.isempty(q::Query) = q.status[] == SQLITE_DONE
+
 struct Row <: Tables.AbstractRow
     q::Query
 end

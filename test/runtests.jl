@@ -84,6 +84,11 @@ results1 = SQLite.tables(db)
     DBInterface.close!(employees_stmt)
 end
 
+@testset "isempty(::Query)" begin
+    @test !DBInterface.execute(isempty, db, "SELECT * FROM Employee")
+    @test DBInterface.execute(isempty, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
+end
+
 DBInterface.execute(db, "create table temp as select * from album")
 DBInterface.execute(db, "alter table temp add column colyear int")
 DBInterface.execute(db, "update temp set colyear = 2014")
