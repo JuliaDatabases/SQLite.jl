@@ -20,6 +20,17 @@ end
 getquery(r::Row) = getfield(r, :q)
 
 Tables.isrowtable(::Type{Query}) = true
+Tables.columnnames(q::Query) = q.names
+
+function Tables.schema(q::Query)
+    if isempty(q)
+        # when the query is empty, return the types provided by SQLite
+        # by default SQLite.jl assumes all columns can have missing values
+        Tables.Schema(Tables.columnnames(q), q.types)
+    else
+        return nothing # fallback to the actual column types of the result
+    end
+end
 
 Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
@@ -60,7 +71,7 @@ Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T} = getvalue(get
 
 Tables.getcolumn(r::Row, i::Int) = Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
 Tables.getcolumn(r::Row, nm::Symbol) = Tables.getcolumn(r, getquery(r).lookup[nm])
-Tables.columnnames(r::Row) = getquery(r).names
+Tables.columnnames(r::Row) = Tables.columnnames(getquery(r))
 
 function Base.iterate(q::Query)
     done(q) && return nothing
