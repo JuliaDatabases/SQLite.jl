@@ -255,7 +255,7 @@ function bind! end
 
 function bind!(stmt::_Stmt, params::DBInterface.NamedStatementParams)
     nparams = sqlite3_bind_parameter_count(stmt.handle)
-    (nparams == length(params)) || throw(SQLiteException("values should be provided for all query placeholders"))
+    (nparams <= length(params)) || throw(SQLiteException("values should be provided for all query placeholders"))
     for i in 1:nparams
         name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
         isempty(name) && throw(SQLiteException("nameless parameters should be passed as a Vector"))
