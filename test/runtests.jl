@@ -84,6 +84,23 @@ results1 = SQLite.tables(db)
     DBInterface.close!(employees_stmt)
 end
 
+@testset "isempty(::Query)" begin
+    @test !DBInterface.execute(isempty, db, "SELECT * FROM Employee")
+    @test DBInterface.execute(isempty, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
+end
+
+@testset "empty query has correct schema and return type" begin
+    empty_scheme = DBInterface.execute(Tables.schema, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
+    all_scheme = DBInterface.execute(Tables.schema, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
+    @test empty_scheme.names == all_scheme.names
+    @test all(ea -> ea[1] <: ea[2], zip(empty_scheme.types, all_scheme.types))
+
+    empty_tbl = DBInterface.execute(columntable, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
+    all_tbl = DBInterface.execute(columntable, db, "SELECT * FROM Employee")
+    @test propertynames(empty_tbl) == propertynames(all_tbl)
+    @test all(col -> eltype(empty_tbl[col]) >: eltype(all_tbl[col]), propertynames(all_tbl))
+end
+
 DBInterface.execute(db, "create table temp as select * from album")
 DBInterface.execute(db, "alter table temp add column colyear int")
 DBInterface.execute(db, "update temp set colyear = 2014")
