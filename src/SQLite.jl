@@ -345,6 +345,7 @@ end
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
+# get julia type for given column of the given statement
 function juliatype(handle, col)
     t = SQLite.sqlite3_column_decltype(handle, col)
     if t != C_NULL
@@ -360,12 +361,14 @@ function juliatype(handle, col)
     end
 end
 
+# convert SQLite stored type into Julia equivalent
 juliatype(x::Integer) =
     x == SQLITE_INTEGER ? Int :
     x == SQLITE_FLOAT ? Float64 :
     x == SQLITE_TEXT ? String :
     Any
 
+# convert SQLite declared type into Julia equivalent
 function juliatype(typestr::AbstractString)
     typeuc = uppercase(typestr)
     if typeuc in ("INTEGER", "INT")
