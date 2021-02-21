@@ -373,7 +373,7 @@ function juliatype(typestr::AbstractString)
     typeuc = uppercase(typestr)
     if typeuc in ("INTEGER", "INT")
         return Int
-    elseif typeuc in ("NUMERIC", "REAL")
+    elseif typeuc in ("NUMERIC", "REAL", "FLOAT")
         return Float64
     elseif typeuc == "TEXT"
         return String
@@ -381,7 +381,9 @@ function juliatype(typestr::AbstractString)
         return Any
     elseif typeuc == "DATETIME"
         return Any # FIXME
-    elseif occursin(r"^NVARCHAR\(\d+\)$", typeuc)
+    elseif typeuc == "TIMESTAMP"
+        return Any # FIXME
+    elseif occursin(r"^(?:N?VAR)?CHAR\(\d+\)$", typeuc)
         return String
     elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
         return Float64
