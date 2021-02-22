@@ -345,46 +345,56 @@ end
  #int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
  #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
+# get julia type for given column of the given statement
 function juliatype(handle, col)
-    t = SQLite.sqlite3_column_decltype(handle, col)
-    if t != C_NULL
-        T = juliatype(unsafe_string(t))
-        T !== Any && return T
-    end
-    x = SQLite.sqlite3_column_type(handle, col)
-    if x == SQLite.SQLITE_BLOB
-        val = SQLite.sqlitevalue(Any, handle, col)
-        return typeof(val)
+    stored_typeid = SQLite.sqlite3_column_type(handle, col)
+    if stored_typeid == SQLite.SQLITE_BLOB
+        # blobs are serialized julia types, so just try to deserialize it
+        deser_val = SQLite.sqlitevalue(Any, handle, col)
+        # FIXME deserialized type have priority over declared type, is it fine?
+        return typeof(deser_val)
     else
-        return juliatype(x)
+        stored_type = juliatype(stored_typeid)
+    end
+    decl_typestr = SQLite.sqlite3_column_decltype(handle, col)
+    if decl_typestr != C_NULL
+        return juliatype(unsafe_string(decl_typestr), stored_type)
+    else
+        return stored_type
     end
 end
 
+# convert SQLite stored type into Julia equivalent
 juliatype(x::Integer) =
     x == SQLITE_INTEGER ? Int :
     x == SQLITE_FLOAT ? Float64 :
     x == SQLITE_TEXT ? String :
     Any
 
-function juliatype(typestr::AbstractString)
-    typeuc = uppercase(typestr)
+# convert SQLite declared type into Julia equivalent,
+# fall back to default (stored type), if no good match
+function juliatype(decl_typestr::AbstractString,
+                   default::Type = Any)
+    typeuc = uppercase(decl_typestr)
     if typeuc in ("INTEGER", "INT")
         return Int
-    elseif typeuc in ("NUMERIC", "REAL")
+    elseif typeuc in ("NUMERIC", "REAL", "FLOAT")
         return Float64
     elseif typeuc == "TEXT"
         return String
     elseif typeuc == "BLOB"
         return Any
     elseif typeuc == "DATETIME"
-        return Any # FIXME
-    elseif occursin(r"^NVARCHAR\(\d+\)$", typeuc)
+        return default # FIXME
+    elseif typeuc == "TIMESTAMP"
+        return default # FIXME
+    elseif occursin(r"^(?:N?VAR)?CHAR\(\d+\)$", typeuc)
         return String
     elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
         return Float64
     else
-        @warn "Unsupported SQLite type $typestr"
-        return Any
+        @warn "Unsupported SQLite declared type $decl_typestr, falling back to $default type"
+        return default
     end
 end
 

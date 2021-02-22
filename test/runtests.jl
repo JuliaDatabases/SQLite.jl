@@ -272,15 +272,36 @@ stmt = DBInterface.prepare(db, "INSERT INTO tbl (a) VALUES (@a);")
 SQLite.bind!(stmt, "@a", 1)
 SQLite.clear!(stmt)
 
-binddb = SQLite.DB()
-DBInterface.execute(binddb, "CREATE TABLE temp (n NULL, i6 INT, f REAL, s TEXT, a BLOB)")
-DBInterface.execute(binddb, "INSERT INTO temp VALUES (?1, ?2, ?3, ?4, ?5)", [missing, Int64(6), 6.4, "some text", b"bytearray"])
-r = DBInterface.execute(binddb, "SELECT * FROM temp") |> columntable
-@test isa(r[1][1], Missing)
-@test isa(r[2][1], Int)
-@test isa(r[3][1], Float64)
-@test isa(r[4][1], AbstractString)
-@test isa(r[5][1], Base.CodeUnits)
+@testset "SQLite to Julia type conversion" begin
+    binddb = SQLite.DB()
+    DBInterface.execute(binddb,
+        "CREATE TABLE temp (n NULL, i1 INT, i2 integer,
+                            f1 REAL, f2 FLOAT, f3 NUMERIC,
+                            s1 TEXT, s2 CHAR(10), s3 VARCHAR(15), s4 NVARCHAR(5),
+                            d1 DATETIME, ts1 TIMESTAMP,
+                            b BLOB,
+                            x1 UNKNOWN1, x2 UNKNOWN2)")
+    DBInterface.execute(binddb, "INSERT INTO temp VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [missing, Int64(6), Int64(4),
+         6.4, 6.3, Int64(7),
+        "some long text", "short text", "another text", "short",
+        "2021-02-21", "2021-02-12::1532",
+        b"bytearray",
+        "actually known", 435])
+    rr = (;) # just to have the var declared
+    @test_logs(
+        (:warn, "Unsupported SQLite declared type UNKNOWN1, falling back to String type"),
+        (:warn, "Unsupported SQLite declared type UNKNOWN2, falling back to $(Int) type"),
+        rr = DBInterface.execute(rowtable, binddb, "SELECT * FROM temp"))
+    @test length(rr) == 1
+    r = first(rr)
+    @test typeof.(Tuple(r)) == (Missing, Int, Int,
+                            Float64, Float64, Int,
+                            String, String, String, String,
+                            String, String,
+                            Base.CodeUnits{UInt8, String},
+                            String, Int)
+end
 
 ############################################
 
