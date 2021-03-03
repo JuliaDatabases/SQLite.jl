@@ -46,6 +46,11 @@ end
 
 db = SQLite.DB(dbfile2)
 db = DBInterface.connect(SQLite.DB, dbfile2)
+
+# https://github.com/JuliaDatabases/SQLite.jl/issues/207
+ds = DBInterface.execute(db, "SELECT RANDOM() as a FROM Track LIMIT 1") |> columntable
+@test ds.a[1] isa Int64
+
 # regular SQLite tests
 
 @test_throws SQLiteException DBInterface.execute(db, "just some syntax error")

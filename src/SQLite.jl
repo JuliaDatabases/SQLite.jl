@@ -366,7 +366,7 @@ end
 
 # convert SQLite stored type into Julia equivalent
 juliatype(x::Integer) =
-    x == SQLITE_INTEGER ? Int :
+    x == SQLITE_INTEGER ? Int64 :
     x == SQLITE_FLOAT ? Float64 :
     x == SQLITE_TEXT ? String :
     Any
@@ -377,7 +377,7 @@ function juliatype(decl_typestr::AbstractString,
                    default::Type = Any)
     typeuc = uppercase(decl_typestr)
     if typeuc in ("INTEGER", "INT")
-        return Int
+        return Int64
     elseif typeuc in ("NUMERIC", "REAL", "FLOAT")
         return Float64
     elseif typeuc == "TEXT"
