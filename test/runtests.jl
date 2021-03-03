@@ -46,6 +46,11 @@ end
 
 db = SQLite.DB(dbfile2)
 db = DBInterface.connect(SQLite.DB, dbfile2)
+
+# https://github.com/JuliaDatabases/SQLite.jl/issues/207
+ds = DBInterface.execute(db, "SELECT RANDOM() as a FROM Track LIMIT 1") |> columntable
+@test ds.a[1] isa Int64
+
 # regular SQLite tests
 
 @test_throws SQLiteException DBInterface.execute(db, "just some syntax error")
@@ -151,9 +156,9 @@ r = DBInterface.execute(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"])
 @test r[1] == [76, 111, 187]
 DBInterface.execute(db, "INSERT INTO temp VALUES (?1, ?3, ?2)", [0,0, "Test Album"])
 r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
-@test r[1][1] === 0
+@test r[1][1] == 0
 @test r[2][1] == "Test Album"
-@test r[3][1] === 0
+@test r[3][1] == 0
 SQLite.drop!(db, "temp")
 
 DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
@@ -189,10 +194,10 @@ s = DBInterface.execute(db, "SELECT AlbumId FROM Album") |> columntable
 @test r[1][1] == s[1][1] + 4
 
 SQLite.@register db mult
-r = DBInterface.execute(db, "SELECT Milliseconds, Bytes FROM Track") |> columntable
-s = DBInterface.execute(db, "SELECT mult(Milliseconds, Bytes) FROM Track") |> columntable
+r = DBInterface.execute(db, "SELECT GenreId, UnitPrice FROM Track") |> columntable
+s = DBInterface.execute(db, "SELECT mult(GenreId, UnitPrice) FROM Track") |> columntable
 @test (r[1][1] * r[2][1]) == s[1][1]
-t = DBInterface.execute(db, "SELECT mult(Milliseconds, Bytes, 3, 4) FROM Track") |> columntable
+t = DBInterface.execute(db, "SELECT mult(GenreId, UnitPrice, 3, 4) FROM Track") |> columntable
 @test (r[1][1] * r[2][1] * 3 * 4) == t[1][1]
 
 SQLite.@register db sin
@@ -291,16 +296,16 @@ SQLite.clear!(stmt)
     rr = (;) # just to have the var declared
     @test_logs(
         (:warn, "Unsupported SQLite declared type UNKNOWN1, falling back to String type"),
-        (:warn, "Unsupported SQLite declared type UNKNOWN2, falling back to $(Int) type"),
+        (:warn, "Unsupported SQLite declared type UNKNOWN2, falling back to $(Int64) type"),
         rr = DBInterface.execute(rowtable, binddb, "SELECT * FROM temp"))
     @test length(rr) == 1
     r = first(rr)
-    @test typeof.(Tuple(r)) == (Missing, Int, Int,
-                            Float64, Float64, Int,
+    @test typeof.(Tuple(r)) == (Missing, Int64, Int64,
+                            Float64, Float64, Int64,
                             String, String, String, String,
                             String, String,
                             Base.CodeUnits{UInt8, String},
-                            String, Int)
+                            String, Int64)
 end
 
 ############################################
