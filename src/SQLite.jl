@@ -292,6 +292,7 @@ bind!(stmt::_Stmt, i::Integer, val::AbstractFloat)  = (stmt.params[i] = val; @CH
 bind!(stmt::_Stmt, i::Integer, val::Int32)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(stmt.handle, i, val); return nothing)
 bind!(stmt::_Stmt, i::Integer, val::Int64)          = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int64(stmt.handle, i, val); return nothing)
 bind!(stmt::_Stmt, i::Integer, val::Missing)        = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_null(stmt.handle, i); return nothing)
+bind!(stmt::_Stmt, i::Integer, val::Nothing)        = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_null(stmt.handle, i); return nothing)
 bind!(stmt::_Stmt, i::Integer, val::AbstractString) = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i, val); return nothing)
 bind!(stmt::_Stmt, i::Integer, val::WeakRefString{UInt8})   = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(stmt.handle, i, val.ptr, val.len); return nothing)
 bind!(stmt::_Stmt, i::Integer, val::WeakRefString{UInt16})  = (stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text16(stmt.handle, i, val.ptr, val.len*2); return nothing)
@@ -420,6 +421,7 @@ sqlitetype_(::Type{Bool}) = "INT"
 sqlitetype_(::Type) = "BLOB" # fallback
 
 sqlitetype(::Type{Missing}) = "NULL"
+sqlitetype(::Type{Nothing}) = "NULL"
 sqlitetype(::Type{Union{T, Missing}}) where T = sqlitetype_(T)
 sqlitetype(::Type{T}) where T = string(sqlitetype_(T), " NOT NULL")
 

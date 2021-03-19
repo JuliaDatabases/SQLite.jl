@@ -41,6 +41,7 @@ chmod(dbfile2, 0o777)
     @test SQLite.sqlitetype(String) == "TEXT NOT NULL"
     @test SQLite.sqlitetype(Symbol) == "BLOB NOT NULL"
     @test SQLite.sqlitetype(Missing) == "NULL"
+    @test SQLite.sqlitetype(Nothing) == "NULL"
     @test SQLite.sqlitetype(Any) == "BLOB"
 end
 
