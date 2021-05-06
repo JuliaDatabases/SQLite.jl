@@ -27,10 +27,10 @@ Contributions are very welcome, as are feature requests and suggestions. Please 
 
 
 [docs-latest-img]: https://img.shields.io/badge/docs-latest-blue.svg
-[docs-latest-url]: https://juliadatabases.github.io/SQLite.jl/latest
+[docs-latest-url]: https://juliadatabases.org/SQLite.jl/latest
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
-[docs-stable-url]: https://juliadatabases.github.io/SQLite.jl/stable
+[docs-stable-url]: https://juliadatabases.org/SQLite.jl/stable
 
 [travis-img]: https://travis-ci.org/JuliaDatabases/SQLite.jl.svg?branch=master
 [travis-url]: https://travis-ci.org/JuliaDatabases/SQLite.jl
