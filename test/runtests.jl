@@ -181,6 +181,11 @@ SQLite.register(db, SQLite.regexp, nargs=2, name="regexp")
 r = DBInterface.execute(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'")) |> columntable
 @test r[1][1] == "Peacock"
 
+SQLite.register(db, identity, nargs=1, name="identity")
+r = DBInterface.execute(db, """SELECT identity("abc") as x, "abc" == identity("abc") as cmp""") |> columntable
+@test only(r.x) == "abc"
+@test only(r.cmp) == 1
+
 @test_throws AssertionError SQLite.register(db, triple, nargs=186)
 SQLite.register(db, triple, nargs=1)
 r = DBInterface.execute(db, "SELECT triple(Total) FROM Invoice ORDER BY InvoiceId LIMIT 5") |> columntable

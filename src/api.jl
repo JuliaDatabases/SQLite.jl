@@ -274,7 +274,7 @@ end
 function sqlite3_result_text(context::Ptr{Cvoid}, value::AbstractString)
     return ccall( (:sqlite3_result_text, libsqlite),
         Cvoid, (Ptr{Cvoid}, Ptr{UInt8}, Cint, Ptr{Cvoid}),
-        context, value, sizeof(value)+1, SQLITE_TRANSIENT)
+        context, value, sizeof(value), SQLITE_TRANSIENT)
 end
 # SQLITE_API void sqlite3_result_text16(sqlite3_context*, const void*, int, void(*)(void*));
 # SQLITE_API void sqlite3_result_blob(sqlite3_context*, const void*, int n, void(*)(void*));
