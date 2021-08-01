@@ -183,8 +183,8 @@ r = DBInterface.execute(db, SQLite.@sr_str("SELECT LastName FROM Employee WHERE 
 
 SQLite.register(db, identity, nargs=1, name="identity")
 r = DBInterface.execute(db, """SELECT identity("abc") as x, "abc" == identity("abc") as cmp""") |> columntable
-@test only(r.x) == "abc"
-@test only(r.cmp) == 1
+@test first(r.x) == "abc"
+@test first(r.cmp) == 1
 
 @test_throws AssertionError SQLite.register(db, triple, nargs=186)
 SQLite.register(db, triple, nargs=1)
