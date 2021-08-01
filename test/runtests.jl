@@ -451,9 +451,9 @@ end
 @testset "serialization edgecases" begin
     db = SQLite.DB()
     r = DBInterface.execute(db, "SELECT zeroblob(2) as b") |> columntable
-    @test only(r.b) == [0, 0]
+    @test first(r.b) == [0, 0]
     r = DBInterface.execute(db, "SELECT zeroblob(0) as b") |> columntable
-    @test only(r.b) == []
+    @test first(r.b) == []
 end
 
 @testset "Stmt scope" begin
