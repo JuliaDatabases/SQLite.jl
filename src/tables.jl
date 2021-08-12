@@ -109,14 +109,24 @@ Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator
 The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tables.jl) interface, so results can be collected in any Tables.jl-compatible sink,
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
 """
-function DBInterface.execute(stmt::Stmt, params::DBInterface.StatementParams)
+function DBInterface.execute(stmt::Stmt, params::DBInterface.StatementParams; allowduplicates::Bool=false)
     status = execute(stmt, params)
     _st = _stmt(stmt)
     cols = sqlite3_column_count(_st.handle)
     header = Vector{Symbol}(undef, cols)
     types = Vector{Type}(undef, cols)
     for i = 1:cols
-        header[i] = sym(sqlite3_column_name(_st.handle, i))
+        nm = sym(sqlite3_column_name(_st.handle, i))
+        if !allowduplicates && nm in view(header, 1:(i - 1))
+            j = 1
+            newnm = Symbol(nm, :_, j)
+            while newnm in view(header, 1:(i - 1))
+                j += 1
+                newnm = Symbol(nm, :_, j)
+            end
+            nm = newnm
+        end
+        header[i] = nm
         types[i] = Union{juliatype(_st.handle, i), Missing}
     end
     return Query(stmt, Ref(status), header, types, Dict(x=>i for (i, x) in enumerate(header)))
