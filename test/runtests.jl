@@ -424,6 +424,11 @@ tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
 # Test busy_timeout
 @test SQLite.busy_timeout(db, 300) == 0
 
+# 253, ensure query column names are unique by default
+db = SQLite.DB()
+res = DBInterface.execute(db, "select 1 as x2, 2 as x2, 3 as x2, 4 as x2_2") |> columntable
+@test res == (x2 = [1], x2_1 = [2], x2_2 = [3], x2_2_1 = [4])
+
 @testset "load!()/drop!() table name escaping" begin
     tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
     SQLite.load!(tbl, db, "escape 10.0%")

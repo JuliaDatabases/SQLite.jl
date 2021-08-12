@@ -458,7 +458,7 @@ end
 execute(stmt::Stmt, params::DBInterface.StatementParams) =
     execute(stmt.db, _stmt(stmt), params)
 
-execute(stmt::Stmt; kwargs...) = execute(stmt, kwargs.data)
+execute(stmt::Stmt; kwargs...) = execute(stmt, values(kwargs))
 
 function execute(db::DB, sql::AbstractString, params::DBInterface.StatementParams)
      # prepare without registering _Stmt in DB
@@ -470,7 +470,7 @@ function execute(db::DB, sql::AbstractString, params::DBInterface.StatementParam
     end
 end
 
-execute(db::DB, sql::AbstractString; kwargs...) = execute(db, sql, kwargs.data)
+execute(db::DB, sql::AbstractString; kwargs...) = execute(db, sql, values(kwargs))
 
 """
     SQLite.esc_id(x::Union{AbstractString,Vector{AbstractString}})
