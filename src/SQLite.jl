@@ -394,7 +394,7 @@ function juliatype(decl_typestr::AbstractString,
         return default # FIXME
     elseif typeuc == "TIMESTAMP"
         return default # FIXME
-    elseif occursin(r"^N?V?A?R?Y?I?N?G?\s*CHARA?C?T?E?R?\s*\(?\d*\)?$"i, typeuc)
+    elseif occursin(r"^N?V?A?R?Y?I?N?G?\s*CHARA?C?T?E?R?T?E?X?T?\s*\(?\d*\)?$"i, typeuc)
         return String
     elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
         return Float64
