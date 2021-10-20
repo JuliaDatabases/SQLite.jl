@@ -328,6 +328,9 @@ end
 const SERIALIZATION = sqlserialize(0)[1:18]
 
 function sqldeserialize(r)
+    if sizeof(r) < sizeof(SERIALIZATION)
+        return r
+    end
     ret = ccall(:memcmp, Int32, (Ptr{UInt8}, Ptr{UInt8}, UInt),
             SERIALIZATION, r, min(sizeof(SERIALIZATION), sizeof(r)))
     if ret == 0

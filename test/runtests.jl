@@ -458,6 +458,14 @@ end
     SQLite.drop!(db, "bool_data");
 end
 
+@testset "serialization edgecases" begin
+    db = SQLite.DB()
+    r = DBInterface.execute(db, "SELECT zeroblob(2) as b") |> columntable
+    @test first(r.b) == [0, 0]
+    r = DBInterface.execute(db, "SELECT zeroblob(0) as b") |> columntable
+    @test first(r.b) == []
+end
+
 @testset "Stmt scope" begin
     dbfile = joinpath(tempdir(), "test_stmt_scope.sqlite")
     db = SQLite.DB(dbfile)
