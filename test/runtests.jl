@@ -104,7 +104,7 @@ end
     empty_tbl = DBInterface.execute(columntable, db, "SELECT * FROM Employee WHERE FirstName='Joanne'")
     all_tbl = DBInterface.execute(columntable, db, "SELECT * FROM Employee")
     @test propertynames(empty_tbl) == propertynames(all_tbl)
-    @test all(col -> eltype(empty_tbl[col]) >: eltype(all_tbl[col]), propertynames(all_tbl))
+    @test all(col -> eltype(empty_tbl[col]) == Missing || eltype(empty_tbl[col]) >: eltype(all_tbl[col]), propertynames(all_tbl))
 end
 
 DBInterface.execute(db, "create table temp as select * from album")
