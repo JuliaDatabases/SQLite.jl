@@ -307,15 +307,14 @@ struct Serialized
     object
 end
 
-const GLOBAL_BUF = IOBuffer()
 function sqlserialize(x)
-    seekstart(GLOBAL_BUF)
+    buffer = IOBuffer()
     # deserialize will sometimes return a random object when called on an array
     # which has not been previously serialized, we can use this mutable struct to check
     # that the array has been serialized
     s = Serialized(x)
-    Serialization.serialize(GLOBAL_BUF, s)
-    return take!(GLOBAL_BUF)
+    Serialization.serialize(buffer, s)
+    return take!(buffer)
 end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
 bind!(stmt::_Stmt, i::Integer, val::Any) = bind!(stmt, i, sqlserialize(val))
