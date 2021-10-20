@@ -519,3 +519,25 @@ end
 end
 
 end # @testset
+
+struct UnknownSchemaTable
+end
+
+Tables.isrowtable(::Type{UnknownSchemaTable}) = true
+Tables.rows(x::UnknownSchemaTable) = x
+Base.length(x::UnknownSchemaTable) = 3
+Base.iterate(::UnknownSchemaTable, st=1) = st == 4 ? nothing : ((a=1, b=2, c=3), st + 1)
+
+@testset "misc" begin
+
+# https://github.com/JuliaDatabases/SQLite.jl/issues/259
+db = SQLite.DB()
+SQLite.load!(UnknownSchemaTable(), db, "tbl")
+tbl = DBInterface.execute(db, "select * from tbl") |> columntable
+@test tbl == (
+    a = [1, 1, 1],
+    b = [2, 2, 2],
+    c = [3, 3, 3]
+)
+
+end
