@@ -526,7 +526,7 @@ end
 Tables.isrowtable(::Type{UnknownSchemaTable}) = true
 Tables.rows(x::UnknownSchemaTable) = x
 Base.length(x::UnknownSchemaTable) = 3
-Base.iterate(::UnknownSchemaTable, st=1) = st == 4 ? nothing : ((a=1, b=2, c=3), st + 1)
+Base.iterate(::UnknownSchemaTable, st=1) = st == 4 ? nothing : ((a=1, b=2 + st, c=3 + st), st + 1)
 
 @testset "misc" begin
 
@@ -536,15 +536,27 @@ SQLite.load!(UnknownSchemaTable(), db, "tbl")
 tbl = DBInterface.execute(db, "select * from tbl") |> columntable
 @test tbl == (
     a = [1, 1, 1],
-    b = [2, 2, 2],
-    c = [3, 3, 3]
+    b = [3, 4, 5],
+    c = [4, 5, 6]
 )
 
 # https://github.com/JuliaDatabases/SQLite.jl/issues/251
 q = DBInterface.execute(db, "select * from tbl")
 row, st = iterate(q)
-@test row.a == 1 && row.b == 2 && row.c == 3
+@test row.a == 1 && row.b == 3 && row.c == 4
 row2, st = iterate(q, st)
 @test_throws ArgumentError row.a
+
+# https://github.com/JuliaDatabases/SQLite.jl/issues/243
+db = SQLite.DB()
+DBInterface.execute(db, "create table tmp ( a INTEGER NOT NULL PRIMARY KEY, b INTEGER, c INTEGER )")
+@test_throws SQLite.SQLiteException SQLite.load!(UnknownSchemaTable(), db, "tmp")
+SQLite.load!(UnknownSchemaTable(), db, "tmp"; replace=true)
+tbl = DBInterface.execute(db, "select * from tmp") |> columntable
+@test tbl == (
+    a = [1],
+    b = [5],
+    c = [6]
+)
 
 end
