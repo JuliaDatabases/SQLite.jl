@@ -540,4 +540,11 @@ tbl = DBInterface.execute(db, "select * from tbl") |> columntable
     c = [3, 3, 3]
 )
 
+# https://github.com/JuliaDatabases/SQLite.jl/issues/251
+q = DBInterface.execute(db, "select * from tbl")
+row, st = iterate(q)
+@test row.a == 1 && row.b == 2 && row.c == 3
+row2, st = iterate(q, st)
+@test_throws ArgumentError row.a
+
 end
