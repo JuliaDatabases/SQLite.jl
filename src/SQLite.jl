@@ -380,9 +380,11 @@ juliatype(x::Integer) =
 function juliatype(decl_typestr::AbstractString,
                    default::Type = Any)
     typeuc = uppercase(decl_typestr)
-    if typeuc in ("INTEGER", "INT")
+    # try to match the type affinities described in the "Affinity Name Examples" section
+    # of https://www.sqlite.org/datatype3.html
+    if typeuc in ("INTEGER", "INT", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "UNSIGNED BIG INT", "INT2", "INT8")
         return Int64
-    elseif typeuc in ("NUMERIC", "REAL", "FLOAT")
+    elseif typeuc in ("NUMERIC", "REAL", "FLOAT", "DOUBLE", "DOUBLE PRECISION")
         return Float64
     elseif typeuc == "TEXT"
         return String
@@ -392,7 +394,7 @@ function juliatype(decl_typestr::AbstractString,
         return default # FIXME
     elseif typeuc == "TIMESTAMP"
         return default # FIXME
-    elseif occursin(r"^(?:N?VAR)?CHAR\(\d+\)$", typeuc)
+    elseif occursin(r"^N?V?A?R?Y?I?N?G?\s*CHARA?C?T?E?R?T?E?X?T?\s*\(?\d*\)?$"i, typeuc)
         return String
     elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
         return Float64
