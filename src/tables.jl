@@ -175,14 +175,15 @@ tableinfo(db::DB, name::AbstractString) =
     end
 
 """
-    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
-    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, analyze::Bool=false)
+    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, analyze::Bool=false)
+    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, analyze::Bool=false)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
 
-`temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
-`ifnotexists=false` will throw an error if `tablename` already exists in `db`
-`analyze=true` will execute `ANALYZE` at the end of the insert
+  * `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
+  * `ifnotexists=false` will throw an error if `tablename` already exists in `db`
+  * `replace=false` controls whether an `INSERT INTO ...` statement is generated or a `REPLACE INTO ...`
+  * `analyze=true` will execute `ANALYZE` at the end of the insert
 """
 function load! end
 
@@ -222,7 +223,7 @@ function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) wh
 end
 
 function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tableinfo::Union{NamedTuple, Nothing}, row=nothing, st=nothing;
-               temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
+               temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
     # check if `rows` column names match the existing table, or create the new one
@@ -234,7 +235,8 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    stmt = _Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
+    kind = replace ? "REPLACE" : "INSERT"
+    stmt = _Stmt(db, "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
         if row === nothing
@@ -246,8 +248,14 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
             Tables.eachcolumn(sch, row) do val, col, _
                 bind!(stmt, col, val)
             end
-            sqlite3_step(stmt.handle)
-            sqlite3_reset(stmt.handle)
+            r = sqlite3_step(stmt.handle)
+            if r == SQLITE_DONE
+                sqlite3_reset(stmt.handle)
+            elseif r != SQLITE_ROW
+                e = sqliteexception(db)
+                sqlite3_reset(stmt.handle)
+                throw(e)
+            end
             state = iterate(rows, st)
             state === nothing && break
             row, st = state
