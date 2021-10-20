@@ -148,7 +148,8 @@ function createtable!(db::DB, name::AbstractString, ::Tables.Schema{names, types
     columns = [string(esc_id(String(names[i])), ' ',
                       sqlitetype(types !== nothing ? fieldtype(types, i) : Any))
                for i in eachindex(names)]
-    return execute(db, "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))")
+    sql = "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))"
+    return execute(db, sql)
 end
 
 # table info for load!():
@@ -213,7 +214,7 @@ function checknames(::Tables.Schema{names}, db_names::AbstractVector{String}) wh
     return true
 end
 
-function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tableinfo::Union{NamedTuple, Nothing};
+function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tableinfo::Union{NamedTuple, Nothing}, row=nothing, st=nothing;
                temp::Bool=false, ifnotexists::Bool=false, analyze::Bool=false)
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
@@ -229,12 +230,20 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
     stmt = _Stmt(db, "INSERT INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
     transaction(db) do
-        for row in rows
+        if row === nothing
+            state = iterate(rows)
+            state === nothing && return
+            row, st = state
+        end
+        while true
             Tables.eachcolumn(sch, row) do val, col, _
                 bind!(stmt, col, val)
             end
             sqlite3_step(stmt.handle)
             sqlite3_reset(stmt.handle)
+            state = iterate(rows, st)
+            state === nothing && break
+            row, st = state
         end
     end
     _close!(stmt)
@@ -250,5 +259,5 @@ function load!(::Nothing, rows, db::DB, name::AbstractString,
     row, st = state
     names = propertynames(row)
     sch = Tables.Schema(names, nothing)
-    return load!(sch, rows, db, name, db_tableinfo; kwargs...)
+    return load!(sch, rows, db, name, db_tableinfo, row, st; kwargs...)
 end
