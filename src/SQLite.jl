@@ -78,7 +78,7 @@ mutable struct DB <: DBInterface.Connection
 
     function DB(f::AbstractString)
         handle = Ref{DBHandle}()
-        f = isempty(f) ? f : expanduser(f)
+        f = String(isempty(f) ? f : expanduser(f))
         if @OK sqlite3_open(f, handle)
             db = new(f, handle[], Dict{StmtHandle, _Stmt}(), 0)
             finalizer(_close, db)
