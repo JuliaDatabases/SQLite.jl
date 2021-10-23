@@ -69,8 +69,15 @@ ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';
 @test keys(ds) == (:name,)
 @test length(ds.name) == 11
 
-results1 = SQLite.tables(db)
-@test isequal(ds, results1)
+@testset "SQLite.tables(db)" begin
+    results1 = SQLite.tables(db)
+
+    @test isa(results1, SQLite.DBTables)
+    @test length(results1) == 11
+    @test isa(results1[1], SQLite.DBTable)
+    @test results1[1].name == "Album"
+    @test results1[1].schema == Tables.schema(DBInterface.execute(db,"SELECT * FROM Album LIMIT 0"))
+end
 
 @testset "DBInterface.execute([f])" begin
     # pipe approach
@@ -137,7 +144,7 @@ DBInterface.execute(stmt, (Date(2014,1,1),))
 
 r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
 @test length(r) == 5 && length(r[1]) == 10
-@test typeof(r[5][1]) == Date
+@test isa(r[5][1], Date)
 @test all(Bool[x == Date(2014,1,1) for x in r[5]])
 DBInterface.execute(db, "drop table temp")
 
@@ -147,7 +154,7 @@ tablename = dt |> SQLite.load!(db, "temp")
 r = DBInterface.execute(db, "select * from $tablename") |> columntable
 @test length(r) == 2 && length(r[1]) == 5
 @test all([i for i in r[1]] .== collect(rng))
-@test all([typeof(i) for i in r[1]] .== Dates.Date)
+@test all([isa(i, Dates.Date) for i in r[1]])
 SQLite.drop!(db, "$tablename")
 
 DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
@@ -221,7 +228,7 @@ r = DBInterface.execute(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2") |>
 SQLite.@register db big
 r = DBInterface.execute(db, "SELECT big(5)") |> columntable
 @test r[1][1] == big(5)
-@test typeof(r[1][1]) == BigInt
+@test isa(r[1][1], BigInt)
 
 SQLite.register(db, 0, doublesum_step, doublesum_final, name="doublesum")
 r = DBInterface.execute(db, "SELECT doublesum(UnitPrice) FROM Track") |> columntable

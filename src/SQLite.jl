@@ -662,7 +662,10 @@ include("tables.jl")
 
 returns a list of tables in `db`
 """
-tables(db::DB, sink=columntable) = DBInterface.execute(sink, db, "SELECT name FROM sqlite_master WHERE type='table';")
+function tables(db::DB, sink=columntable)
+    tblnames = DBInterface.execute(sink, db, "SELECT name FROM sqlite_master WHERE type='table';")
+    return [DBTable(tbl, Tables.schema(DBInterface.execute(db,"SELECT * FROM $(tbl) LIMIT 0"))) for tbl in tblnames.name]
+end
 
 """
     SQLite.indices(db, sink=columntable)
