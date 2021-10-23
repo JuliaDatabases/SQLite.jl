@@ -414,7 +414,7 @@ function sqlitevalue(::Type{T}, handle, col) where {T}
     b = sqlite3_column_bytes(handle, col)
     buf = zeros(UInt8, b) # global const?
     unsafe_copyto!(pointer(buf), blob, b)
-    r = sqldeserialize(buf)::T
+    r = sqldeserialize(buf)
     return r
 end
 

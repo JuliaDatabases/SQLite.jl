@@ -559,4 +559,11 @@ tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     c = [6]
 )
 
+db = SQLite.DB()
+DBInterface.execute(db, "create table tmp ( x TEXT )")
+DBInterface.execute(db, "insert into tmp values (?)", (nothing,))
+DBInterface.execute(db, "insert into tmp values (?)", (:a,))
+tbl = DBInterface.execute(db, "select x from tmp") |> columntable
+@test isequal(tbl.x, [missing, :a])
+
 end
