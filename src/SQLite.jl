@@ -187,6 +187,8 @@ function DBInterface.close!(stmt::Stmt)
     return stmt
 end
 
+DBInterface.getconnection(stmt::Stmt) = stmt.db
+
 sqliteprepare(db::DB, sql::AbstractString, stmt::Ref{StmtHandle}, null::Ref{StmtHandle}) =
     @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
 
