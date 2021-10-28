@@ -177,6 +177,8 @@ end
 # it from the db.stmts collection
 _finalize(stmt::Stmt) = DBInterface.close!(stmt)
 
+DBInterface.getconnection(stmt::Stmt) = stmt.db
+
 # explicitly close prepared statement
 function DBInterface.close!(stmt::Stmt)
     _st = _stmt_safe(stmt)
@@ -548,6 +550,8 @@ function transaction(db::DB, mode="DEFERRED")
         execute(db, "SAVEPOINT $(mode);")
     end
 end
+
+DBInterface.transaction(f, db::DB) = transaction(f, db)
 
 @inline function transaction(f::Function, db::DB)
     # generate a random name for the savepoint

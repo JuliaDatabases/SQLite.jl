@@ -238,7 +238,7 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
     kind = replace ? "REPLACE" : "INSERT"
     stmt = _Stmt(db, "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)")
     # start a transaction for inserting rows
-    transaction(db) do
+    DBInterface.transaction(db) do
         if row === nothing
             state = iterate(rows)
             state === nothing && return
