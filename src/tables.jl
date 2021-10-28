@@ -29,6 +29,8 @@ struct DBTable
     schema::Tables.Schema
 end
 
+DBTable(name::String) = DBTable(name, Tables.schema(""))
+
 DBTables = AbstractVector{DBTable}
 
 Tables.istable(::DBTables) = true

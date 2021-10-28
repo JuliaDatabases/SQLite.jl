@@ -264,11 +264,11 @@ DBInterface.execute(db2, "CREATE TABLE tab1 (r REAL, s INT)")
 SQLite.drop!(db2, "nonexistant", ifexists=true)
 # should drop "tab2"
 SQLite.drop!(db2, "tab2", ifexists=true)
-@test !in("tab2", SQLite.tables(db2)[1])
-
+@test filter(x -> x.name == "tab2", SQLite.tables(db2)) |> length == 0
+filter(x -> x.name == "tab2", SQLite.tables(db2))
 SQLite.drop!(db, "sqlite_stat1", ifexists=true)
 tables = SQLite.tables(db)
-@test length(tables[1]) == 11
+@test length(tables) == 11
 
 #Test removeduplicates!
 db = SQLite.DB() #In case the order of tests is changed
