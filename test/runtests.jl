@@ -573,4 +573,17 @@ DBInterface.execute(db, "insert into tmp values (?)", (:a,))
 tbl = DBInterface.execute(db, "select x from tmp") |> columntable
 @test isequal(tbl.x, [missing, :a])
 
+db = SQLite.DB()
+DBInterface.execute(db, "create table tmp (a integer, b integer, c integer)")
+stmt = DBInterface.prepare(db, "INSERT INTO tmp VALUES(?, ?, ?)")
+tbl = (
+    a = [1, 1, 1],
+    b = [3, 4, 5],
+    c = [4, 5, 6]
+)
+DBInterface.executemany(stmt, tbl)
+tbl2 = DBInterface.execute(db, "select * from tmp") |> columntable
+@test tbl == tbl2
+
 end
+
