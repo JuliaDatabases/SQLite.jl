@@ -26,7 +26,7 @@ Tables.columnnames(q::Query) = q.names
 
 struct DBTable
     name::String
-    schema::Tables.Schema
+    schema::Union{Tables.Schema, Nothing}
 end
 
 DBTable(name::String) = DBTable(name, Tables.schema(""))

@@ -75,8 +75,15 @@ ds = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';
     @test isa(results1, SQLite.DBTables)
     @test length(results1) == 11
     @test isa(results1[1], SQLite.DBTable)
+    
+    @test Tables.istable(results1)
+    @test Tables.rowaccess(results1)
+    @test Tables.rows(results1) == results1
+
     @test results1[1].name == "Album"
     @test results1[1].schema == Tables.schema(DBInterface.execute(db,"SELECT * FROM Album LIMIT 0"))
+
+    @test SQLite.DBTable("Album") == SQLite.DBTable("Album", nothing)
 end
 
 @testset "DBInterface.execute([f])" begin
