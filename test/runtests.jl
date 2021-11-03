@@ -495,11 +495,14 @@ end
     end
 
     @testset "Enable extension" begin
+        db = SQLite.DB()
         @test SQLite.@OK SQLite.enable_load_extension(db)    
     end
     
     @testset "show(DB)" begin
         io = IOBuffer()
+        db = SQLite.DB()
+
         show(io, db)
         @test String(take!(io)) == "SQLite.DB(\":memory:\")"
 
@@ -582,7 +585,7 @@ end
 
     @testset "Issue #216: Table should map by name" begin
         db = SQLite.DB()
-        # Table should map by name #216
+
         tbl1 = (a = [1, 2, 3], b = [4, 5, 6])
         tbl2 = (b = [7, 8, 9], a = [4, 5, 6])
         SQLite.load!(tbl1, db, "data")
@@ -595,6 +598,9 @@ end
 
     @testset "Issue #216: Table should error if names don't match" begin
         db = SQLite.DB()
+
+        tbl1 = (a = [1, 2, 3], b = [4, 5, 6])
+        SQLite.load!(tbl1, db, "data")
         tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
         @test_throws SQLiteException SQLite.load!(tbl3, db, "data")
     end
@@ -613,7 +619,8 @@ end
         @test res == (x2 = [1], x2_1 = [2], x2_2 = [3], x2_2_1 = [4])
     end
 
-    @testset "load!()/drop!() table name escaping" begin
+    @testset "load!() / drop!() table name escaping" begin
+        db = SQLite.DB()
         tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
         SQLite.load!(tbl, db, "escape 10.0%")
         r =
@@ -624,6 +631,7 @@ end
     end
 
     @testset "load!() column names escaping" begin
+        db = SQLite.DB()
         tbl = NamedTuple{(:a, Symbol("50.0%"))}(([1, 2, 3], ["a", "b", "c"]))
         SQLite.load!(tbl, db, "escape_colnames")
         r = DBInterface.execute(db, "SELECT * FROM escape_colnames") |> columntable
@@ -632,6 +640,7 @@ end
     end
 
     @testset "Bool column data" begin
+        db = SQLite.DB()
         tbl = (a = [true, false, false], b = [false, missing, true])
         SQLite.load!(tbl, db, "bool_data")
         r = DBInterface.execute(db, "SELECT * FROM bool_data") |> columntable
