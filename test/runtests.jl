@@ -80,7 +80,6 @@ end
 
     @testset "Issue #207: 32 bit integers" begin
         setup_clean_test_db() do db
-            db = SQLite.DB(test_dbfile)
             ds =
                 DBInterface.execute(db, "SELECT RANDOM() as a FROM Track LIMIT 1") |>
                 columntable
@@ -422,17 +421,18 @@ end
 
     @testset "Remove Duplicates" begin
         setup_clean_test_db() do db
-        db = SQLite.DB() #In case the order of tests is changed
-        dt = (ints = Int64[1, 1, 2, 2, 3], strs = ["A", "A", "B", "C", "C"])
-        tablename = dt |> SQLite.load!(db, "temp")
-        SQLite.removeduplicates!(db, "temp", ["ints", "strs"]) #New format
-        dt3 = DBInterface.execute(db, "Select * from temp") |> columntable
-        @test dt3[1][1] == 1
-        @test dt3[2][1] == "A"
-        @test dt3[1][2] == 2
-        @test dt3[2][2] == "B"
-        @test dt3[1][3] == 2
-        @test dt3[2][3] == "C"
+            db = SQLite.DB() #In case the order of tests is changed
+            dt = (ints = Int64[1, 1, 2, 2, 3], strs = ["A", "A", "B", "C", "C"])
+            tablename = dt |> SQLite.load!(db, "temp")
+            SQLite.removeduplicates!(db, "temp", ["ints", "strs"]) #New format
+            dt3 = DBInterface.execute(db, "Select * from temp") |> columntable
+            @test dt3[1][1] == 1
+            @test dt3[2][1] == "A"
+            @test dt3[1][2] == 2
+            @test dt3[2][2] == "B"
+            @test dt3[1][3] == 2
+            @test dt3[2][3] == "C"
+        end
     end
 
 
