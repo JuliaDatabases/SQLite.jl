@@ -33,20 +33,26 @@ mycount(p, c) = p + 1
 bigsum(p, c) = p + big(c)
 sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
 
-test_dbfile = joinpath(tempdir(), "test.sqlite")
-
 """
     setup_clean_test_db()
 
 Copy test sqlite file to temp directory, path `test.sqlite`,
 overwrite file if necessary and set permissions.
 """
-function setup_clean_test_db()
+function setup_clean_test_db(f::Function, args...)
     dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
+    tmp_dir = mktempdir()
+    test_dbfile = joinpath(tmp_dir, "test.sqlite")
+    
     cp(dbfile, test_dbfile; force = true)
     chmod(test_dbfile, 0o777)
 
-    return SQLite.DB(test_dbfile)
+    try
+        db = SQLite.DB(test_dbfile)
+        f(db)
+    finally
+        close(db)
+        rm(tmp_dir)
 end
 
 @testset "basics" begin
@@ -62,9 +68,11 @@ end
     end
 
     @testset "DB Connection" begin
-        setup_clean_test_db()
-        @test SQLite.DB(test_dbfile) isa SQLite.DB
-        @test DBInterface.connect(SQLite.DB, test_dbfile) isa SQLite.DB
+        dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
+        @test SQLite.DB(dbfile) isa SQLite.DB
+        con = DBInterface.connect(SQLite.DB, dbfile)
+        @test con isa SQLite.DB
+        DBInterface.close!(con)
     end
 
     @testset "Issue #207: 32 bit integers" begin
