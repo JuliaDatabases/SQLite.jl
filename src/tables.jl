@@ -29,7 +29,7 @@ struct DBTable
     schema::Union{Tables.Schema, Nothing}
 end
 
-DBTable(name::String) = DBTable(name, Tables.schema(""))
+DBTable(name::String) = DBTable(name, nothing)
 
 const DBTables = AbstractVector{DBTable}
 
