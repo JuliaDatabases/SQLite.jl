@@ -31,7 +31,7 @@ end
 
 DBTable(name::String) = DBTable(name, Tables.schema(""))
 
-DBTables = AbstractVector{DBTable}
+const DBTables = AbstractVector{DBTable}
 
 Tables.istable(::Type{<:DBTables}) = true
 Tables.rowaccess(::Type{<:DBTables}) = true
