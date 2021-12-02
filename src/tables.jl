@@ -252,7 +252,7 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
             if r == SQLITE_DONE
                 sqlite3_reset(stmt.handle)
             elseif r != SQLITE_ROW
-                e = sqliteexception(db)
+                e = sqliteexception(db, stmt)
                 sqlite3_reset(stmt.handle)
                 throw(e)
             end
