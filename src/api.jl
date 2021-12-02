@@ -38,6 +38,12 @@ function sqlite3_prepare16_v2(handle::Ptr{Cvoid}, query::AbstractString, stmt, u
         Cint, (Ptr{Cvoid}, Ptr{UInt16}, Cint, Ptr{Cvoid}, Ptr{Cvoid}),
         handle, query, sizeof(query), stmt, unused)
 end
+function sqlite3_expanded_sql(stmt::Ptr{Cvoid})
+    @NULLCHECK stmt
+    return ccall( (:sqlite3_expanded_sql, libsqlite),
+        Ptr{UInt8}, (Ptr{Cvoid},), stmt)
+end
+sqlite3_free(ptr::Ptr{Cvoid}) = ccall( (:sqlite3_free, libsqlite), Cvoid, (Ptr{Cvoid},), ptr)
 function sqlite3_finalize(stmt::Ptr{Cvoid})
     @NULLCHECK stmt
     return ccall( (:sqlite3_finalize, libsqlite),
