@@ -262,7 +262,7 @@ function load!(sch::Tables.Schema, rows, db::DB, name::AbstractString, db_tablei
         end
     end
     _close!(stmt)
-    analyze && execute(db, "ANALYZE $nm")
+    analyze && execute(db, "ANALYZE $name")
     return name
 end
 
