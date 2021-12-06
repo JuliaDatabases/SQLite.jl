@@ -17,7 +17,17 @@ const StmtHandle = Ptr{Cvoid} # SQLite3 prepared statement handle
 
 # Normal constructor from filename
 sqliteexception(handle::DBHandle) = SQLiteException(unsafe_string(sqlite3_errmsg(handle)))
+function sqliteexception(handle::DBHandle, stmt::StmtHandle)
+    errstr = unsafe_string(sqlite3_errmsg(handle))
+    stmt_text_handle = sqlite3_expanded_sql(stmt)
+    stmt_text = unsafe_string(stmt_text_handle)
+    msg = "$errstr on statement \"$stmt_text\""
+    sqlite3_free(convert(Ptr{Cvoid}, stmt_text_handle))
+    return SQLiteException(msg)
+end
+
 sqliteerror(handle::DBHandle) = throw(sqliteexception(handle))
+sqliteerror(handle::DBHandle, stmt::StmtHandle) = throw(sqliteexception(handle, stmt))
 
 """
 Internal wrapper that holds the handle to SQLite3 prepared statement.
@@ -157,6 +167,8 @@ mutable struct Stmt <: DBInterface.Statement
         return stmt
     end
 end
+
+sqliteexception(db::DB, stmt::_Stmt) = sqliteexception(db.handle, stmt.handle)
 
 # check if the statement is ready (not finalized due to
 # _close(_Stmt) called and the statment handle removed from DB)
