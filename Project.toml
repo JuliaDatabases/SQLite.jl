@@ -1,6 +1,6 @@
 name = "SQLite"
 uuid = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
-authors = ["Jacob Quinn <quinn.jacobd@gmail.com>"]
+authors = ["Jacob Quinn <quinn.jacobd@gmail.com>", "JuliaData Contributors"]
 version = "1.4.0"
 
 [deps]
