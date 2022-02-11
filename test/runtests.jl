@@ -78,6 +78,35 @@ end
         DBInterface.close!(con)
     end
 
+    @testset "SQLite.tables(db)" begin
+        setup_clean_test_db() do db
+
+            results1 = SQLite.tables(db)
+    
+            @test isa(results1, SQLite.DBTables)
+            @test length(results1) == 11
+            @test isa(results1[1], SQLite.DBTable)
+    
+            @test Tables.istable(results1)
+            @test Tables.rowaccess(results1)
+            @test Tables.rows(results1) == results1
+    
+            @test results1[1].name == "Album"
+            @test results1[1].schema == Tables.schema(DBInterface.execute(db,"SELECT * FROM Album LIMIT 0"))
+    
+            @test SQLite.DBTable("Album") == SQLite.DBTable("Album", nothing)
+
+            @test [t.name for t in results1] == ["Album", "Artist", "Customer", "Employee", "Genre", "Invoice", "InvoiceLine", "MediaType", "Playlist", "PlaylistTrack", "Track"]
+        end
+
+        @testset "#209: SQLite.tables response when no tables in DB" begin
+            db = SQLite.DB()
+            tables_v = SQLite.tables(db)
+            @test String[] == [t.name for t in tables_v]
+            DBInterface.close!(db)
+        end
+    end
+
     @testset "Issue #207: 32 bit integers" begin
         setup_clean_test_db() do db
             ds =
@@ -117,7 +146,7 @@ end
             @test length(ds.name) == 11
 
             results1 = SQLite.tables(db)
-            @test isequal(ds, results1)
+            @test isequal(ds.name, [t.name for t in results1])
         end
     end
 
@@ -223,7 +252,7 @@ end
 
             r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
             @test length(r) == 4 && length(r[1]) == 10
-            @test typeof(r[4][1]) == Date
+            @test isa(r[4][1], Date)
             @test all(Bool[x == Date(2014, 1, 1) for x in r[4]])
             DBInterface.execute(db, "drop table temp")
 
@@ -233,7 +262,7 @@ end
             r = DBInterface.execute(db, "select * from $tablename") |> columntable
             @test length(r) == 2 && length(r[1]) == 5
             @test all([i for i in r[1]] .== collect(rng))
-            @test all([typeof(i) for i in r[1]] .== Dates.Date)
+            @test all([isa(i, Dates.Date) for i in r[1]])
             SQLite.drop!(db, "$tablename")
         end
     end
@@ -411,11 +440,11 @@ end
             SQLite.drop!(db2, "nonexistant", ifexists = true)
             # should drop "tab2"
             SQLite.drop!(db2, "tab2", ifexists = true)
-            @test !in("tab2", SQLite.tables(db2)[1])
+            @test filter(x -> x.name == "tab2", SQLite.tables(db2)) |> length == 0
 
             SQLite.drop!(db, "sqlite_stat1", ifexists = true)
             tables = SQLite.tables(db)
-            @test length(tables[1]) == 11
+            @test length(tables) == 11
         end
     end
 

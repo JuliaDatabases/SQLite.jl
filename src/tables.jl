@@ -24,6 +24,19 @@ getquery(r::Row) = getfield(r, :q)
 Tables.isrowtable(::Type{Query}) = true
 Tables.columnnames(q::Query) = q.names
 
+struct DBTable
+    name::String
+    schema::Union{Tables.Schema, Nothing}
+end
+
+DBTable(name::String) = DBTable(name, nothing)
+
+const DBTables = AbstractVector{DBTable}
+
+Tables.istable(::Type{<:DBTables}) = true
+Tables.rowaccess(::Type{<:DBTables}) = true
+Tables.rows(dbtbl::DBTables) = dbtbl
+
 function Tables.schema(q::Query)
     if isempty(q)
         # when the query is empty, return the types provided by SQLite
