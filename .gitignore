@@ -5,7 +5,6 @@
 /deps/build.log
 /deps/usr
 CMakeLists.txt.user
-/deps/deps.jl
 /test/test.sqlite
 /test/test2.sqlite
 /docs/build

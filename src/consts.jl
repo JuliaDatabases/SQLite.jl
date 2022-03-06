@@ -1,17 +1,4 @@
-if VERSION < v"1.3.0"
-
-    # Load libmariadb from our deps.jl
-const depsjl_path = joinpath(dirname(@__FILE__), "..", "deps", "deps.jl")
-if !isfile(depsjl_path)
-    error("SQLite not installed properly, run Pkg.build(\"SQLite\"), restart Julia and try again")
-end
-include(depsjl_path)
-
-else
-
 using SQLite_jll
-
-end
 
 #Macros
 macro OK(func)

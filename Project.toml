@@ -4,7 +4,6 @@ authors = ["Jacob Quinn <quinn.jacobd@gmail.com>", "JuliaData Contributors"]
 version = "1.4.0"
 
 [deps]
-BinaryProvider = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
 DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -16,7 +15,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WeakRefStrings = "ea10d353-3f73-51f8-a26c-33c1cb351aa5"
 
 [compat]
-BinaryProvider = "0.5"
 DBInterface = "2.5"
 SQLite_jll = "3"
 Tables = "1"
