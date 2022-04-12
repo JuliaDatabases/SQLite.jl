@@ -413,7 +413,6 @@ function juliatype(decl_typestr::AbstractString,
     elseif occursin(r"^NUMERIC\(\d+,\d+\)$", typeuc)
         return Float64
     else
-        @warn "Unsupported SQLite declared type $decl_typestr, falling back to $default type"
         return default
     end
 end

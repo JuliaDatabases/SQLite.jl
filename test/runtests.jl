@@ -505,18 +505,7 @@ end
                 435,
             ],
         )
-        rr = (;) # just to have the var declared
-        @test_logs(
-            (
-                :warn,
-                "Unsupported SQLite declared type UNKNOWN1, falling back to String type",
-            ),
-            (
-                :warn,
-                "Unsupported SQLite declared type UNKNOWN2, falling back to $(Int64) type",
-            ),
-            rr = DBInterface.execute(rowtable, binddb, "SELECT * FROM temp")
-        )
+        rr = DBInterface.execute(rowtable, binddb, "SELECT * FROM temp")
         @test length(rr) == 1
         r = first(rr)
         @test typeof.(Tuple(r)) == (
