@@ -28,6 +28,9 @@ SQLite.register
 SQLite.@register
 SQLite.@sr_str
 SQLite.sqlreturn
+SQLite.transaction
+SQLite.commit
+SQLite.rollback
 ```
 
 ## User Defined Functions
