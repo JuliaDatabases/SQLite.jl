@@ -38,7 +38,7 @@ sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
         @test db isa SQLite.DB
     end
 
-Copy test sqlite file to temp directory, path `tmp_dor/test.sqlite`,
+Copy test sqlite file to temp directory, path `tmp_dir/test.sqlite`,
 overwrite file if necessary and set permissions.
 """
 function setup_clean_test_db(f::Function)
