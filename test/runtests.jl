@@ -38,14 +38,14 @@ sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
         @test db isa SQLite.DB
     end
 
-Copy test sqlite file to temp directory, path `test.sqlite`,
+Copy test sqlite file to temp directory, path `tmp_dor/test.sqlite`,
 overwrite file if necessary and set permissions.
 """
-function setup_clean_test_db(f::Function, args...)
+function setup_clean_test_db(f::Function)
     dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
     tmp_dir = mktempdir()
     test_dbfile = joinpath(tmp_dir, "test.sqlite")
-    
+
     cp(dbfile, test_dbfile; force = true)
     chmod(test_dbfile, 0o777)
 
@@ -82,18 +82,18 @@ end
         setup_clean_test_db() do db
 
             results1 = SQLite.tables(db)
-    
+
             @test isa(results1, SQLite.DBTables)
             @test length(results1) == 11
             @test isa(results1[1], SQLite.DBTable)
-    
+
             @test Tables.istable(results1)
             @test Tables.rowaccess(results1)
             @test Tables.rows(results1) == results1
-    
+
             @test results1[1].name == "Album"
             @test results1[1].schema == Tables.schema(DBInterface.execute(db,"SELECT * FROM Album LIMIT 0"))
-    
+
             @test SQLite.DBTable("Album") == SQLite.DBTable("Album", nothing)
 
             @test [t.name for t in results1] == ["Album", "Artist", "Customer", "Employee", "Genre", "Invoice", "InvoiceLine", "MediaType", "Playlist", "PlaylistTrack", "Track"]
