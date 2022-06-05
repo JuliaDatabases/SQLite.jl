@@ -44,8 +44,8 @@ Base.isopen(db::DB) = db.handle != C_NULL
 function finalize_statements!(db::DB)
     # close stmts
     for stmt_wrapper in keys(db.stmt_wrappers)
-        C.sqlite3_finalize(stmt_wrapper.handle)
-        stmt_wrapper.handle = C_NULL
+        C.sqlite3_finalize(stmt_wrapper[])
+        stmt_wrapper[] = C_NULL
     end
     empty!(db.stmt_wrappers)
 end
@@ -65,10 +65,10 @@ sqliteexception(db::DB) = sqliteexception(db.handle)
 Base.show(io::IO, db::DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 
 # prepare given sql statement
-function StmtWrapper(db::DB, sql::AbstractString)
+function prepare_stmt_wrapper(db::DB, sql::AbstractString)
     handle_ptr = Ref{StmtHandle}()
     C.sqlite3_prepare_v2(db.handle, sql, sizeof(sql), handle_ptr, C_NULL)
-    return StmtWrapper(handle_ptr[])
+    return handle_ptr
 end
 
 """
@@ -97,8 +97,8 @@ mutable struct Stmt <: DBInterface.Statement
     stmt_wrapper::StmtWrapper
     params::Dict{Int,Any}
 
-    function Stmt(db::DB, sql::AbstractString; register::Bool=true)
-        stmt_wrapper = StmtWrapper(db, sql)
+    function Stmt(db::DB, sql::AbstractString; register::Bool = true)
+        stmt_wrapper = prepare_stmt_wrapper(db, sql)
         if register
             db.stmt_wrappers[stmt_wrapper] = nothing
         end
@@ -119,9 +119,9 @@ DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
 DBInterface.getconnection(stmt::Stmt) = stmt.db
 DBInterface.close!(stmt::Stmt) = _close_stmt!(stmt)
 
-_get_stmt_handle(stmt::Stmt) = stmt.stmt_wrapper.handle
+_get_stmt_handle(stmt::Stmt) = stmt.stmt_wrapper[]
 function _set_stmt_handle(stmt::Stmt, handle)
-    stmt.stmt_wrapper.handle = handle
+    stmt.stmt_wrapper[] = handle
     return
 end
 

@@ -7,9 +7,7 @@ const DBHandle = Ptr{C.sqlite3}
 # SQLite3 statement handle
 const StmtHandle = Ptr{C.sqlite3_stmt}
 
-mutable struct StmtWrapper
-    handle::StmtHandle
-end
+const StmtWrapper = Ref{StmtHandle}
 
 sqliteexception(handle::DBHandle) = SQLiteException(unsafe_string(C.sqlite3_errmsg(handle)))
 function sqliteexception(handle::DBHandle, stmt::StmtHandle)
@@ -53,4 +51,6 @@ end
 This string literal is used to escape all special characters in the string,
 useful for using regex in a query.
 """
-macro sr_str(s) s end
+macro sr_str(s)
+    s
+end
