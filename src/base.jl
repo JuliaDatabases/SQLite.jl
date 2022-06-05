@@ -21,8 +21,7 @@ function sqliteexception(handle::DBHandle, stmt::StmtHandle)
     return SQLiteException(msg)
 end
 
-sqliteerror(handle::DBHandle) = throw(sqliteexception(handle))
-sqliteerror(handle::DBHandle, stmt::StmtHandle) = throw(sqliteexception(handle, stmt))
+sqliteerror(args...) = throw(sqliteexception(args...))
 
 # macros
 

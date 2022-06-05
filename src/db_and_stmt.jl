@@ -60,7 +60,6 @@ function _close_db!(db::DB)
     return
 end
 
-sqliteerror(db::DB) = sqliteerror(db.handle)
 sqliteexception(db::DB) = sqliteexception(db.handle)
 
 Base.show(io::IO, db::DB) = print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
