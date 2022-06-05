@@ -14,7 +14,7 @@ To get the results of a SQL query, it is recommended to use [`DBInterface.execut
 """
 function direct_execute end
 
-function direct_execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams)
+function direct_execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams=())
     handle = _get_stmt_handle(stmt)
     C.sqlite3_reset(handle)
     bind!(stmt, params)
@@ -29,7 +29,7 @@ function direct_execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams)
     return r
 end
 
-direct_execute(stmt::Stmt, params::DBInterface.StatementParams) = direct_execute(stmt.db, stmt, params)
+direct_execute(stmt::Stmt, params::DBInterface.StatementParams=()) = direct_execute(stmt.db, stmt, params)
 
 direct_execute(stmt::Stmt; kwargs...) = direct_execute(stmt.db, stmt, NamedTuple(kwargs))
 
