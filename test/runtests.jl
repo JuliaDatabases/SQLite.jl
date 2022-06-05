@@ -42,7 +42,7 @@ Copy test sqlite file to temp directory, path `test.sqlite`,
 overwrite file if necessary and set permissions.
 """
 function setup_clean_test_db(f::Function, args...)
-    dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
+    dbfile = joinpath(@__DIR__, "Chinook_Sqlite.sqlite")
     tmp_dir = mktempdir()
     test_dbfile = joinpath(tmp_dir, "test.sqlite")
     
@@ -565,32 +565,29 @@ end
         DBInterface.close!(db)
     end
 
-
-
-
-    @testset "SQLite.execute()" begin
+    @testset "SQLite.direct_execute()" begin
         db = SQLite.DB()
         DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
 
         q = DBInterface.prepare(db, "INSERT INTO T VALUES(?)")
-        SQLite.execute(q, (1,))
+        SQLite.direct_execute(q, (1,))
         r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
         @test r[1] == [1]
 
-        SQLite.execute(q, [2])
+        SQLite.direct_execute(q, [2])
         r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
         @test r[1] == [1, 2]
 
         q = DBInterface.prepare(db, "INSERT INTO T VALUES(:x)")
-        SQLite.execute(q, Dict(:x => 3))
+        SQLite.direct_execute(q, Dict(:x => 3))
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3]
 
-        SQLite.execute(q, x = 4)
+        SQLite.direct_execute(q, x = 4)
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3, 4]
 
-        SQLite.execute(db, "INSERT INTO T VALUES(:x)", x = 5)
+        SQLite.direct_execute(db, "INSERT INTO T VALUES(:x)", x = 5)
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3, 4, 5]
 
@@ -631,8 +628,6 @@ end
         @test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
     end
 
-
-
     @testset "Issue #193: Throw informative error on duplicate column names" begin
         db = SQLite.DB()
         @test_throws SQLiteException SQLite.load!((a = [1, 2, 3], A = [1, 2, 3]), db)
@@ -660,7 +655,6 @@ end
         tbl3 = (c = [7, 8, 9], a = [4, 5, 6])
         @test_throws SQLiteException SQLite.load!(tbl3, db, "data")
     end
-
 
     @testset "Test busy_timeout" begin
         db = SQLite.DB()
@@ -720,12 +714,10 @@ end
         @testset "explicit finalization by finalize_statements!(db)" begin
             SQLite.load!(tbl, db, "test_table")
             stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table")
-            @test SQLite.isready(stmt)
-            @test SQLite.execute(stmt) == 100
+            @test SQLite.direct_execute(stmt) == 100
             # test cannot drop the table locked by the statement
             @test_throws SQLiteException SQLite.drop!(db, "test_table")
             SQLite.finalize_statements!(db)
-            @test !SQLite.isready(stmt)
             SQLite.drop!(db, "test_table")
             DBInterface.close!(stmt) # test can call close!() 2nd time
         end
@@ -733,27 +725,25 @@ end
         @testset "explicit finalization by close!(stmt)" begin
             SQLite.load!(tbl, db, "test_table2")
             stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table2")
-            @test SQLite.isready(stmt)
-            @test SQLite.execute(stmt) == 100
+            @test SQLite.direct_execute(stmt) == 100
             # test cannot drop the table locked by the statement
             @test_throws SQLiteException SQLite.drop!(db, "test_table2")
             DBInterface.close!(stmt)
-            @test !SQLite.isready(stmt)
             SQLite.drop!(db, "test_table2")
             DBInterface.close!(stmt) # test can call close!() 2nd time
         end
 
         @testset "automatic close of implicit prepared statement" begin
-            @testset "SQLite.execute() call" begin
+            @testset "SQLite.direct_execute() call" begin
                 SQLite.load!(tbl, db, "test_table3")
-                @test SQLite.execute(db, "SELECT a, b FROM test_table3") == 100
+                @test SQLite.direct_execute(db, "SELECT a, b FROM test_table3") == 100
                 # test can immediately drop the table, since no locks by the statement
                 SQLite.drop!(db, "test_table3")
             end
 
             @testset "DBInterface.execute() call" begin
                 SQLite.load!(tbl, db, "test_table4")
-                @test SQLite.execute(db, "SELECT a, b FROM test_table4") == 100
+                @test SQLite.direct_execute(db, "SELECT a, b FROM test_table4") == 100
                 GC.gc() # close implicitly created statement
                 # test can immediately drop the table, since no locks by the GC-ed statement
                 SQLite.drop!(db, "test_table4")
@@ -764,7 +754,7 @@ end
         rm(dbfile)
     end
 
-end # @testset
+end
 
 struct UnknownSchemaTable end
 

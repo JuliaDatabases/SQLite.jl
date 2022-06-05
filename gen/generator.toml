@@ -1,0 +1,14 @@
+[general]
+library_name = "libsqlite"
+output_file_path = "../src/capi.jl"
+module_name = "C"
+jll_pkg_name = "SQLite_jll"
+print_using_CEnum = false
+output_ignorelist = [
+    "SQLITE_STDCALL"
+]
+
+[codegen]
+use_julia_bool = true
+use_ccall_macro = true
+opaque_func_arg_as_PtrCvoid = true
