@@ -1,20 +1,20 @@
 function sqlvalue(values, i)
     temp_val_ptr = unsafe_load(values, i)
-    valuetype = sqlite3_value_type(temp_val_ptr)
+    valuetype = C.sqlite3_value_type(temp_val_ptr)
 
-    if valuetype == SQLITE_INTEGER
+    if valuetype == C.SQLITE_INTEGER
         if Sys.WORD_SIZE == 64
-            return sqlite3_value_int64(temp_val_ptr)
+            return C.sqlite3_value_int64(temp_val_ptr)
         else
-            return sqlite3_value_int(temp_val_ptr)
+            return C.sqlite3_value_int(temp_val_ptr)
         end
-    elseif valuetype == SQLITE_FLOAT
-        return sqlite3_value_double(temp_val_ptr)
-    elseif valuetype == SQLITE_TEXT
-        return unsafe_string(sqlite3_value_text(temp_val_ptr))
-    elseif valuetype == SQLITE_BLOB
-        nbytes = sqlite3_value_bytes(temp_val_ptr)
-        blob = sqlite3_value_blob(temp_val_ptr)
+    elseif valuetype == C.SQLITE_FLOAT
+        return C.sqlite3_value_double(temp_val_ptr)
+    elseif valuetype == C.SQLITE_TEXT
+        return unsafe_string(C.sqlite3_value_text(temp_val_ptr))
+    elseif valuetype == C.SQLITE_BLOB
+        nbytes = C.sqlite3_value_bytes(temp_val_ptr)
+        blob = C.sqlite3_value_blob(temp_val_ptr)
         buf = zeros(UInt8, nbytes)
         unsafe_copyto!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
@@ -30,12 +30,16 @@ see [below](@ref regex).
 """
 function sqlreturn end
 
-sqlreturn(context, ::Missing) = sqlite3_result_null(context)
-sqlreturn(context, val::Int32) = sqlite3_result_int(context, val)
-sqlreturn(context, val::Int64) = sqlite3_result_int64(context, val)
-sqlreturn(context, val::Float64) = sqlite3_result_double(context, val)
-sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
-sqlreturn(context, val::Vector{UInt8}) = sqlite3_result_blob(context, val)
+sqlreturn(context, ::Missing) = C.sqlite3_result_null(context)
+sqlreturn(context, val::Int32) = C.sqlite3_result_int(context, val)
+sqlreturn(context, val::Int64) = C.sqlite3_result_int64(context, val)
+sqlreturn(context, val::Float64) = C.sqlite3_result_double(context, val)
+function sqlreturn(context, val::AbstractString)
+    C.sqlite3_result_text(context, val, sizeof(val), C.SQLITE_TRANSIENT)
+end
+function sqlreturn(context, val::Vector{UInt8})
+    C.sqlite3_result_blob(context, val, sizeof(val), C.SQLITE_TRANSIENT)
+end
 
 sqlreturn(context, val::Bool) = sqlreturn(context, Int(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
@@ -52,9 +56,9 @@ function scalarfunc(func, fsym = Symbol(string(func)))
             nargs::Cint,
             values::Ptr{Ptr{Cvoid}},
         )
-            args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
+            args = [sqlvalue(values, i) for i in 1:nargs]
             ret = $(func)(args...)
-            SQLite.sqlreturn(context, ret)
+            sqlreturn(context, ret)
             nothing
         end
         return $(nm)
@@ -91,8 +95,10 @@ function stepfunc(init, func, fsym = Symbol(string(func) * "_step"))
             intsize = sizeof(Int)
             ptrsize = sizeof(Ptr)
             acsize = intsize + ptrsize
-            acptr =
-                convert(Ptr{UInt8}, sqlite3_aggregate_context(context, acsize))
+            acptr = convert(
+                Ptr{UInt8},
+                C.sqlite3_aggregate_context(context, acsize),
+            )
 
             # acptr will be zeroed-out if this is the first iteration
             ret = ccall(
@@ -170,7 +176,7 @@ function finalfunc(init, func, fsym = Symbol(string(func) * "_final"))
             nargs::Cint,
             values::Ptr{Ptr{Cvoid}},
         )
-            acptr = convert(Ptr{UInt8}, sqlite3_aggregate_context(context, 0))
+            acptr = convert(Ptr{UInt8}, C.sqlite3_aggregate_context(context, 0))
 
             # step function wasn't run
             if acptr == C_NULL
@@ -240,10 +246,10 @@ function register(
 
     cfunc = @cfunction($f, Cvoid, (Ptr{Cvoid}, Cint, Ptr{Ptr{Cvoid}}))
     # TODO: allow the other encodings
-    enc = SQLITE_UTF8
-    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
+    enc = C.SQLITE_UTF8
+    enc = isdeterm ? enc | C.SQLITE_DETERMINISTIC : enc
 
-    @CHECK db sqlite3_create_function_v2(
+    @CHECK db C.sqlite3_create_function_v2(
         db.handle,
         name,
         nargs,
@@ -276,10 +282,10 @@ function register(
     f = eval(finalfunc(init, final, Base.nameof(final)))
     cf = @cfunction($f, Cvoid, (Ptr{Cvoid}, Cint, Ptr{Ptr{Cvoid}}))
 
-    enc = SQLITE_UTF8
-    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
+    enc = C.SQLITE_UTF8
+    enc = isdeterm ? enc | C.SQLITE_DETERMINISTIC : enc
 
-    @CHECK db sqlite3_create_function_v2(
+    @CHECK db C.sqlite3_create_function_v2(
         db.handle,
         name,
         nargs,

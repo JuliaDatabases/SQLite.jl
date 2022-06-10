@@ -12,7 +12,7 @@ struct Query
 end
 
 # check if the query has no (more) rows
-Base.isempty(q::Query) = q.status[] == SQLITE_DONE
+Base.isempty(q::Query) = q.status[] == C.SQLITE_DONE
 
 struct Row <: Tables.AbstractRow
     q::Query
@@ -51,23 +51,21 @@ Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
-    sqlite3_reset(_stmt(q.stmt).handle)
+    C.sqlite3_reset(_get_stmt_handle(q.stmt))
     q.status[] = execute(q.stmt)
-    return
 end
 
 function DBInterface.close!(q::Query)
-    _st = _stmt_safe(q.stmt)
-    (_st !== nothing) && sqlite3_reset(_st.handle)
+    return C.sqlite3_reset(_get_stmt_handle(q.stmt))
 end
 
 function done(q::Query)
     st = q.status[]
-    if st == SQLITE_DONE
-        sqlite3_reset(_stmt(q.stmt).handle)
+    if st == C.SQLITE_DONE
+        C.sqlite3_reset(_get_stmt_handle(q.stmt))
         return true
     end
-    st == SQLITE_ROW || sqliteerror(q.stmt.db)
+    st == C.SQLITE_ROW || sqliteerror(q.stmt.db)
     return false
 end
 
@@ -81,9 +79,9 @@ end
 
 function getvalue(q::Query, col::Int, rownumber::Int, ::Type{T}) where {T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
-    handle = _stmt(q.stmt).handle
-    t = sqlite3_column_type(handle, col)
-    if t == SQLITE_NULL
+    handle = _get_stmt_handle(q.stmt)
+    t = C.sqlite3_column_type(handle, col - 1)
+    if t == C.SQLITE_NULL
         return missing
     else
         TT = juliatype(t) # native SQLite Int, Float, and Text types
@@ -96,14 +94,14 @@ function getvalue(q::Query, col::Int, rownumber::Int, ::Type{T}) where {T}
 end
 
 function Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T}
-    getvalue(getquery(r), i, getfield(r, :rownumber), T)
+    return getvalue(getquery(r), i, getfield(r, :rownumber), T)
 end
 
 function Tables.getcolumn(r::Row, i::Int)
-    Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
+    return Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
 end
 function Tables.getcolumn(r::Row, nm::Symbol)
-    Tables.getcolumn(r, getquery(r).lookup[nm])
+    return Tables.getcolumn(r, getquery(r).lookup[nm])
 end
 Tables.columnnames(r::Row) = Tables.columnnames(getquery(r))
 
@@ -114,23 +112,14 @@ function Base.iterate(q::Query)
 end
 
 function Base.iterate(q::Query, rownumber)
-    q.status[] = sqlite3_step(_stmt(q.stmt).handle)
+    q.status[] = C.sqlite3_step(_get_stmt_handle(q.stmt))
     done(q) && return nothing
     q.current_rownumber[] = rownumber
     return Row(q, rownumber), rownumber + 1
 end
 
 "Return the last row insert id from the executed statement"
-DBInterface.lastrowid(q::Query) = last_insert_rowid(q.stmt.db)
-
-"""
-    DBInterface.prepare(db::SQLite.DB, sql::AbstractString)
-
-Prepare an SQL statement given as a string in the sqlite database; returns an `SQLite.Stmt` compiled object.
-See `DBInterface.execute`(@ref) for information on executing a prepared statement and passing parameters to bind.
-A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
-"""
-DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
+DBInterface.lastrowid(q::Query) = C.sqlite3_last_insert_rowid(q.stmt.db.handle)
 
 """
     DBInterface.execute(db::SQLite.DB, sql::String, [params])
@@ -151,12 +140,12 @@ function DBInterface.execute(
     allowduplicates::Bool = false,
 )
     status = execute(stmt, params)
-    _st = _stmt(stmt)
-    cols = sqlite3_column_count(_st.handle)
+    handle = _get_stmt_handle(stmt)
+    cols = C.sqlite3_column_count(handle)
     header = Vector{Symbol}(undef, cols)
     types = Vector{Type}(undef, cols)
     for i in 1:cols
-        nm = sym(sqlite3_column_name(_st.handle, i))
+        nm = sym(C.sqlite3_column_name(handle, i - 1))
         if !allowduplicates && nm in view(header, 1:(i-1))
             j = 1
             newnm = Symbol(nm, :_, j)
@@ -167,7 +156,7 @@ function DBInterface.execute(
             nm = newnm
         end
         header[i] = nm
-        types[i] = Union{juliatype(_st.handle, i),Missing}
+        types[i] = Union{juliatype(handle, i),Missing}
     end
     return Query(
         stmt,
@@ -212,14 +201,14 @@ end
 # returns NamedTuple with columns information,
 # or nothing if table does not exist
 function tableinfo(db::DB, name::AbstractString)
-    DBInterface.execute(db, "pragma table_info($(esc_id(name)))") do qry
-        st = qry.status[]
-        if st == SQLITE_ROW
-            return Tables.columntable(qry)
-        elseif st == SQLITE_DONE
+    DBInterface.execute(db, "pragma table_info($(esc_id(name)))") do query
+        st = query.status[]
+        if st == C.SQLITE_ROW
+            return Tables.columntable(query)
+        elseif st == C.SQLITE_DONE
             return nothing
         else
-            sqliteerror(q.stmt.db)
+            sqliteerror(query.stmt.db)
         end
     end
 end
@@ -242,7 +231,7 @@ function load!(
     name::AbstractString = "sqlitejl_" * Random.randstring(5);
     kwargs...,
 )
-    x -> load!(x, db, name; kwargs...)
+    return x -> load!(x, db, name; kwargs...)
 end
 
 function load!(
@@ -318,10 +307,12 @@ function load!(
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
     kind = replace ? "REPLACE" : "INSERT"
-    stmt = _Stmt(
+    stmt = Stmt(
         db,
-        "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)",
+        "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)";
+        register = false,
     )
+    handle = _get_stmt_handle(stmt)
     # start a transaction for inserting rows
     DBInterface.transaction(db) do
         if row === nothing
@@ -333,12 +324,12 @@ function load!(
             Tables.eachcolumn(sch, row) do val, col, _
                 bind!(stmt, col, val)
             end
-            r = sqlite3_step(stmt.handle)
-            if r == SQLITE_DONE
-                sqlite3_reset(stmt.handle)
-            elseif r != SQLITE_ROW
+            r = C.sqlite3_step(handle)
+            if r == C.SQLITE_DONE
+                C.sqlite3_reset(handle)
+            elseif r != C.SQLITE_ROW
                 e = sqliteexception(db, stmt)
-                sqlite3_reset(stmt.handle)
+                C.sqlite3_reset(handle)
                 throw(e)
             end
             state = iterate(rows, st)
@@ -346,7 +337,7 @@ function load!(
             row, st = state
         end
     end
-    _close!(stmt)
+    _close_stmt!(stmt)
     analyze && execute(db, "ANALYZE $name")
     return name
 end
