@@ -158,6 +158,9 @@ function _set_stmt_handle(stmt::Stmt, handle)
     stmt.stmt_wrapper[] = handle
 end
 
+# check if the statement is ready (not finalized due to _close_stmt!(Stmt) called)
+isready(stmt::Stmt) = _get_stmt_handle(stmt) != C_NULL
+
 function _close_stmt!(stmt::Stmt)
     C.sqlite3_finalize(_get_stmt_handle(stmt))
     _set_stmt_handle(stmt, C_NULL)

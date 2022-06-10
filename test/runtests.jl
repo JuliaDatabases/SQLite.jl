@@ -852,10 +852,12 @@ end
         @testset "explicit finalization by finalize_statements!(db)" begin
             SQLite.load!(tbl, db, "test_table")
             stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table")
+            @test SQLite.isready(stmt)
             @test SQLite.execute(stmt) == 100
             # test cannot drop the table locked by the statement
             @test_throws SQLiteException SQLite.drop!(db, "test_table")
             SQLite.finalize_statements!(db)
+            @test !SQLite.isready(stmt)
             SQLite.drop!(db, "test_table")
             DBInterface.close!(stmt) # test can call close!() 2nd time
         end
@@ -863,10 +865,12 @@ end
         @testset "explicit finalization by close!(stmt)" begin
             SQLite.load!(tbl, db, "test_table2")
             stmt = SQLite.Stmt(db, "SELECT a, b FROM test_table2")
+            @test SQLite.isready(stmt)
             @test SQLite.execute(stmt) == 100
             # test cannot drop the table locked by the statement
             @test_throws SQLiteException SQLite.drop!(db, "test_table2")
             DBInterface.close!(stmt)
+            @test !SQLite.isready(stmt)
             SQLite.drop!(db, "test_table2")
             DBInterface.close!(stmt) # test can call close!() 2nd time
         end
