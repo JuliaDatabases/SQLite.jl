@@ -45,7 +45,7 @@ function setup_clean_test_db(f::Function, args...)
     dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
     tmp_dir = mktempdir()
     test_dbfile = joinpath(tmp_dir, "test.sqlite")
-    
+
     cp(dbfile, test_dbfile; force = true)
     chmod(test_dbfile, 0o777)
 
@@ -54,12 +54,11 @@ function setup_clean_test_db(f::Function, args...)
         f(db)
     finally
         close(db)
-        rm(tmp_dir, recursive = true)
+        rm(tmp_dir; recursive = true)
     end
 end
 
 @testset "basics" begin
-
     @testset "Julia to SQLite3 type conversion" begin
         @test SQLite.sqlitetype(Int) == "INT NOT NULL"
         @test SQLite.sqlitetype(Union{Float64,Missing}) == "REAL"
@@ -71,7 +70,8 @@ end
     end
 
     @testset "DB Connection" begin
-        dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
+        dbfile =
+            joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
         @test SQLite.DB(dbfile) isa SQLite.DB
         con = DBInterface.connect(SQLite.DB, dbfile)
         @test con isa SQLite.DB
@@ -80,23 +80,36 @@ end
 
     @testset "SQLite.tables(db)" begin
         setup_clean_test_db() do db
-
             results1 = SQLite.tables(db)
-    
+
             @test isa(results1, SQLite.DBTables)
             @test length(results1) == 11
             @test isa(results1[1], SQLite.DBTable)
-    
+
             @test Tables.istable(results1)
             @test Tables.rowaccess(results1)
             @test Tables.rows(results1) == results1
-    
+
             @test results1[1].name == "Album"
-            @test results1[1].schema == Tables.schema(DBInterface.execute(db,"SELECT * FROM Album LIMIT 0"))
-    
+            @test results1[1].schema == Tables.schema(
+                DBInterface.execute(db, "SELECT * FROM Album LIMIT 0"),
+            )
+
             @test SQLite.DBTable("Album") == SQLite.DBTable("Album", nothing)
 
-            @test [t.name for t in results1] == ["Album", "Artist", "Customer", "Employee", "Genre", "Invoice", "InvoiceLine", "MediaType", "Playlist", "PlaylistTrack", "Track"]
+            @test [t.name for t in results1] == [
+                "Album",
+                "Artist",
+                "Customer",
+                "Employee",
+                "Genre",
+                "Invoice",
+                "InvoiceLine",
+                "MediaType",
+                "Playlist",
+                "PlaylistTrack",
+                "Track",
+            ]
         end
 
         @testset "#209: SQLite.tables response when no tables in DB" begin
@@ -110,16 +123,20 @@ end
     @testset "Issue #207: 32 bit integers" begin
         setup_clean_test_db() do db
             ds =
-                DBInterface.execute(db, "SELECT RANDOM() as a FROM Track LIMIT 1") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT RANDOM() as a FROM Track LIMIT 1",
+                ) |> columntable
             @test ds.a[1] isa Int64
-
         end
     end
 
     @testset "Regular SQLite Tests" begin
         setup_clean_test_db() do db
-            @test_throws SQLiteException DBInterface.execute(db, "just some syntax error")
+            @test_throws SQLiteException DBInterface.execute(
+                db,
+                "just some syntax error",
+            )
             # syntax correct, table missing
             @test_throws SQLiteException DBInterface.execute(
                 db,
@@ -130,7 +147,10 @@ end
 
     @testset "close!(query)" begin
         setup_clean_test_db() do db
-            qry = DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';")
+            qry = DBInterface.execute(
+                db,
+                "SELECT name FROM sqlite_master WHERE type='table';",
+            )
             DBInterface.close!(qry)
             DBInterface.close!(qry) # test it doesn't throw on double-close
         end
@@ -139,8 +159,10 @@ end
     @testset "Query tables" begin
         setup_clean_test_db() do db
             ds =
-                DBInterface.execute(db, "SELECT name FROM sqlite_master WHERE type='table';") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT name FROM sqlite_master WHERE type='table';",
+                ) |> columntable
             @test length(ds) == 1
             @test keys(ds) == (:name,)
             @test length(ds.name) == 11
@@ -154,7 +176,9 @@ end
         setup_clean_test_db() do db
 
             # pipe approach
-            results = DBInterface.execute(db, "SELECT * FROM Employee;") |> columntable
+            results =
+                DBInterface.execute(db, "SELECT * FROM Employee;") |>
+                columntable
             @test length(results) == 15
             @test length(results[1]) == 8
             # callable approach
@@ -163,12 +187,25 @@ end
                 results,
             )
             employees_stmt = DBInterface.prepare(db, "SELECT * FROM Employee")
-            @test isequal(columntable(DBInterface.execute(employees_stmt)), results)
-            @test isequal(DBInterface.execute(columntable, employees_stmt), results)
+            @test isequal(
+                columntable(DBInterface.execute(employees_stmt)),
+                results,
+            )
+            @test isequal(
+                DBInterface.execute(columntable, employees_stmt),
+                results,
+            )
             @testset "throwing from f()" begin
                 f(::SQLite.Query) = error("I'm throwing!")
-                @test_throws ErrorException DBInterface.execute(f, employees_stmt)
-                @test_throws ErrorException DBInterface.execute(f, db, "SELECT * FROM Employee")
+                @test_throws ErrorException DBInterface.execute(
+                    f,
+                    employees_stmt,
+                )
+                @test_throws ErrorException DBInterface.execute(
+                    f,
+                    db,
+                    "SELECT * FROM Employee",
+                )
             end
             DBInterface.close!(employees_stmt)
         end
@@ -176,7 +213,6 @@ end
 
     @testset "isempty(::Query)" begin
         setup_clean_test_db() do db
-
             @test !DBInterface.execute(isempty, db, "SELECT * FROM Employee")
             @test DBInterface.execute(
                 isempty,
@@ -199,14 +235,18 @@ end
                 "SELECT * FROM Employee WHERE FirstName='Joanne'",
             )
             @test empty_scheme.names == all_scheme.names
-            @test all(ea -> ea[1] <: ea[2], zip(empty_scheme.types, all_scheme.types))
+            @test all(
+                ea -> ea[1] <: ea[2],
+                zip(empty_scheme.types, all_scheme.types),
+            )
 
             empty_tbl = DBInterface.execute(
                 columntable,
                 db,
                 "SELECT * FROM Employee WHERE FirstName='Joanne'",
             )
-            all_tbl = DBInterface.execute(columntable, db, "SELECT * FROM Employee")
+            all_tbl =
+                DBInterface.execute(columntable, db, "SELECT * FROM Employee")
             @test propertynames(empty_tbl) == propertynames(all_tbl)
             @test all(
                 col ->
@@ -222,7 +262,9 @@ end
             DBInterface.execute(db, "create table temp as select * from album")
             DBInterface.execute(db, "alter table temp add column colyear int")
             DBInterface.execute(db, "update temp set colyear = 2014")
-            r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+            r =
+                DBInterface.execute(db, "select * from temp limit 10") |>
+                columntable
             @test length(r) == 4 && length(r[1]) == 10
             @test all(==(2014), r[4])
 
@@ -232,13 +274,17 @@ end
             SQLite.transaction(db)
             DBInterface.execute(db, "update temp set colyear = 2015")
             SQLite.rollback(db)
-            r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+            r =
+                DBInterface.execute(db, "select * from temp limit 10") |>
+                columntable
             @test all(==(2014), r[4])
 
             SQLite.transaction(db)
             DBInterface.execute(db, "update temp set colyear = 2015")
             SQLite.commit(db)
-            r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+            r =
+                DBInterface.execute(db, "select * from temp limit 10") |>
+                columntable
             @test all(==(2015), r[4])
         end
     end
@@ -250,7 +296,9 @@ end
             stmt = DBInterface.prepare(db, "update temp set dates = ?")
             DBInterface.execute(stmt, (Date(2014, 1, 1),))
 
-            r = DBInterface.execute(db, "select * from temp limit 10") |> columntable
+            r =
+                DBInterface.execute(db, "select * from temp limit 10") |>
+                columntable
             @test length(r) == 4 && length(r[1]) == 10
             @test isa(r[4][1], Date)
             @test all(Bool[x == Date(2014, 1, 1) for x in r[4]])
@@ -259,7 +307,9 @@ end
             rng = Dates.Date(2013):Dates.Day(1):Dates.Date(2013, 1, 5)
             dt = (i = collect(rng), j = collect(rng))
             tablename = dt |> SQLite.load!(db, "temp")
-            r = DBInterface.execute(db, "select * from $tablename") |> columntable
+            r =
+                DBInterface.execute(db, "select * from $tablename") |>
+                columntable
             @test length(r) == 2 && length(r[1]) == 5
             @test all([i for i in r[1]] .== collect(rng))
             @test all([isa(i, Dates.Date) for i in r[1]])
@@ -269,29 +319,44 @@ end
 
     @testset "Prepared Statements" begin
         setup_clean_test_db() do db
-
             DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
-            r = DBInterface.execute(db, "SELECT * FROM temp LIMIT ?", [3]) |> columntable
+            r =
+                DBInterface.execute(db, "SELECT * FROM temp LIMIT ?", [3]) |>
+                columntable
             @test length(r) == 3 && length(r[1]) == 3
             r =
-                DBInterface.execute(db, "SELECT * FROM temp WHERE Title LIKE ?", ["%time%"]) |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT * FROM temp WHERE Title LIKE ?",
+                    ["%time%"],
+                ) |> columntable
             @test r[1] == [76, 111, 187]
             DBInterface.execute(
                 db,
                 "INSERT INTO temp VALUES (?1, ?3, ?2)",
                 [0, 0, "Test Album"],
             )
-            r = DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId = 0") |> columntable
+            r =
+                DBInterface.execute(
+                    db,
+                    "SELECT * FROM temp WHERE AlbumId = 0",
+                ) |> columntable
             @test r[1][1] == 0
             @test r[2][1] == "Test Album"
             @test r[3][1] == 0
             SQLite.drop!(db, "temp")
 
             DBInterface.execute(db, "CREATE TABLE temp AS SELECT * FROM Album")
-            r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", (a = 3,)) |> columntable
+            r =
+                DBInterface.execute(
+                    db,
+                    "SELECT * FROM temp LIMIT :a",
+                    (a = 3,),
+                ) |> columntable
             @test length(r) == 3 && length(r[1]) == 3
-            r = DBInterface.execute(db, "SELECT * FROM temp LIMIT :a", a = 3) |> columntable
+            r =
+                DBInterface.execute(db, "SELECT * FROM temp LIMIT :a"; a = 3) |>
+                columntable
             @test length(r) == 3 && length(r[1]) == 3
             r =
                 DBInterface.execute(
@@ -307,20 +372,22 @@ end
             )
             DBInterface.execute(
                 db,
-                "INSERT INTO temp VALUES (@lid, :title, \$rid)",
+                "INSERT INTO temp VALUES (@lid, :title, \$rid)";
                 rid = 3,
                 lid = 400,
                 title = "Test2 Album",
             )
             r =
-                DBInterface.execute(db, "SELECT * FROM temp WHERE AlbumId IN (0, 400)") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT * FROM temp WHERE AlbumId IN (0, 400)",
+                ) |> columntable
             @test r[1] == [0, 400]
             @test r[2] == ["Test Album", "Test2 Album"]
             @test r[3] == [1, 3]
             SQLite.drop!(db, "temp")
 
-            SQLite.register(db, SQLite.regexp, nargs = 2, name = "regexp")
+            SQLite.register(db, SQLite.regexp; nargs = 2, name = "regexp")
             r =
                 DBInterface.execute(
                     db,
@@ -330,7 +397,7 @@ end
                 ) |> columntable
             @test r[1][1] == "Peacock"
 
-            SQLite.register(db, identity, nargs = 1, name = "identity")
+            SQLite.register(db, identity; nargs = 1, name = "identity")
             r =
                 DBInterface.execute(
                     db,
@@ -340,7 +407,7 @@ end
             @test first(r.cmp) == 1
 
             @test_throws AssertionError SQLite.register(db, triple, nargs = 186)
-            SQLite.register(db, triple, nargs = 1)
+            SQLite.register(db, triple; nargs = 1)
             r =
                 DBInterface.execute(
                     db,
@@ -360,25 +427,39 @@ end
     @testset "Register functions" begin
         setup_clean_test_db() do db
             SQLite.@register db add4
-            r = DBInterface.execute(db, "SELECT add4(AlbumId) FROM Album") |> columntable
-            s = DBInterface.execute(db, "SELECT AlbumId FROM Album") |> columntable
+            r =
+                DBInterface.execute(db, "SELECT add4(AlbumId) FROM Album") |>
+                columntable
+            s =
+                DBInterface.execute(db, "SELECT AlbumId FROM Album") |>
+                columntable
             @test r[1][1] == s[1][1] + 4
 
             SQLite.@register db mult
-            r = DBInterface.execute(db, "SELECT GenreId, UnitPrice FROM Track") |> columntable
+            r =
+                DBInterface.execute(
+                    db,
+                    "SELECT GenreId, UnitPrice FROM Track",
+                ) |> columntable
             s =
-                DBInterface.execute(db, "SELECT mult(GenreId, UnitPrice) FROM Track") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT mult(GenreId, UnitPrice) FROM Track",
+                ) |> columntable
             @test (r[1][1] * r[2][1]) == s[1][1]
             t =
-                DBInterface.execute(db, "SELECT mult(GenreId, UnitPrice, 3, 4) FROM Track") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT mult(GenreId, UnitPrice, 3, 4) FROM Track",
+                ) |> columntable
             @test (r[1][1] * r[2][1] * 3 * 4) == t[1][1]
 
             SQLite.@register db sin
             u =
-                DBInterface.execute(db, "select sin(milliseconds) from track limit 5") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "select sin(milliseconds) from track limit 5",
+                ) |> columntable
             @test all(-1 .< convert(Vector{Float64}, u[1]) .< 1)
 
             SQLite.register(db, hypot; nargs = 2, name = "hypotenuse")
@@ -391,8 +472,10 @@ end
 
             SQLite.@register db str2arr
             r =
-                DBInterface.execute(db, "SELECT str2arr(LastName) FROM Employee LIMIT 2") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT str2arr(LastName) FROM Employee LIMIT 2",
+                ) |> columntable
             @test r[1][2] == UInt8[0x45, 0x64, 0x77, 0x61, 0x72, 0x64, 0x73]
 
             SQLite.@register db big
@@ -400,35 +483,70 @@ end
             @test r[1][1] == big(5)
             @test typeof(r[1][1]) == BigInt
 
-            SQLite.register(db, 0, doublesum_step, doublesum_final, name = "doublesum")
-            r = DBInterface.execute(db, "SELECT doublesum(UnitPrice) FROM Track") |> columntable
-            s = DBInterface.execute(db, "SELECT UnitPrice FROM Track") |> columntable
+            SQLite.register(
+                db,
+                0,
+                doublesum_step,
+                doublesum_final;
+                name = "doublesum",
+            )
+            r =
+                DBInterface.execute(
+                    db,
+                    "SELECT doublesum(UnitPrice) FROM Track",
+                ) |> columntable
+            s =
+                DBInterface.execute(db, "SELECT UnitPrice FROM Track") |>
+                columntable
             @test abs(r[1][1] - 2 * sum(convert(Vector{Float64}, s[1]))) < 0.02
-
 
             SQLite.register(db, 0, mycount)
             r =
-                DBInterface.execute(db, "SELECT mycount(TrackId) FROM PlaylistTrack") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT mycount(TrackId) FROM PlaylistTrack",
+                ) |> columntable
             s =
-                DBInterface.execute(db, "SELECT count(TrackId) FROM PlaylistTrack") |>
-                columntable
+                DBInterface.execute(
+                    db,
+                    "SELECT count(TrackId) FROM PlaylistTrack",
+                ) |> columntable
             @test r[1][1] == s[1][1]
 
             SQLite.register(db, big(0), bigsum)
             r =
-                DBInterface.execute(db, "SELECT bigsum(TrackId) FROM PlaylistTrack") |>
+                DBInterface.execute(
+                    db,
+                    "SELECT bigsum(TrackId) FROM PlaylistTrack",
+                ) |> columntable
+            s =
+                DBInterface.execute(db, "SELECT TrackId FROM PlaylistTrack") |>
                 columntable
-            s = DBInterface.execute(db, "SELECT TrackId FROM PlaylistTrack") |> columntable
             @test r[1][1] == big(sum(convert(Vector{Int}, s[1])))
 
             DBInterface.execute(db, "CREATE TABLE points (x INT, y INT, z INT)")
-            DBInterface.execute(db, "INSERT INTO points VALUES (?, ?, ?)", (1, 2, 3))
-            DBInterface.execute(db, "INSERT INTO points VALUES (?, ?, ?)", (4, 5, 6))
-            DBInterface.execute(db, "INSERT INTO points VALUES (?, ?, ?)", (7, 8, 9))
+            DBInterface.execute(
+                db,
+                "INSERT INTO points VALUES (?, ?, ?)",
+                (1, 2, 3),
+            )
+            DBInterface.execute(
+                db,
+                "INSERT INTO points VALUES (?, ?, ?)",
+                (4, 5, 6),
+            )
+            DBInterface.execute(
+                db,
+                "INSERT INTO points VALUES (?, ?, ?)",
+                (7, 8, 9),
+            )
 
             SQLite.register(db, Point3D(0, 0, 0), sumpoint)
-            r = DBInterface.execute(db, "SELECT sumpoint(x, y, z) FROM points") |> columntable
+            r =
+                DBInterface.execute(
+                    db,
+                    "SELECT sumpoint(x, y, z) FROM points",
+                ) |> columntable
             @test r[1][1] == Point3D(12, 15, 18)
             SQLite.drop!(db, "points")
 
@@ -437,12 +555,13 @@ end
 
             @test_throws SQLiteException SQLite.drop!(db2, "nonexistant")
             # should not throw anything
-            SQLite.drop!(db2, "nonexistant", ifexists = true)
+            SQLite.drop!(db2, "nonexistant"; ifexists = true)
             # should drop "tab2"
-            SQLite.drop!(db2, "tab2", ifexists = true)
-            @test filter(x -> x.name == "tab2", SQLite.tables(db2)) |> length == 0
+            SQLite.drop!(db2, "tab2"; ifexists = true)
+            @test filter(x -> x.name == "tab2", SQLite.tables(db2)) |> length ==
+                  0
 
-            SQLite.drop!(db, "sqlite_stat1", ifexists = true)
+            SQLite.drop!(db, "sqlite_stat1"; ifexists = true)
             tables = SQLite.tables(db)
             @test length(tables) == 11
         end
@@ -463,7 +582,6 @@ end
             @test dt3[2][3] == "C"
         end
     end
-
 
     @testset "Issue #104: bind!() fails with named parameters" begin
         db = SQLite.DB() #In case the order of tests is changed
@@ -533,7 +651,11 @@ end
 
     @testset "Issue #180, Query" begin
         param = "Hello!"
-        query = DBInterface.execute(SQLite.DB(), "SELECT ?1 UNION ALL SELECT ?1", [param])
+        query = DBInterface.execute(
+            SQLite.DB(),
+            "SELECT ?1 UNION ALL SELECT ?1",
+            [param],
+        )
         param = "x"
         for row in query
             @test row[1] == "Hello!"
@@ -565,9 +687,6 @@ end
         DBInterface.close!(db)
     end
 
-
-
-
     @testset "SQLite.execute()" begin
         db = SQLite.DB()
         DBInterface.execute(db, "CREATE TABLE T (x INT UNIQUE)")
@@ -586,15 +705,17 @@ end
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3]
 
-        SQLite.execute(q, x = 4)
+        SQLite.execute(q; x = 4)
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3, 4]
 
-        SQLite.execute(db, "INSERT INTO T VALUES(:x)", x = 5)
+        SQLite.execute(db, "INSERT INTO T VALUES(:x)"; x = 5)
         r = DBInterface.execute(columntable, db, "SELECT * FROM T")
         @test r[1] == [1, 2, 3, 4, 5]
 
-        r = DBInterface.execute(db, strip("   SELECT * FROM T  ")) |> columntable
+        r =
+            DBInterface.execute(db, strip("   SELECT * FROM T  ")) |>
+            columntable
         @test r[1] == [1, 2, 3, 4, 5]
 
         SQLite.createindex!(db, "T", "x", "x_index"; unique = false)
@@ -622,7 +743,13 @@ end
         @test DBInterface.lastrowid(r) == 5
 
         r = DBInterface.execute(db, "SELECT * FROM T") |> columntable
-        SQLite.load!(nothing, Tables.rows(r), db, "T2", SQLite.tableinfo(db, "T2"))
+        SQLite.load!(
+            nothing,
+            Tables.rows(r),
+            db,
+            "T2",
+            SQLite.tableinfo(db, "T2"),
+        )
         r2 = DBInterface.execute(db, "SELECT * FROM T2") |> columntable
         @test r == r2
     end
@@ -631,13 +758,13 @@ end
         @test SQLite.esc_id(["1", "2", "3"]) == "\"1\",\"2\",\"3\""
     end
 
-
-
     @testset "Issue #193: Throw informative error on duplicate column names" begin
         db = SQLite.DB()
-        @test_throws SQLiteException SQLite.load!((a = [1, 2, 3], A = [1, 2, 3]), db)
+        @test_throws SQLiteException SQLite.load!(
+            (a = [1, 2, 3], A = [1, 2, 3]),
+            db,
+        )
     end
-
 
     @testset "Issue #216: Table should map by name" begin
         db = SQLite.DB()
@@ -661,7 +788,6 @@ end
         @test_throws SQLiteException SQLite.load!(tbl3, db, "data")
     end
 
-
     @testset "Test busy_timeout" begin
         db = SQLite.DB()
         @test SQLite.busy_timeout(db, 300) == 0
@@ -670,8 +796,10 @@ end
     @testset "Issue #253: Ensure query column names are unique by default" begin
         db = SQLite.DB()
         res =
-            DBInterface.execute(db, "select 1 as x2, 2 as x2, 3 as x2, 4 as x2_2") |>
-            columntable
+            DBInterface.execute(
+                db,
+                "select 1 as x2, 2 as x2, 3 as x2, 4 as x2_2",
+            ) |> columntable
         @test res == (x2 = [1], x2_1 = [2], x2_2 = [3], x2_2_1 = [4])
     end
 
@@ -680,8 +808,10 @@ end
         tbl = (a = [1, 2, 3], b = ["a", "b", "c"])
         SQLite.load!(tbl, db, "escape 10.0%")
         r =
-            DBInterface.execute(db, "SELECT * FROM $(SQLite.esc_id("escape 10.0%"))") |>
-            columntable
+            DBInterface.execute(
+                db,
+                "SELECT * FROM $(SQLite.esc_id("escape 10.0%"))",
+            ) |> columntable
         @test r == tbl
         SQLite.drop!(db, "escape 10.0%")
     end
@@ -690,7 +820,9 @@ end
         db = SQLite.DB()
         tbl = NamedTuple{(:a, Symbol("50.0%"))}(([1, 2, 3], ["a", "b", "c"]))
         SQLite.load!(tbl, db, "escape_colnames")
-        r = DBInterface.execute(db, "SELECT * FROM escape_colnames") |> columntable
+        r =
+            DBInterface.execute(db, "SELECT * FROM escape_colnames") |>
+            columntable
         @test r == tbl
         SQLite.drop!(db, "escape_colnames")
     end
@@ -763,7 +895,6 @@ end
         close(db)
         rm(dbfile)
     end
-
 end # @testset
 
 struct UnknownSchemaTable end
@@ -771,8 +902,9 @@ struct UnknownSchemaTable end
 Tables.isrowtable(::Type{UnknownSchemaTable}) = true
 Tables.rows(x::UnknownSchemaTable) = x
 Base.length(x::UnknownSchemaTable) = 3
-Base.iterate(::UnknownSchemaTable, st = 1) =
+function Base.iterate(::UnknownSchemaTable, st = 1)
     st == 4 ? nothing : ((a = 1, b = 2 + st, c = 3 + st), st + 1)
+end
 
 @testset "misc" begin
 
@@ -795,7 +927,11 @@ Base.iterate(::UnknownSchemaTable, st = 1) =
         db,
         "create table tmp ( a INTEGER NOT NULL PRIMARY KEY, b INTEGER, c INTEGER )",
     )
-    @test_throws SQLite.SQLiteException SQLite.load!(UnknownSchemaTable(), db, "tmp")
+    @test_throws SQLite.SQLiteException SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+    )
     SQLite.load!(UnknownSchemaTable(), db, "tmp"; replace = true)
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [1], b = [5], c = [6])
@@ -808,11 +944,13 @@ Base.iterate(::UnknownSchemaTable, st = 1) =
     @test isequal(tbl.x, [missing, :a])
 
     db = SQLite.DB()
-    DBInterface.execute(db, "create table tmp (a integer, b integer, c integer)")
+    DBInterface.execute(
+        db,
+        "create table tmp (a integer, b integer, c integer)",
+    )
     stmt = DBInterface.prepare(db, "INSERT INTO tmp VALUES(?, ?, ?)")
     tbl = (a = [1, 1, 1], b = [3, 4, 5], c = [4, 5, 6])
     DBInterface.executemany(stmt, tbl)
     tbl2 = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == tbl2
-
 end
