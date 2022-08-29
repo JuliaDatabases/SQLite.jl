@@ -73,6 +73,20 @@ end
 
 @noinline wrongrow(i) = throw(ArgumentError("row $i is no longer valid; sqlite query results are forward-only iterators where each row is only valid when iterated; re-execute the query, convert rows to NamedTuples, or stream the results to a sink to save results"))
 
+function getvalue_t(q::Query, col::Int, rownumber::Int, ::Type{T}):: Union{Missing, T} where {T}
+    rownumber == q.current_rownumber[] || wrongrow(rownumber)
+    handle = _stmt(q.stmt).handle
+    t = sqlite3_column_type(handle, col)
+    if t == SQLITE_NULL
+        return missing
+    else
+        return sqlitevalue(T, handle, col)
+    end
+end
+
+getvalue(q::Query, col::Int, rownumber::Int, t::Type{<: Number})  = getvalue_t(q, col, rownumber, t)
+getvalue(q::Query, col::Int, rownumber::Int, t::Type{String})  = getvalue_t(q, col, rownumber, t)
+
 function getvalue(q::Query, col::Int, rownumber::Int, ::Type{T}) where {T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _stmt(q.stmt).handle
