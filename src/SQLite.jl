@@ -433,9 +433,9 @@ end
 
 # convert SQLite stored type into Julia equivalent
 function juliatype(x::Integer)
-    return x == C.SQLITE_INTEGER ? Int64 :
-           x == C.SQLITE_FLOAT ? Float64 :
-           x == C.SQLITE_TEXT ? String : x == C.SQLITE_NULL ? Missing : Any
+    x == C.SQLITE_INTEGER ? Int64 :
+    x == C.SQLITE_FLOAT ? Float64 :
+    x == C.SQLITE_TEXT ? String : x == C.SQLITE_NULL ? Missing : Any
 end
 
 # convert SQLite declared type into Julia equivalent,
@@ -483,15 +483,15 @@ function sqlitevalue(
     handle,
     col,
 ) where {T<:Union{Base.BitSigned,Base.BitUnsigned}}
-    return convert(T, C.sqlite3_column_int64(handle, col - 1))
+    convert(T, C.sqlite3_column_int64(handle, col - 1))
 end
 const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
 function sqlitevalue(::Type{T}, handle, col) where {T<:FLOAT_TYPES}
-    return convert(T, C.sqlite3_column_double(handle, col - 1))
+    convert(T, C.sqlite3_column_double(handle, col - 1))
 end
 #TODO: test returning a WeakRefString instead of calling `unsafe_string`
 function sqlitevalue(::Type{T}, handle, col) where {T<:AbstractString}
-    return convert(T, unsafe_string(C.sqlite3_column_text(handle, col - 1)))
+    convert(T, unsafe_string(C.sqlite3_column_text(handle, col - 1)))
 end
 function sqlitevalue(::Type{T}, handle, col) where {T}
     blob = convert(Ptr{UInt8}, C.sqlite3_column_blob(handle, col - 1))
@@ -546,7 +546,7 @@ function execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams = ())
 end
 
 function execute(stmt::Stmt, params::DBInterface.StatementParams = ())
-    return execute(stmt.db, stmt, params)
+    execute(stmt.db, stmt, params)
 end
 
 execute(stmt::Stmt; kwargs...) = execute(stmt.db, stmt, NamedTuple(kwargs))
@@ -566,7 +566,7 @@ function execute(
 end
 
 function execute(db::DB, sql::AbstractString; kwargs...)
-    return execute(db, sql, NamedTuple(kwargs))
+    execute(db, sql, NamedTuple(kwargs))
 end
 
 """
@@ -616,7 +616,7 @@ function esc_id end
 
 esc_id(x::AbstractString) = "\"" * replace(x, "\"" => "\"\"") * "\""
 function esc_id(X::AbstractVector{S}) where {S<:AbstractString}
-    return join(map(esc_id, X), ',')
+    join(map(esc_id, X), ',')
 end
 
 # Transaction-based commands
@@ -730,7 +730,7 @@ function createindex!(
     u = unique ? "UNIQUE" : ""
     exists = ifnotexists ? "IF NOT EXISTS" : ""
     transaction(db) do
-        return execute(
+        execute(
             db,
             "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))",
         )
@@ -758,7 +758,7 @@ function removeduplicates!(
     end
     colsstr = chop(colsstr)
     transaction(db) do
-        return execute(
+        execute(
             db,
             "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));",
         )
@@ -795,7 +795,7 @@ end
 returns a list of indices in `db`
 """
 function indices(db::DB, sink = columntable)
-    return DBInterface.execute(
+    DBInterface.execute(
         sink,
         db,
         "SELECT name FROM sqlite_master WHERE type='index';",

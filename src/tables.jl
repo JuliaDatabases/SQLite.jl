@@ -56,7 +56,7 @@ function reset!(q::Query)
 end
 
 function DBInterface.close!(q::Query)
-    return C.sqlite3_reset(_get_stmt_handle(q.stmt))
+    C.sqlite3_reset(_get_stmt_handle(q.stmt))
 end
 
 function done(q::Query)
@@ -94,14 +94,14 @@ function getvalue(q::Query, col::Int, rownumber::Int, ::Type{T}) where {T}
 end
 
 function Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T}
-    return getvalue(getquery(r), i, getfield(r, :rownumber), T)
+    getvalue(getquery(r), i, getfield(r, :rownumber), T)
 end
 
 function Tables.getcolumn(r::Row, i::Int)
-    return Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
+    Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
 end
 function Tables.getcolumn(r::Row, nm::Symbol)
-    return Tables.getcolumn(r, getquery(r).lookup[nm])
+    Tables.getcolumn(r, getquery(r).lookup[nm])
 end
 Tables.columnnames(r::Row) = Tables.columnnames(getquery(r))
 
@@ -231,7 +231,7 @@ function load!(
     name::AbstractString = "sqlitejl_" * Random.randstring(5);
     kwargs...,
 )
-    return x -> load!(x, db, name; kwargs...)
+    x -> load!(x, db, name; kwargs...)
 end
 
 function load!(
