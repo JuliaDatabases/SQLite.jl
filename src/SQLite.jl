@@ -5,64 +5,35 @@ using WeakRefStrings, DBInterface
 
 export DBInterface, SQLiteException
 
+include("capi.jl")
+import .C
 struct SQLiteException <: Exception
     msg::AbstractString
 end
 
-include("consts.jl")
-include("api.jl")
+# SQLite3 DB connection handle
+const DBHandle = Ptr{C.sqlite3}
+# SQLite3 statement handle
+const StmtHandle = Ptr{C.sqlite3_stmt}
 
-const DBHandle = Ptr{Cvoid}   # SQLite3 DB connection handle
-const StmtHandle = Ptr{Cvoid} # SQLite3 prepared statement handle
+const StmtWrapper = Ref{StmtHandle}
 
 # Normal constructor from filename
 function sqliteexception(handle::DBHandle)
-    SQLiteException(unsafe_string(sqlite3_errmsg(handle)))
+    SQLiteException(unsafe_string(C.sqlite3_errmsg(handle)))
 end
 function sqliteexception(handle::DBHandle, stmt::StmtHandle)
-    errstr = unsafe_string(sqlite3_errmsg(handle))
-    stmt_text_handle = sqlite3_expanded_sql(stmt)
+    errstr = unsafe_string(C.sqlite3_errmsg(handle))
+    stmt_text_handle = C.sqlite3_expanded_sql(stmt)
     stmt_text = unsafe_string(stmt_text_handle)
     msg = "$errstr on statement \"$stmt_text\""
-    sqlite3_free(convert(Ptr{Cvoid}, stmt_text_handle))
+    C.sqlite3_free(stmt_text_handle)
     return SQLiteException(msg)
 end
 
-sqliteerror(handle::DBHandle) = throw(sqliteexception(handle))
-function sqliteerror(handle::DBHandle, stmt::StmtHandle)
-    throw(sqliteexception(handle, stmt))
-end
+sqliteerror(args...) = throw(sqliteexception(args...))
 
-"""
-Internal wrapper that holds the handle to SQLite3 prepared statement.
-It is managed by [`SQLite.DB`](@ref) and referenced by the "public" [`SQLite.Stmt`](@ref) object.
-
-When no `SQLite.Stmt` instances reference the given `SQlite._Stmt` object,
-it is closed automatically.
-
-When `SQLite.DB` is closed or [`SQLite.finalize_statements!`](@ref) is called,
-all its `SQLite._Stmt` objects are closed.
-"""
-mutable struct _Stmt
-    handle::StmtHandle
-    params::Dict{Int,Any}
-
-    function _Stmt(handle::StmtHandle)
-        stmt = new(handle, Dict{Int,Any}())
-        finalizer(_close!, stmt)
-        return stmt
-    end
-end
-
-# close statement
-function _close!(stmt::_Stmt)
-    stmt.handle == C_NULL || sqlite3_finalize(stmt.handle)
-    stmt.handle = C_NULL
-    return
-end
-
-# _Stmt unique identifier in DB
-const _StmtId = Int
+include("base.jl")
 
 """
     `SQLite.DB()` => in-memory SQLite database
@@ -86,57 +57,63 @@ The `SQLite.DB` will be automatically closed/shutdown when it goes out of scope
 mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
-    stmts::Dict{_StmtId,_Stmt} # opened prepared statements
-
-    lastStmtId::_StmtId
+    stmt_wrappers::WeakKeyDict{StmtWrapper,Nothing} # opened prepared statements
 
     function DB(f::AbstractString)
-        handle = Ref{DBHandle}()
+        handle_ptr = Ref{DBHandle}()
         f = String(isempty(f) ? f : expanduser(f))
-        if @OK sqlite3_open(f, handle)
-            db = new(f, handle[], Dict{StmtHandle,_Stmt}(), 0)
-            finalizer(_close, db)
+        if @OK C.sqlite3_open(f, handle_ptr)
+            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}())
+            finalizer(_close_db!, db)
             return db
         else # error
-            sqliteerror(handle[])
+            sqliteerror(handle_ptr[])
         end
     end
 end
 DB() = DB(":memory:")
 DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
-DBInterface.close!(db::DB) = _close(db)
-Base.close(db::DB) = _close(db)
+DBInterface.close!(db::DB) = _close_db!(db)
+Base.close(db::DB) = _close_db!(db)
 Base.isopen(db::DB) = db.handle != C_NULL
 
-# close all prepared statements of db connection
 function finalize_statements!(db::DB)
-    for stmt in values(db.stmts)
-        _close!(stmt)
+    # close stmts
+    for stmt_wrapper in keys(db.stmt_wrappers)
+        C.sqlite3_finalize(stmt_wrapper[])
+        stmt_wrapper[] = C_NULL
     end
-    empty!(db.stmts)
+    empty!(db.stmt_wrappers)
 end
 
-function _close(db::DB)
+function _close_db!(db::DB)
     finalize_statements!(db)
-    # disconnect from DB
-    db.handle == C_NULL || sqlite3_close_v2(db.handle)
+
+    # close DB
+    C.sqlite3_close_v2(db.handle)
     db.handle = C_NULL
+
     return
 end
 
-sqliteerror(db::DB) = sqliteerror(db.handle)
 sqliteexception(db::DB) = sqliteexception(db.handle)
 
-function Base.show(io::IO, db::SQLite.DB)
+function Base.show(io::IO, db::DB)
     print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 end
 
 # prepare given sql statement
-function _Stmt(db::DB, sql::AbstractString)
-    handle = Ref{StmtHandle}()
-    sqliteprepare(db, sql, handle, Ref{StmtHandle}())
-    return _Stmt(handle[])
+function prepare_stmt_wrapper(db::DB, sql::AbstractString)
+    handle_ptr = Ref{StmtHandle}()
+    @CHECK db C.sqlite3_prepare_v2(
+        db.handle,
+        sql,
+        sizeof(sql),
+        handle_ptr,
+        C_NULL,
+    )
+    return handle_ptr
 end
 
 """
@@ -162,60 +139,47 @@ DB is disconnected or when [`SQLite.finalize_statements!`](@ref) is explicitly c
 """
 mutable struct Stmt <: DBInterface.Statement
     db::DB
-    id::_StmtId # id of _Stmt inside db (may refer to already closed connection)
+    stmt_wrapper::StmtWrapper
+    params::Dict{Int,Any}
 
-    function Stmt(db::DB, sql::AbstractString)
-        _stmt = _Stmt(db, sql)
-        id = (db.lastStmtId += 1)
-        stmt = new(db, id)
-        db.stmts[id] = _stmt # FIXME check for duplicate handle?
-        finalizer(_finalize, stmt)
+    function Stmt(db::DB, sql::AbstractString; register::Bool = true)
+        stmt_wrapper = prepare_stmt_wrapper(db, sql)
+        if register
+            db.stmt_wrappers[stmt_wrapper] = nothing
+        end
+        stmt = new(db, stmt_wrapper, Dict{Int,Any}())
+        finalizer(_close_stmt!, stmt)
         return stmt
     end
 end
 
-sqliteexception(db::DB, stmt::_Stmt) = sqliteexception(db.handle, stmt.handle)
-
-# check if the statement is ready (not finalized due to
-# _close(_Stmt) called and the statment handle removed from DB)
-isready(stmt::Stmt) = haskey(stmt.db.stmts, stmt.id)
-
-# get underlying _Stmt or nothing if not found
-_stmt_safe(stmt::Stmt) = get(stmt.db.stmts, stmt.id, nothing)
-
-# get underlying _Stmt or throw if not found
-@inline function _stmt(stmt::Stmt)
-    _st = _stmt_safe(stmt)
-    (_st === nothing) &&
-        throw(SQLiteException("Statement $(stmt.id) not found"))
-    return _st
+_get_stmt_handle(stmt::Stmt) = stmt.stmt_wrapper[]
+function _set_stmt_handle(stmt::Stmt, handle)
+    stmt.stmt_wrapper[] = handle
 end
 
-# automatically finalizes prepared statement (_Stmt)
-# when no Stmt objects refer to it and removes
-# it from the db.stmts collection
-_finalize(stmt::Stmt) = DBInterface.close!(stmt)
+# check if the statement is ready (not finalized due to _close_stmt!(Stmt) called)
+isready(stmt::Stmt) = _get_stmt_handle(stmt) != C_NULL
 
+function _close_stmt!(stmt::Stmt)
+    C.sqlite3_finalize(_get_stmt_handle(stmt))
+    _set_stmt_handle(stmt, C_NULL)
+end
+
+function sqliteexception(db::DB, stmt::Stmt)
+    sqliteexception(db.handle, _get_stmt_handle(stmt))
+end
+
+"""
+    DBInterface.prepare(db::SQLite.DB, sql::AbstractString)
+
+Prepare an SQL statement given as a string in the sqlite database; returns an `SQLite.Stmt` compiled object.
+See `DBInterface.execute`(@ref) for information on executing a prepared statement and passing parameters to bind.
+A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
+"""
+DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
 DBInterface.getconnection(stmt::Stmt) = stmt.db
-
-# explicitly close prepared statement
-function DBInterface.close!(stmt::Stmt)
-    _st = _stmt_safe(stmt)
-    if _st !== nothing
-        _close!(_st)
-        delete!(stmt.db.stmts, stmt.id) # remove the _Stmt
-    end
-    return stmt
-end
-
-function sqliteprepare(
-    db::DB,
-    sql::AbstractString,
-    stmt::Ref{StmtHandle},
-    null::Ref{StmtHandle},
-)
-    @CHECK db sqlite3_prepare_v2(db.handle, sql, stmt, null)
-end
+DBInterface.close!(stmt::Stmt) = _close_stmt!(stmt)
 
 include("UDF.jl")
 export @sr_str
@@ -226,10 +190,8 @@ export @sr_str
 Clears any bound values to a prepared SQL statement
 """
 function clear!(stmt::Stmt)
-    _st = _stmt(stmt)
-    sqlite3_clear_bindings(_st.handle)
-    empty!(_st.params)
-    return
+    C.sqlite3_clear_bindings(_get_stmt_handle(stmt))
+    empty!(stmt.params)
 end
 
 """
@@ -280,13 +242,14 @@ From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
 """
 function bind! end
 
-function bind!(stmt::_Stmt, params::DBInterface.NamedStatementParams)
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
+function bind!(stmt::Stmt, params::DBInterface.NamedStatementParams)
+    handle = _get_stmt_handle(stmt)
+    nparams = C.sqlite3_bind_parameter_count(handle)
     (nparams <= length(params)) || throw(
         SQLiteException("values should be provided for all query placeholders"),
     )
     for i in 1:nparams
-        name = unsafe_string(sqlite3_bind_parameter_name(stmt.handle, i))
+        name = unsafe_string(C.sqlite3_bind_parameter_name(handle, i))
         isempty(name) && throw(
             SQLiteException("nameless parameters should be passed as a Vector"),
         )
@@ -301,8 +264,8 @@ function bind!(stmt::_Stmt, params::DBInterface.NamedStatementParams)
     end
 end
 
-function bind!(stmt::_Stmt, values::DBInterface.PositionalStatementParams)
-    nparams = sqlite3_bind_parameter_count(stmt.handle)
+function bind!(stmt::Stmt, values::DBInterface.PositionalStatementParams)
+    nparams = C.sqlite3_bind_parameter_count(_get_stmt_handle(stmt))
     (nparams == length(values)) || throw(
         SQLiteException("values should be provided for all query placeholders"),
     )
@@ -311,111 +274,87 @@ function bind!(stmt::_Stmt, values::DBInterface.PositionalStatementParams)
     end
 end
 
-function bind!(stmt::Stmt, values::DBInterface.StatementParams)
-    bind!(_stmt(stmt), values)
-end
-
-bind!(stmt::Union{_Stmt,Stmt}; kwargs...) = bind!(stmt, kwargs.data)
+bind!(stmt::Stmt; kwargs...) = bind!(stmt, kwargs.data)
 
 # Binding parameters to SQL statements
-function bind!(stmt::_Stmt, name::AbstractString, val::Any)
-    i::Int = sqlite3_bind_parameter_index(stmt.handle, name)
+function bind!(stmt::Stmt, name::AbstractString, val::Any)
+    i::Int = C.sqlite3_bind_parameter_index(_get_stmt_handle(stmt), name)
     if i == 0
         throw(SQLiteException("SQL parameter $name not found in $stmt"))
     end
-    return bind!(stmt, i, val)
+    bind!(stmt, i, val)
 end
 
 # binding method for internal _Stmt class
-function bind!(stmt::_Stmt, i::Integer, val::AbstractFloat)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_double(
-            stmt.handle,
-            i,
-            Float64(val),
-        ); return nothing
+function bind!(stmt::Stmt, i::Integer, val::AbstractFloat)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_double(
+        _get_stmt_handle(stmt),
+        i,
+        Float64(val),
     )
 end
-function bind!(stmt::_Stmt, i::Integer, val::Int32)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(
-            stmt.handle,
-            i,
-            val,
-        ); return nothing
+function bind!(stmt::Stmt, i::Integer, val::Int32)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, val)
+end
+function bind!(stmt::Stmt, i::Integer, val::Int64)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_int64(_get_stmt_handle(stmt), i, val)
+end
+function bind!(stmt::Stmt, i::Integer, val::Missing)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
+end
+function bind!(stmt::Stmt, i::Integer, val::Nothing)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
+end
+function bind!(stmt::Stmt, i::Integer, val::AbstractString)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_text(
+        _get_stmt_handle(stmt),
+        i,
+        val,
+        sizeof(val),
+        C_NULL,
     )
 end
-function bind!(stmt::_Stmt, i::Integer, val::Int64)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int64(
-            stmt.handle,
-            i,
-            val,
-        ); return nothing
+function bind!(stmt::Stmt, i::Integer, val::WeakRefString{UInt8})
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_text(
+        _get_stmt_handle(stmt),
+        i,
+        val.ptr,
+        val.len,
+        C_NULL,
     )
 end
-function bind!(stmt::_Stmt, i::Integer, val::Missing)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_null(stmt.handle, i); return nothing
+function bind!(stmt::Stmt, i::Integer, val::WeakRefString{UInt16})
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_text16(
+        _get_stmt_handle(stmt),
+        i,
+        val.ptr,
+        val.len * 2,
+        C_NULL,
     )
 end
-function bind!(stmt::_Stmt, i::Integer, val::Nothing)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_null(stmt.handle, i); return nothing
-    )
+function bind!(stmt::Stmt, i::Integer, val::Bool)
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, Int32(val))
 end
-function bind!(stmt::_Stmt, i::Integer, val::AbstractString)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(
-            stmt.handle,
-            i,
-            val,
-        ); return nothing
-    )
-end
-function bind!(stmt::_Stmt, i::Integer, val::WeakRefString{UInt8})
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text(
-            stmt.handle,
-            i,
-            val.ptr,
-            val.len,
-        ); return nothing
-    )
-end
-function bind!(stmt::_Stmt, i::Integer, val::WeakRefString{UInt16})
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_text16(
-            stmt.handle,
-            i,
-            val.ptr,
-            val.len * 2,
-        ); return nothing
-    )
-end
-function bind!(stmt::_Stmt, i::Integer, val::Bool)
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_int(
-            stmt.handle,
-            i,
-            Int32(val),
-        ); return nothing
-    )
-end
-function bind!(stmt::_Stmt, i::Integer, val::Vector{UInt8})
-    (
-        stmt.params[i] = val; @CHECK stmt.db sqlite3_bind_blob(
-            stmt.handle,
-            i,
-            val,
-        ); return nothing
+function bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_blob(
+        _get_stmt_handle(stmt),
+        i,
+        val,
+        sizeof(val),
+        C.SQLITE_STATIC,
     )
 end
 # Fallback is BLOB and defaults to serializing the julia value
-
-function bind!(stmt::Stmt, param::Union{Integer,AbstractString}, val::Any)
-    bind!(_stmt(stmt), param, val)
-end
 
 # internal wrapper mutable struct to, in-effect, mark something which has been serialized
 struct Serialized
@@ -432,7 +371,7 @@ function sqlserialize(x)
     return take!(buffer)
 end
 # fallback method to bind arbitrary julia `val` to the parameter at index `i` (object is serialized)
-bind!(stmt::_Stmt, i::Integer, val::Any) = bind!(stmt, i, sqlserialize(val))
+bind!(stmt::Stmt, i::Integer, val::Any) = bind!(stmt, i, sqlserialize(val))
 
 struct SerializeError <: Exception
     msg::String
@@ -475,16 +414,16 @@ end
 
 # get julia type for given column of the given statement
 function juliatype(handle, col)
-    stored_typeid = SQLite.sqlite3_column_type(handle, col)
-    if stored_typeid == SQLite.SQLITE_BLOB
+    stored_typeid = C.sqlite3_column_type(handle, col - 1)
+    if stored_typeid == C.SQLITE_BLOB
         # blobs are serialized julia types, so just try to deserialize it
-        deser_val = SQLite.sqlitevalue(Any, handle, col)
+        deser_val = sqlitevalue(Any, handle, col)
         # FIXME deserialized type have priority over declared type, is it fine?
         return typeof(deser_val)
     else
         stored_type = juliatype(stored_typeid)
     end
-    decl_typestr = SQLite.sqlite3_column_decltype(handle, col)
+    decl_typestr = C.sqlite3_column_decltype(handle, col - 1)
     if decl_typestr != C_NULL
         return juliatype(unsafe_string(decl_typestr), stored_type)
     else
@@ -494,9 +433,9 @@ end
 
 # convert SQLite stored type into Julia equivalent
 function juliatype(x::Integer)
-    x == SQLITE_INTEGER ? Int64 :
-    x == SQLITE_FLOAT ? Float64 :
-    x == SQLITE_TEXT ? String : x == SQLITE_NULL ? Missing : Any
+    x == C.SQLITE_INTEGER ? Int64 :
+    x == C.SQLITE_FLOAT ? Float64 :
+    x == C.SQLITE_TEXT ? String : x == C.SQLITE_NULL ? Missing : Any
 end
 
 # convert SQLite declared type into Julia equivalent,
@@ -544,19 +483,19 @@ function sqlitevalue(
     handle,
     col,
 ) where {T<:Union{Base.BitSigned,Base.BitUnsigned}}
-    convert(T, sqlite3_column_int64(handle, col))
+    convert(T, C.sqlite3_column_int64(handle, col - 1))
 end
 const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
 function sqlitevalue(::Type{T}, handle, col) where {T<:FLOAT_TYPES}
-    convert(T, sqlite3_column_double(handle, col))
+    convert(T, C.sqlite3_column_double(handle, col - 1))
 end
 #TODO: test returning a WeakRefString instead of calling `unsafe_string`
 function sqlitevalue(::Type{T}, handle, col) where {T<:AbstractString}
-    convert(T, unsafe_string(sqlite3_column_text(handle, col)))
+    convert(T, unsafe_string(C.sqlite3_column_text(handle, col - 1)))
 end
 function sqlitevalue(::Type{T}, handle, col) where {T}
-    blob = convert(Ptr{UInt8}, sqlite3_column_blob(handle, col))
-    b = sqlite3_column_bytes(handle, col)
+    blob = convert(Ptr{UInt8}, C.sqlite3_column_blob(handle, col - 1))
+    b = C.sqlite3_column_bytes(handle, col - 1)
     buf = zeros(UInt8, b) # global const?
     unsafe_copyto!(pointer(buf), blob, b)
     r = sqldeserialize(buf)
@@ -591,42 +530,43 @@ To get the results of a SQL query, it is recommended to use [`DBInterface.execut
 """
 function execute end
 
-function execute(db::DB, stmt::_Stmt, params::DBInterface.StatementParams = ())
-    sqlite3_reset(stmt.handle)
+function execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams = ())
+    handle = _get_stmt_handle(stmt)
+    C.sqlite3_reset(handle)
     bind!(stmt, params)
-    r = sqlite3_step(stmt.handle)
-    if r == SQLITE_DONE
-        sqlite3_reset(stmt.handle)
-    elseif r != SQLITE_ROW
+    r = C.sqlite3_step(handle)
+    if r == C.SQLITE_DONE
+        C.sqlite3_reset(handle)
+    elseif r != C.SQLITE_ROW
         e = sqliteexception(db)
-        sqlite3_reset(stmt.handle)
+        C.sqlite3_reset(handle)
         throw(e)
     end
     return r
 end
 
-function execute(stmt::Stmt, params::DBInterface.StatementParams)
-    execute(stmt.db, _stmt(stmt), params)
+function execute(stmt::Stmt, params::DBInterface.StatementParams = ())
+    execute(stmt.db, stmt, params)
 end
 
-execute(stmt::Stmt; kwargs...) = execute(stmt, values(kwargs))
+execute(stmt::Stmt; kwargs...) = execute(stmt.db, stmt, NamedTuple(kwargs))
 
 function execute(
     db::DB,
     sql::AbstractString,
-    params::DBInterface.StatementParams,
+    params::DBInterface.StatementParams = (),
 )
-    # prepare without registering _Stmt in DB
-    _stmt = _Stmt(db, sql)
+    # prepare without registering Stmt in DB
+    stmt = Stmt(db, sql; register = false)
     try
-        return execute(db, _stmt, params)
+        return execute(db, stmt, params)
     finally
-        _close!(_stmt) # immediately close, don't wait for GC
+        _close_stmt!(stmt) # immediately close, don't wait for GC
     end
 end
 
 function execute(db::DB, sql::AbstractString; kwargs...)
-    execute(db, sql, values(kwargs))
+    execute(db, sql, NamedTuple(kwargs))
 end
 
 """
@@ -757,7 +697,6 @@ function drop!(db::DB, table::AbstractString; ifexists::Bool = false)
         execute(db, "DROP TABLE $exists $(esc_id(table))")
     end
     execute(db, "VACUUM")
-    return
 end
 
 """
@@ -770,7 +709,6 @@ function dropindex!(db::DB, index::AbstractString; ifexists::Bool = false)
     transaction(db) do
         execute(db, "DROP INDEX $exists $(esc_id(index))")
     end
-    return
 end
 
 """
@@ -826,7 +764,6 @@ function removeduplicates!(
         )
     end
     execute(db, "ANALYZE $table")
-    return
 end
 
 include("tables.jl")
@@ -879,7 +816,7 @@ end
 
 returns the auto increment id of the last row
 """
-last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
+last_insert_rowid(db::DB) = C.sqlite3_last_insert_rowid(db.handle)
 
 """
     SQLite.enable_load_extension(db, enable::Bool=true)
@@ -887,13 +824,7 @@ last_insert_rowid(db::DB) = sqlite3_last_insert_rowid(db.handle)
 Enables extension loading (off by default) on the sqlite database `db`. Pass `false` as the second argument to disable.
 """
 function enable_load_extension(db::DB, enable::Bool = true)
-    ccall(
-        (:sqlite3_enable_load_extension, SQLite.libsqlite),
-        Cint,
-        (Ptr{Cvoid}, Cint),
-        db.handle,
-        enable,
-    )
+    C.sqlite3_enable_load_extension(db.handle, enable)
 end
 
 """
@@ -901,8 +832,6 @@ end
 
 Set a busy handler that sleeps for a specified amount of milliseconds  when a table is locked. After at least ms milliseconds of sleeping, the handler will return 0, causing sqlite to return SQLITE_BUSY.
 """
-function busy_timeout(db::DB, ms::Integer = 0)
-    sqlite3_busy_timeout(db.handle, ms)
-end
+busy_timeout(db::DB, ms::Integer = 0) = C.sqlite3_busy_timeout(db.handle, ms)
 
 end # module
