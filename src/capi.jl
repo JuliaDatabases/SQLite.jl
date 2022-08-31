@@ -1291,6 +1291,10 @@ function sqlite3_db_handle(arg1)
     @ccall libsqlite.sqlite3_db_handle(arg1::Ptr{sqlite3_stmt})::Ptr{sqlite3}
 end
 
+function sqlite3_db_name(db, N)
+    @ccall libsqlite.sqlite3_db_name(db::Ptr{sqlite3}, N::Cint)::Ptr{Cchar}
+end
+
 function sqlite3_db_filename(db, zDbName)
     @ccall libsqlite.sqlite3_db_filename(
         db::Ptr{sqlite3},
@@ -2119,11 +2123,11 @@ end
 
 # Skipping MacroDefinition: SQLITE_EXTERN extern
 
-const SQLITE_VERSION = "3.38.4"
+const SQLITE_VERSION = "3.39.2"
 
-const SQLITE_VERSION_NUMBER = 3038004
+const SQLITE_VERSION_NUMBER = 3039002
 
-const SQLITE_SOURCE_ID = "2022-05-04 15:45:55 d402f49871152670a62f4f28cacb15d814f2c1644e9347ad7d258e562978e45e"
+const SQLITE_SOURCE_ID = "2022-07-21 15:24:47 698edb77537b67c41adc68f9b892db56bcf9a55e00371a61420f3ddd668e6603"
 
 const SQLITE_OK = 0
 
