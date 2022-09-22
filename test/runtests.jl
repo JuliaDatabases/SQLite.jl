@@ -933,6 +933,7 @@ end
         "tmp",
     )
     SQLite.load!(UnknownSchemaTable(), db, "tmp"; replace = true)
+    SQLite.load!(UnknownSchemaTable(), db, "tmp"; or = "IGNORE")
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [1], b = [5], c = [6])
 
