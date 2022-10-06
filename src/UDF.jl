@@ -1,20 +1,20 @@
 function sqlvalue(values, i)
     temp_val_ptr = unsafe_load(values, i)
-    valuetype = sqlite3_value_type(temp_val_ptr)
+    valuetype = C.sqlite3_value_type(temp_val_ptr)
 
-    if valuetype == SQLITE_INTEGER
+    if valuetype == C.SQLITE_INTEGER
         if Sys.WORD_SIZE == 64
-            return sqlite3_value_int64(temp_val_ptr)
+            return C.sqlite3_value_int64(temp_val_ptr)
         else
-            return sqlite3_value_int(temp_val_ptr)
+            return C.sqlite3_value_int(temp_val_ptr)
         end
-    elseif valuetype == SQLITE_FLOAT
-        return sqlite3_value_double(temp_val_ptr)
-    elseif valuetype == SQLITE_TEXT
-        return unsafe_string(sqlite3_value_text(temp_val_ptr))
-    elseif valuetype == SQLITE_BLOB
-        nbytes = sqlite3_value_bytes(temp_val_ptr)
-        blob = sqlite3_value_blob(temp_val_ptr)
+    elseif valuetype == C.SQLITE_FLOAT
+        return C.sqlite3_value_double(temp_val_ptr)
+    elseif valuetype == C.SQLITE_TEXT
+        return unsafe_string(C.sqlite3_value_text(temp_val_ptr))
+    elseif valuetype == C.SQLITE_BLOB
+        nbytes = C.sqlite3_value_bytes(temp_val_ptr)
+        blob = C.sqlite3_value_blob(temp_val_ptr)
         buf = zeros(UInt8, nbytes)
         unsafe_copyto!(pointer(buf), convert(Ptr{UInt8}, blob), nbytes)
         return sqldeserialize(buf)
@@ -30,27 +30,35 @@ see [below](@ref regex).
 """
 function sqlreturn end
 
-sqlreturn(context, ::Missing)           = sqlite3_result_null(context)
-sqlreturn(context, val::Int32)          = sqlite3_result_int(context, val)
-sqlreturn(context, val::Int64)          = sqlite3_result_int64(context, val)
-sqlreturn(context, val::Float64)        = sqlite3_result_double(context, val)
-sqlreturn(context, val::AbstractString) = sqlite3_result_text(context, val)
-sqlreturn(context, val::Vector{UInt8})  = sqlite3_result_blob(context, val)
+sqlreturn(context, ::Missing) = C.sqlite3_result_null(context)
+sqlreturn(context, val::Int32) = C.sqlite3_result_int(context, val)
+sqlreturn(context, val::Int64) = C.sqlite3_result_int64(context, val)
+sqlreturn(context, val::Float64) = C.sqlite3_result_double(context, val)
+function sqlreturn(context, val::AbstractString)
+    C.sqlite3_result_text(context, val, sizeof(val), C.SQLITE_TRANSIENT)
+end
+function sqlreturn(context, val::Vector{UInt8})
+    C.sqlite3_result_blob(context, val, sizeof(val), C.SQLITE_TRANSIENT)
+end
 
 sqlreturn(context, val::Bool) = sqlreturn(context, Int(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
 # Internal method for generating an SQLite scalar function from
 # a Julia function name
-function scalarfunc(func,fsym=Symbol(string(func)))
+function scalarfunc(func, fsym = Symbol(string(func)))
     # check if name defined in Base so we don't clobber Base methods
-    nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
+    nm = isdefined(Base, fsym) ? :(Base.$fsym) : fsym
     return quote
         #nm needs to be a symbol or expr, i.e. :sin or :(Base.sin)
-        function $(nm)(context::Ptr{Cvoid}, nargs::Cint, values::Ptr{Ptr{Cvoid}})
-            args = [SQLite.sqlvalue(values, i) for i in 1:nargs]
+        function $(nm)(
+            context::Ptr{Cvoid},
+            nargs::Cint,
+            values::Ptr{Ptr{Cvoid}},
+        )
+            args = [sqlvalue(values, i) for i in 1:nargs]
             ret = $(func)(args...)
-            SQLite.sqlreturn(context, ret)
+            sqlreturn(context, ret)
             nothing
         end
         return $(nm)
@@ -74,21 +82,32 @@ function bytestoint(ptr::Ptr{UInt8}, start::Int, len::Int)
     return htol(s)
 end
 
-function stepfunc(init, func, fsym=Symbol(string(func)*"_step"))
-    nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
+function stepfunc(init, func, fsym = Symbol(string(func) * "_step"))
+    nm = isdefined(Base, fsym) ? :(Base.$fsym) : fsym
     return quote
-        function $(nm)(context::Ptr{Cvoid}, nargs::Cint, values::Ptr{Ptr{Cvoid}})
+        function $(nm)(
+            context::Ptr{Cvoid},
+            nargs::Cint,
+            values::Ptr{Ptr{Cvoid}},
+        )
             args = [sqlvalue(values, i) for i in 1:nargs]
 
             intsize = sizeof(Int)
             ptrsize = sizeof(Ptr)
             acsize = intsize + ptrsize
-            acptr = convert(Ptr{UInt8}, sqlite3_aggregate_context(context, acsize))
+            acptr = convert(
+                Ptr{UInt8},
+                C.sqlite3_aggregate_context(context, acsize),
+            )
 
             # acptr will be zeroed-out if this is the first iteration
             ret = ccall(
-                :memcmp, Cint, (Ptr{UInt8}, Ptr{UInt8}, Cuint),
-                zeros(UInt8, acsize), acptr, acsize,
+                :memcmp,
+                Cint,
+                (Ptr{UInt8}, Ptr{UInt8}, Cuint),
+                zeros(UInt8, acsize),
+                acptr,
+                acsize,
             )
             if ret == 0
                 acval = $(init)
@@ -101,7 +120,8 @@ function stepfunc(init, func, fsym=Symbol(string(func)*"_step"))
                 valsize = bytestoint(acptr, 1, intsize)
                 # ptr to serialized value is last sizeof(Ptr) bytes
                 valptr = reinterpret(
-                    Ptr{UInt8}, bytestoint(acptr, intsize+1, ptrsize)
+                    Ptr{UInt8},
+                    bytestoint(acptr, intsize + 1, ptrsize),
                 )
                 # deserialize the value pointed to by valptr
                 acvalbuf = zeros(UInt8, valsize)
@@ -135,12 +155,12 @@ function stepfunc(init, func, fsym=Symbol(string(func)*"_step"))
             unsafe_copyto!(
                 acptr,
                 pointer(reinterpret(UInt8, [newsize])),
-                intsize
+                intsize,
             )
             # copy the address of the pointer to the serialized value
             valarr = reinterpret(UInt8, [valptr])
             for i in 1:length(valarr)
-                unsafe_store!(acptr, valarr[i], intsize+i)
+                unsafe_store!(acptr, valarr[i], intsize + i)
             end
             nothing
         end
@@ -148,11 +168,15 @@ function stepfunc(init, func, fsym=Symbol(string(func)*"_step"))
     end
 end
 
-function finalfunc(init, func, fsym=Symbol(string(func)*"_final"))
-    nm = isdefined(Base,fsym) ? :(Base.$fsym) : fsym
+function finalfunc(init, func, fsym = Symbol(string(func) * "_final"))
+    nm = isdefined(Base, fsym) ? :(Base.$fsym) : fsym
     return quote
-        function $(nm)(context::Ptr{Cvoid}, nargs::Cint, values::Ptr{Ptr{Cvoid}})
-            acptr = convert(Ptr{UInt8}, sqlite3_aggregate_context(context, 0))
+        function $(nm)(
+            context::Ptr{Cvoid},
+            nargs::Cint,
+            values::Ptr{Ptr{Cvoid}},
+        )
+            acptr = convert(Ptr{UInt8}, C.sqlite3_aggregate_context(context, 0))
 
             # step function wasn't run
             if acptr == C_NULL
@@ -166,7 +190,8 @@ function finalfunc(init, func, fsym=Symbol(string(func)*"_final"))
                 valsize = bytestoint(acptr, 1, intsize)
                 # load ptr
                 valptr = reinterpret(
-                    Ptr{UInt8}, bytestoint(acptr, intsize+1, ptrsize)
+                    Ptr{UInt8},
+                    bytestoint(acptr, intsize + 1, ptrsize),
                 )
 
                 # load value
@@ -205,29 +230,48 @@ end
 Register a scalar (first method) or aggregate (second method) function
 with a [`SQLite.DB`](@ref).
 """
-function register(db, func::Function; nargs::Int=-1, name::AbstractString=string(func), isdeterm::Bool=true)
+function register(
+    db,
+    func::Function;
+    nargs::Int = -1,
+    name::AbstractString = string(func),
+    isdeterm::Bool = true,
+)
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     # assume any negative number means a varargs function
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255"
 
-    f = eval(scalarfunc(func,Symbol(name)))
+    f = eval(scalarfunc(func, Symbol(name)))
 
     cfunc = @cfunction($f, Cvoid, (Ptr{Cvoid}, Cint, Ptr{Ptr{Cvoid}}))
     # TODO: allow the other encodings
-    enc = SQLITE_UTF8
-    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
+    enc = C.SQLITE_UTF8
+    enc = isdeterm ? enc | C.SQLITE_DETERMINISTIC : enc
 
-    @CHECK db sqlite3_create_function_v2(
-        db.handle, name, nargs, enc, C_NULL, cfunc, C_NULL, C_NULL, C_NULL
+    @CHECK db C.sqlite3_create_function_v2(
+        db.handle,
+        name,
+        nargs,
+        enc,
+        C_NULL,
+        cfunc,
+        C_NULL,
+        C_NULL,
+        C_NULL,
     )
 end
 
 # as above but for aggregate functions
-newidentity() = @eval x->x
+newidentity() = @eval x -> x
 function register(
-    db, init, step::Function, final::Function= newidentity();
-    nargs::Int=-1, name::AbstractString=string(step), isdeterm::Bool=true
+    db,
+    init,
+    step::Function,
+    final::Function = newidentity();
+    nargs::Int = -1,
+    name::AbstractString = string(step),
+    isdeterm::Bool = true,
 )
     @assert nargs <= 127 "use -1 if > 127 arguments are needed"
     nargs < -1 && (nargs = -1)
@@ -238,11 +282,19 @@ function register(
     f = eval(finalfunc(init, final, Base.nameof(final)))
     cf = @cfunction($f, Cvoid, (Ptr{Cvoid}, Cint, Ptr{Ptr{Cvoid}}))
 
-    enc = SQLITE_UTF8
-    enc = isdeterm ? enc | SQLITE_DETERMINISTIC : enc
+    enc = C.SQLITE_UTF8
+    enc = isdeterm ? enc | C.SQLITE_DETERMINISTIC : enc
 
-    @CHECK db sqlite3_create_function_v2(
-        db.handle, name, nargs, enc, C_NULL, C_NULL, cs, cf, C_NULL
+    @CHECK db C.sqlite3_create_function_v2(
+        db.handle,
+        name,
+        nargs,
+        enc,
+        C_NULL,
+        C_NULL,
+        cs,
+        cf,
+        C_NULL,
     )
 end
 
@@ -255,4 +307,6 @@ regexp(r::AbstractString, s::AbstractString) = occursin(Regex(r), s)
 This string literal is used to escape all special characters in the string,
 useful for using regex in a query.
 """
-macro sr_str(s) s end
+macro sr_str(s)
+    s
+end
