@@ -545,7 +545,7 @@ function execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams = ())
     return r
 end
 
-function execute(stmt::Stmt, params::DBInterface.StatementParams = ())
+function execute(stmt::Stmt, params::DBInterface.StatementParams)
     execute(stmt.db, stmt, params)
 end
 
@@ -554,7 +554,7 @@ execute(stmt::Stmt; kwargs...) = execute(stmt.db, stmt, NamedTuple(kwargs))
 function execute(
     db::DB,
     sql::AbstractString,
-    params::DBInterface.StatementParams = (),
+    params::DBInterface.StatementParams,
 )
     # prepare without registering Stmt in DB
     stmt = Stmt(db, sql; register = false)
