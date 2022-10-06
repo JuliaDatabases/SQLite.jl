@@ -38,10 +38,10 @@ sumpoint(p::Point3D, x, y, z) = p + Point3D(x, y, z)
         @test db isa SQLite.DB
     end
 
-Copy test sqlite file to temp directory, path `test.sqlite`,
+Copy test sqlite file to temp directory, path `tmp_dir/test.sqlite`,
 overwrite file if necessary and set permissions.
 """
-function setup_clean_test_db(f::Function, args...)
+function setup_clean_test_db(f::Function)
     dbfile = joinpath(dirname(pathof(SQLite)), "../test/Chinook_Sqlite.sqlite")
     tmp_dir = mktempdir()
     test_dbfile = joinpath(tmp_dir, "test.sqlite")
