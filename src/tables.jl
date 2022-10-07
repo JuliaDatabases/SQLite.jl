@@ -214,14 +214,15 @@ function tableinfo(db::DB, name::AbstractString)
 end
 
 """
-    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, analyze::Bool=false)
-    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, analyze::Bool=false)
+    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
+    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
 
   * `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
   * `ifnotexists=false` will throw an error if `tablename` already exists in `db`
-  * `replace=false` controls whether an `INSERT INTO ...` statement is generated or a `REPLACE INTO ...`
+  * `on_conflict=nothing` allows to specify an alternative [constraint conflict resolution algorithm](https://sqlite.org/lang_conflict.html): "ABORT", "FAIL", "IGNORE", "REPLACE", or "ROLLBACK".
+  * `replace=false` controls whether an `INSERT INTO ...` statement is generated or a `REPLACE INTO ...`. This keyword argument exists for backward compatibility, and is overridden if an algorithm is selected using the `on_conflict` keyword.
   * `analyze=true` will execute `ANALYZE` at the end of the insert
 """
 function load! end
@@ -292,6 +293,7 @@ function load!(
     st = nothing;
     temp::Bool = false,
     ifnotexists::Bool = false,
+    on_conflict::Union{String, Nothing} = nothing,
     replace::Bool = false,
     analyze::Bool = false,
 )
@@ -306,7 +308,7 @@ function load!(
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    kind = replace ? "REPLACE" : "INSERT"
+    kind = isnothing(on_conflict) ? (replace ? "REPLACE" : "INSERT") : "INSERT OR $on_conflict"
     stmt = Stmt(
         db,
         "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)";

@@ -936,6 +936,49 @@ end
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [1], b = [5], c = [6])
 
+    # https://github.com/JuliaDatabases/SQLite.jl/pull/302
+    db = SQLite.DB()
+    DBInterface.execute(
+        db,
+        "create table tmp ( a INTEGER NOT NULL PRIMARY KEY, b INTEGER, c INTEGER )",
+    )
+    @test_throws SQLite.SQLiteException SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+        on_conflict = "ROLLBACK"
+    )
+    tbl = DBInterface.execute(db, "select * from tmp") |> columntable
+    @test tbl == (a = [], b = [], c = [])
+    @test_throws SQLite.SQLiteException SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+        on_conflict = "ABORT"
+    )
+    @test_throws SQLite.SQLiteException SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+        on_conflict = "FAIL"
+    )
+    SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+        on_conflict = "IGNORE"
+    )
+    tbl = DBInterface.execute(db, "select * from tmp") |> columntable
+    @test tbl == (a = [1], b = [3], c = [4])
+    SQLite.load!(
+        UnknownSchemaTable(),
+        db,
+        "tmp",
+        on_conflict = "REPLACE"
+    )
+    tbl = DBInterface.execute(db, "select * from tmp") |> columntable
+    @test tbl == (a = [1], b = [5], c = [6])
+
     db = SQLite.DB()
     DBInterface.execute(db, "create table tmp ( x TEXT )")
     DBInterface.execute(db, "insert into tmp values (?)", (nothing,))
