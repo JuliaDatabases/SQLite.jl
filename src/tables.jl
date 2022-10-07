@@ -214,8 +214,8 @@ function tableinfo(db::DB, name::AbstractString)
 end
 
 """
-    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, or::Union{String, Nothing} = nothing, analyze::Bool=false)
-    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, or::Union{String, Nothing} = nothing, analyze::Bool=false)
+    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
+    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
 
