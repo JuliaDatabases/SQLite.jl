@@ -326,7 +326,7 @@ function load!(
             Tables.eachcolumn(sch, row) do val, col, _
                 bind!(stmt, col, val)
             end
-            r = C.sqlite3_step(handle)
+            r = GC.@preserve row C.sqlite3_step(handle)
             if r == C.SQLITE_DONE
                 C.sqlite3_reset(handle)
             elseif r != C.SQLITE_ROW
