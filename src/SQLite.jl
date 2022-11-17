@@ -140,6 +140,7 @@ DB is disconnected or when [`SQLite.finalize_statements!`](@ref) is explicitly c
 mutable struct Stmt <: DBInterface.Statement
     db::DB
     stmt_wrapper::StmtWrapper
+    # used for holding references to bound statement values via bind!
     params::Dict{Int,Any}
 
     function Stmt(db::DB, sql::AbstractString; register::Bool = true)
@@ -311,11 +312,12 @@ function bind!(stmt::Stmt, i::Integer, val::Nothing)
     @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
 end
 function bind!(stmt::Stmt, i::Integer, val::AbstractString)
-    stmt.params[i] = val
+    cval = Base.cconvert(Ptr{Cchar}, val)
+    stmt.params[i] = cval
     @CHECK stmt.db C.sqlite3_bind_text(
         _get_stmt_handle(stmt),
         i,
-        val,
+        cval,
         sizeof(val),
         C_NULL,
     )
