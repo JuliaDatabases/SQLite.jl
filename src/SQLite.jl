@@ -117,7 +117,7 @@ function prepare_stmt_wrapper(db::DB, sql::AbstractString)
 end
 
 """
-    SQLite.Stmt(db, sql) => SQL.Stmt
+    SQLite.Stmt(db, sql; register = true) => SQL.Stmt
 
 Prepares an optimized internal representation of SQL statement in
 the context of the provided SQLite3 `db` and constructs the `SQLite.Stmt`
@@ -127,15 +127,14 @@ Julia object that holds a reference to the prepared statement.
 (mainly for usage where the same statement is executed multiple times
 with different parameters bound as values).
 
-Internally `SQLite.Stmt` constructor creates the [`SQLite._Stmt`](@ref) object that is managed by `db`.
-`SQLite.Stmt` references the `SQLite._Stmt` by its unique id.
-
 The `SQLite.Stmt` will be automatically closed/shutdown when it goes out of scope
 (i.e. the end of the Julia session, end of a function call wherein it was created, etc.).
 One can also call `DBInterface.close!(stmt)` to immediately close it.
 
-All prepared statements of a given DB connection are also automatically closed when the
-DB is disconnected or when [`SQLite.finalize_statements!`](@ref) is explicitly called.
+The keyword argument `register` controls whether the created `Stmt` is registered in the
+provided SQLite3 database `db`. All registered and unclosed statements of a given DB
+connection are automatically closed when the DB is garbage collected or closed explicitly
+after calling `close(db)` or `DBInterface.close!(db)`.
 """
 mutable struct Stmt <: DBInterface.Statement
     db::DB
