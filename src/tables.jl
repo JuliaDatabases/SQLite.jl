@@ -2,7 +2,7 @@ using Tables
 
 sym(ptr) = ccall(:jl_symbol, Ref{Symbol}, (Ptr{UInt8},), ptr)
 
-struct Query
+struct Query{strict}
     stmt::Stmt
     status::Base.RefValue{Cint}
     names::Vector{Symbol}
@@ -14,14 +14,14 @@ end
 # check if the query has no (more) rows
 Base.isempty(q::Query) = q.status[] == C.SQLITE_DONE
 
-struct Row <: Tables.AbstractRow
-    q::Query
+struct Row{strict} <: Tables.AbstractRow
+    q::Query{strict}
     rownumber::Int
 end
 
 getquery(r::Row) = getfield(r, :q)
 
-Tables.isrowtable(::Type{Query}) = true
+Tables.isrowtable(::Type{<:Query}) = true
 Tables.columnnames(q::Query) = q.names
 
 struct DBTable
@@ -37,9 +37,9 @@ Tables.istable(::Type{<:DBTables}) = true
 Tables.rowaccess(::Type{<:DBTables}) = true
 Tables.rows(dbtbl::DBTables) = dbtbl
 
-function Tables.schema(q::Query)
-    if isempty(q)
-        # when the query is empty, return the types provided by SQLite
+function Tables.schema(q::Query{strict}) where {strict}
+    if isempty(q) || strict
+        # when the query is empty or types are strict, return the types provided by SQLite
         # by default SQLite.jl assumes all columns can have missing values
         Tables.Schema(Tables.columnnames(q), q.types)
     else
@@ -47,7 +47,7 @@ function Tables.schema(q::Query)
     end
 end
 
-Base.IteratorSize(::Type{Query}) = Base.SizeUnknown()
+Base.IteratorSize(::Type{<:Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
@@ -77,12 +77,14 @@ end
     )
 end
 
-function getvalue(q::Query, col::Int, rownumber::Int, ::Type{T}) where {T}
+function getvalue(q::Query{strict}, col::Int, rownumber::Int, ::Type{T}) where {strict, T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _get_stmt_handle(q.stmt)
     t = C.sqlite3_column_type(handle, col - 1)
     if t == C.SQLITE_NULL
         return missing
+    elseif strict
+        return sqlitevalue(T, handle, col)
     else
         TT = juliatype(t) # native SQLite Int, Float, and Text types
         return sqlitevalue(
@@ -133,11 +135,14 @@ Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator
 
 The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tables.jl) interface, so results can be collected in any Tables.jl-compatible sink,
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
+
+Passing `strict=true` to `DBInterface.execute` will cause the resultset iterator to return values of the exact type specified by SQLite.
 """
 function DBInterface.execute(
     stmt::Stmt,
     params::DBInterface.StatementParams;
     allowduplicates::Bool = false,
+    strict::Bool = false,
 )
     status = execute(stmt, params)
     handle = _get_stmt_handle(stmt)
@@ -158,7 +163,7 @@ function DBInterface.execute(
         header[i] = nm
         types[i] = Union{juliatype(handle, i),Missing}
     end
-    return Query(
+    return Query{strict}(
         stmt,
         Ref(status),
         header,
