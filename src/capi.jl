@@ -91,6 +91,8 @@ mutable struct sqlite3_mutex end
 
 mutable struct sqlite3_api_routines end
 
+const sqlite3_filename = Ptr{Cchar}
+
 struct sqlite3_vfs
     iVersion::Cint
     szOsFile::Cint
@@ -325,16 +327,16 @@ function sqlite3_open_v2(filename, ppDb, flags, zVfs)
     )::Cint
 end
 
-function sqlite3_uri_parameter(zFilename, zParam)
+function sqlite3_uri_parameter(z, zParam)
     @ccall libsqlite.sqlite3_uri_parameter(
-        zFilename::Ptr{Cchar},
+        z::sqlite3_filename,
         zParam::Ptr{Cchar},
     )::Ptr{Cchar}
 end
 
-function sqlite3_uri_boolean(zFile, zParam, bDefault)
+function sqlite3_uri_boolean(z, zParam, bDefault)
     @ccall libsqlite.sqlite3_uri_boolean(
-        zFile::Ptr{Cchar},
+        z::sqlite3_filename,
         zParam::Ptr{Cchar},
         bDefault::Cint,
     )::Cint
@@ -342,26 +344,30 @@ end
 
 function sqlite3_uri_int64(arg1, arg2, arg3)
     @ccall libsqlite.sqlite3_uri_int64(
-        arg1::Ptr{Cchar},
+        arg1::sqlite3_filename,
         arg2::Ptr{Cchar},
         arg3::sqlite3_int64,
     )::sqlite3_int64
 end
 
-function sqlite3_uri_key(zFilename, N)
-    @ccall libsqlite.sqlite3_uri_key(zFilename::Ptr{Cchar}, N::Cint)::Ptr{Cchar}
+function sqlite3_uri_key(z, N)
+    @ccall libsqlite.sqlite3_uri_key(z::sqlite3_filename, N::Cint)::Ptr{Cchar}
 end
 
 function sqlite3_filename_database(arg1)
-    @ccall libsqlite.sqlite3_filename_database(arg1::Ptr{Cchar})::Ptr{Cchar}
+    @ccall libsqlite.sqlite3_filename_database(
+        arg1::sqlite3_filename,
+    )::Ptr{Cchar}
 end
 
 function sqlite3_filename_journal(arg1)
-    @ccall libsqlite.sqlite3_filename_journal(arg1::Ptr{Cchar})::Ptr{Cchar}
+    @ccall libsqlite.sqlite3_filename_journal(
+        arg1::sqlite3_filename,
+    )::Ptr{Cchar}
 end
 
 function sqlite3_filename_wal(arg1)
-    @ccall libsqlite.sqlite3_filename_wal(arg1::Ptr{Cchar})::Ptr{Cchar}
+    @ccall libsqlite.sqlite3_filename_wal(arg1::sqlite3_filename)::Ptr{Cchar}
 end
 
 function sqlite3_database_file_object(arg1)
@@ -377,11 +383,11 @@ function sqlite3_create_filename(zDatabase, zJournal, zWal, nParam, azParam)
         zWal::Ptr{Cchar},
         nParam::Cint,
         azParam::Ptr{Ptr{Cchar}},
-    )::Ptr{Cchar}
+    )::sqlite3_filename
 end
 
 function sqlite3_free_filename(arg1)
-    @ccall libsqlite.sqlite3_free_filename(arg1::Ptr{Cchar})::Cvoid
+    @ccall libsqlite.sqlite3_free_filename(arg1::sqlite3_filename)::Cvoid
 end
 
 function sqlite3_errcode(db)
@@ -996,6 +1002,10 @@ function sqlite3_value_frombind(arg1)
     @ccall libsqlite.sqlite3_value_frombind(arg1::Ptr{sqlite3_value})::Cint
 end
 
+function sqlite3_value_encoding(arg1)
+    @ccall libsqlite.sqlite3_value_encoding(arg1::Ptr{sqlite3_value})::Cint
+end
+
 function sqlite3_value_subtype(arg1)
     @ccall libsqlite.sqlite3_value_subtype(arg1::Ptr{sqlite3_value})::Cuint
 end
@@ -1299,7 +1309,7 @@ function sqlite3_db_filename(db, zDbName)
     @ccall libsqlite.sqlite3_db_filename(
         db::Ptr{sqlite3},
         zDbName::Ptr{Cchar},
-    )::Ptr{Cchar}
+    )::sqlite3_filename
 end
 
 function sqlite3_db_readonly(db, zDbName)
@@ -2123,11 +2133,11 @@ end
 
 # Skipping MacroDefinition: SQLITE_EXTERN extern
 
-const SQLITE_VERSION = "3.39.2"
+const SQLITE_VERSION = "3.40.0"
 
-const SQLITE_VERSION_NUMBER = 3039002
+const SQLITE_VERSION_NUMBER = 3040000
 
-const SQLITE_SOURCE_ID = "2022-07-21 15:24:47 698edb77537b67c41adc68f9b892db56bcf9a55e00371a61420f3ddd668e6603"
+const SQLITE_SOURCE_ID = "2022-11-16 12:10:08 89c459e766ea7e9165d0beeb124708b955a4950d0f4792f457465d71b158d318"
 
 const SQLITE_OK = 0
 
