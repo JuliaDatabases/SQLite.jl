@@ -10,4 +10,6 @@ CMakeLists.txt.user
 /docs/build
 .vscode
 
+*.db
+
 Manifest.toml
