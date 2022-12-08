@@ -906,6 +906,13 @@ function Base.iterate(::UnknownSchemaTable, st = 1)
     st == 4 ? nothing : ((a = 1, b = 2 + st, c = 3 + st), st + 1)
 end
 
+@testset "SQLite Open Flags" begin
+    @test_throws SQLiteException("unable to open database file") SQLite.DB("file:test.db?mode=ro")
+
+    db = SQLite.DB("file:test.db?mode=rwc")
+    @test db isa SQLite.DB
+end
+
 @testset "misc" begin
 
     # https://github.com/JuliaDatabases/SQLite.jl/issues/259
