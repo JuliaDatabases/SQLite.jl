@@ -116,7 +116,7 @@ julia> DBInterface.execute(db, "SELECT * FROM MediaType WHERE Name REGEXP '-d'")
 
 This can be avoided in two ways.
 You can either escape each backslash yourself
-or you can use the sr"..." string literal that SQLite.jl exports.
+or you can use the raw"..." string literal.
 The previous query can then successfully be run like so:
 
 ```julia
@@ -128,17 +128,13 @@ julia> DBInterface.execute(db, "SELECT * FROM MediaType WHERE Name REGEXP '-\\d'
 |-----|---------------|-------------------------------|
 | 1   | 3             | "Protected MPEG-4 video file" |
 
-julia> # using sr"..."
 
-julia> DBInterface.execute(db, sr"SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
+julia> DBInterface.execute(db, raw"SELECT * FROM MediaType WHERE Name REGEXP '-\d'") |> DataFrame
 1x2 ResultSet
 | Row | "MediaTypeId" | "Name"                        |
 |-----|---------------|-------------------------------|
 | 1   | 3             | "Protected MPEG-4 video file" |
 ```
-
-The `sr"..."` currently escapes all special characters in a string
-but it may be changed in the future to escape only characters which are part of a regex.
 
 
 ### Custom Scalar Functions

@@ -391,7 +391,7 @@ end
             r =
                 DBInterface.execute(
                     db,
-                    SQLite.@sr_str(
+                    @raw_str(
                         "SELECT LastName FROM Employee WHERE BirthDate REGEXP '^\\d{4}-08'"
                     )
                 ) |> columntable
@@ -907,7 +907,9 @@ function Base.iterate(::UnknownSchemaTable, st = 1)
 end
 
 @testset "SQLite Open Flags" begin
-    @test_throws SQLiteException("unable to open database file") SQLite.DB("file:test.db?mode=ro")
+    @test_throws SQLiteException("unable to open database file") SQLite.DB(
+        "file:test.db?mode=ro",
+    )
 
     db = SQLite.DB("file:test.db?mode=rwc")
     @test db isa SQLite.DB
@@ -953,7 +955,7 @@ end
         UnknownSchemaTable(),
         db,
         "tmp",
-        on_conflict = "ROLLBACK"
+        on_conflict = "ROLLBACK",
     )
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [], b = [], c = [])
@@ -961,28 +963,18 @@ end
         UnknownSchemaTable(),
         db,
         "tmp",
-        on_conflict = "ABORT"
+        on_conflict = "ABORT",
     )
     @test_throws SQLite.SQLiteException SQLite.load!(
         UnknownSchemaTable(),
         db,
         "tmp",
-        on_conflict = "FAIL"
+        on_conflict = "FAIL",
     )
-    SQLite.load!(
-        UnknownSchemaTable(),
-        db,
-        "tmp",
-        on_conflict = "IGNORE"
-    )
+    SQLite.load!(UnknownSchemaTable(), db, "tmp"; on_conflict = "IGNORE")
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [1], b = [3], c = [4])
-    SQLite.load!(
-        UnknownSchemaTable(),
-        db,
-        "tmp",
-        on_conflict = "REPLACE"
-    )
+    SQLite.load!(UnknownSchemaTable(), db, "tmp"; on_conflict = "REPLACE")
     tbl = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == (a = [1], b = [5], c = [6])
 
