@@ -688,7 +688,7 @@ function rollback(db::DB, name::AbstractString)
 end
 
 """
-    SQLite.drop!(db, table; ifexists::Bool=true)
+    SQLite.drop!(db, table; ifexists::Bool=false)
 
 drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist
 """
@@ -701,7 +701,7 @@ function drop!(db::DB, table::AbstractString; ifexists::Bool = false)
 end
 
 """
-    SQLite.dropindex!(db, index; ifexists::Bool=true)
+    SQLite.dropindex!(db, index; ifexists::Bool=false)
 
 drop the SQLite index `index` from the database `db`; `ifexists=true` will not return an error if `index` doesn't exist
 """
