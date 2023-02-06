@@ -784,7 +784,7 @@ function tables(db::DB, sink = columntable)
         DBTable(
             tbl,
             Tables.schema(
-                DBInterface.execute(db, "SELECT * FROM $(tbl) LIMIT 0"),
+                DBInterface.execute(db, "SELECT * FROM $(esc_id(tbl)) LIMIT 0"),
             ),
         ) for tbl in tblnames.name
     ]

@@ -118,6 +118,14 @@ end
             @test String[] == [t.name for t in tables_v]
             DBInterface.close!(db)
         end
+
+        @testset "#322: SQLite.tables should escape table name" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE 'I.Js' (i INTEGER, j INTEGER)")
+            tables_v = SQLite.tables(db)
+            @test ["I.Js"] == [t.name for t in tables_v]
+            DBInterface.close!(db)
+        end
     end
 
     @testset "Issue #207: 32 bit integers" begin
