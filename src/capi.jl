@@ -188,6 +188,10 @@ function sqlite3_interrupt(arg1)
     @ccall libsqlite.sqlite3_interrupt(arg1::Ptr{sqlite3})::Cvoid
 end
 
+function sqlite3_is_interrupted(arg1)
+    @ccall libsqlite.sqlite3_is_interrupted(arg1::Ptr{sqlite3})::Cint
+end
+
 function sqlite3_complete(sql)
     @ccall libsqlite.sqlite3_complete(sql::Ptr{Cchar})::Cint
 end
@@ -1957,6 +1961,16 @@ function sqlite3_stmt_scanstatus(pStmt, idx, iScanStatusOp, pOut)
     )::Cint
 end
 
+function sqlite3_stmt_scanstatus_v2(pStmt, idx, iScanStatusOp, flags, pOut)
+    @ccall libsqlite.sqlite3_stmt_scanstatus_v2(
+        pStmt::Ptr{sqlite3_stmt},
+        idx::Cint,
+        iScanStatusOp::Cint,
+        flags::Cint,
+        pOut::Ptr{Cvoid},
+    )::Cint
+end
+
 function sqlite3_stmt_scanstatus_reset(arg1)
     @ccall libsqlite.sqlite3_stmt_scanstatus_reset(
         arg1::Ptr{sqlite3_stmt},
@@ -2133,11 +2147,11 @@ end
 
 # Skipping MacroDefinition: SQLITE_EXTERN extern
 
-const SQLITE_VERSION = "3.40.0"
+const SQLITE_VERSION = "3.41.0"
 
-const SQLITE_VERSION_NUMBER = 3040000
+const SQLITE_VERSION_NUMBER = 3041000
 
-const SQLITE_SOURCE_ID = "2022-11-16 12:10:08 89c459e766ea7e9165d0beeb124708b955a4950d0f4792f457465d71b158d318"
+const SQLITE_SOURCE_ID = "2023-02-21 18:09:37 05941c2a04037fc3ed2ffae11f5d2260706f89431f463518740f72ada350866d"
 
 const SQLITE_OK = 0
 
@@ -2343,6 +2357,8 @@ const SQLITE_NOTICE_RECOVER_WAL = SQLITE_NOTICE | 1 << 8
 
 const SQLITE_NOTICE_RECOVER_ROLLBACK = SQLITE_NOTICE | 2 << 8
 
+const SQLITE_NOTICE_RBU = SQLITE_NOTICE | 3 << 8
+
 const SQLITE_WARNING_AUTOINDEX = SQLITE_WARNING | 1 << 8
 
 const SQLITE_AUTH_USER = SQLITE_AUTH | 1 << 8
@@ -2522,6 +2538,8 @@ const SQLITE_FCNTL_CKPT_START = 39
 const SQLITE_FCNTL_EXTERNAL_READER = 40
 
 const SQLITE_FCNTL_CKSM_FILE = 41
+
+const SQLITE_FCNTL_RESET_CACHE = 42
 
 const SQLITE_GET_LOCKPROXYFILE = SQLITE_FCNTL_GET_LOCKPROXYFILE
 
@@ -3028,6 +3046,12 @@ const SQLITE_SCANSTAT_NAME = 3
 const SQLITE_SCANSTAT_EXPLAIN = 4
 
 const SQLITE_SCANSTAT_SELECTID = 5
+
+const SQLITE_SCANSTAT_PARENTID = 6
+
+const SQLITE_SCANSTAT_NCYCLE = 7
+
+const SQLITE_SCANSTAT_COMPLEX = 0x0001
 
 const SQLITE_SERIALIZE_NOCOPY = 0x0001
 
