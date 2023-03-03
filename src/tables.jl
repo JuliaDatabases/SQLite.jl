@@ -77,7 +77,12 @@ end
     )
 end
 
-function getvalue(q::Query{strict}, col::Int, rownumber::Int, ::Type{T}) where {strict, T}
+function getvalue(
+    q::Query{strict},
+    col::Int,
+    rownumber::Int,
+    ::Type{T},
+) where {strict,T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _get_stmt_handle(q.stmt)
     t = C.sqlite3_column_type(handle, col - 1)
@@ -144,6 +149,11 @@ function DBInterface.execute(
     allowduplicates::Bool = false,
     strict::Bool = false,
 )
+    if isa(params, NamedTuple) &&
+       isempty(setdiff(keys(params), [:strict, :allowduplicates]))
+        strict = get(params, :strict, false)
+        allowduplicates = get(params, :allowduplicates, false)
+    end
     status = execute(stmt, params)
     handle = _get_stmt_handle(stmt)
     cols = C.sqlite3_column_count(handle)
@@ -298,7 +308,7 @@ function load!(
     st = nothing;
     temp::Bool = false,
     ifnotexists::Bool = false,
-    on_conflict::Union{String, Nothing} = nothing,
+    on_conflict::Union{String,Nothing} = nothing,
     replace::Bool = false,
     analyze::Bool = false,
 )

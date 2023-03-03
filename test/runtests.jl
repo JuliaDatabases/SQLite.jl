@@ -222,6 +222,21 @@ end
         end
     end
 
+    @testset "strict=true || isempty(query)" begin
+        setup_clean_test_db() do db
+            empty_query =
+                DBInterface.execute(db, "SELECT * FROM Employee LIMIT 0")
+            sch = Tables.schema(empty_query)
+            @test sch == Tables.Schema(empty_query.names, empty_query.types)
+            strict_query =
+                DBInterface.execute(db, "SELECT * FROM Employee"; strict = true)
+            @test strict_query isa SQLite.Query{true}
+            sch2 = Tables.schema(strict_query)
+            @test sch2 == Tables.Schema(strict_query.names, strict_query.types)
+            @test sch.names == sch2.names
+        end
+    end
+
     @testset "empty query has correct schema and return type" begin
         setup_clean_test_db() do db
             empty_scheme = DBInterface.execute(
