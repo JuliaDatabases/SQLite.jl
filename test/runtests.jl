@@ -907,12 +907,15 @@ function Base.iterate(::UnknownSchemaTable, st = 1)
 end
 
 @testset "SQLite Open Flags" begin
+    rm("test.db", force = true)
     @test_throws SQLiteException("unable to open database file") SQLite.DB(
         "file:test.db?mode=ro",
     )
 
     db = SQLite.DB("file:test.db?mode=rwc")
     @test db isa SQLite.DB
+    close(db)
+    rm("test.db", force = true)
 end
 
 @testset "misc" begin
