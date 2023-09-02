@@ -121,7 +121,10 @@ end
 
         @testset "#322: SQLite.tables should escape table name" begin
             db = SQLite.DB()
-            DBInterface.execute(db, "CREATE TABLE 'I.Js' (i INTEGER, j INTEGER)")
+            DBInterface.execute(
+                db,
+                "CREATE TABLE 'I.Js' (i INTEGER, j INTEGER)",
+            )
             tables_v = SQLite.tables(db)
             @test ["I.Js"] == [t.name for t in tables_v]
             DBInterface.close!(db)
@@ -915,7 +918,7 @@ function Base.iterate(::UnknownSchemaTable, st = 1)
 end
 
 @testset "SQLite Open Flags" begin
-    rm("test.db", force = true)
+    rm("test.db"; force = true)
     @test_throws SQLiteException("unable to open database file") SQLite.DB(
         "file:test.db?mode=ro",
     )
@@ -923,7 +926,7 @@ end
     db = SQLite.DB("file:test.db?mode=rwc")
     @test db isa SQLite.DB
     close(db)
-    rm("test.db", force = true)
+    rm("test.db"; force = true)
 end
 
 @testset "misc" begin
@@ -1006,4 +1009,14 @@ end
     DBInterface.executemany(stmt, tbl)
     tbl2 = DBInterface.execute(db, "select * from tmp") |> columntable
     @test tbl == tbl2
+
+    # https://github.com/JuliaDatabases/SQLite.jl/issues/331
+    db_a = SQLite.DB(":memory:")
+    db_b = SQLite.DB(":memory:")
+    SQLite.register(db_a, x -> 2x; name = "myfunc")
+    SQLite.register(db_b, x -> 10x; name = "myfunc")
+    tbl_a = DBInterface.execute(db_a, "select myfunc(1) as x") |> columntable
+    tbl_b = DBInterface.execute(db_b, "select myfunc(1) as x") |> columntable
+    @test tbl_a.x == [2]
+    @test tbl_b.x == [10]
 end

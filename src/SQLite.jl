@@ -58,12 +58,13 @@ mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
     stmt_wrappers::WeakKeyDict{StmtWrapper,Nothing} # opened prepared statements
+    registered_UDFs::Vector{Any} # keep registered UDFs alive and not garbage collected
 
     function DB(f::AbstractString)
         handle_ptr = Ref{DBHandle}()
         f = String(isempty(f) ? f : expanduser(f))
         if @OK C.sqlite3_open(f, handle_ptr)
-            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}())
+            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}(), Any[])
             finalizer(_close_db!, db)
             return db
         else # error

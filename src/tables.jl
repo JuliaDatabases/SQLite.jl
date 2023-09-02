@@ -77,7 +77,12 @@ end
     )
 end
 
-function getvalue(q::Query{strict}, col::Int, rownumber::Int, ::Type{T}) where {strict, T}
+function getvalue(
+    q::Query{strict},
+    col::Int,
+    rownumber::Int,
+    ::Type{T},
+) where {strict,T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _get_stmt_handle(q.stmt)
     t = C.sqlite3_column_type(handle, col - 1)
@@ -298,7 +303,7 @@ function load!(
     st = nothing;
     temp::Bool = false,
     ifnotexists::Bool = false,
-    on_conflict::Union{String, Nothing} = nothing,
+    on_conflict::Union{String,Nothing} = nothing,
     replace::Bool = false,
     analyze::Bool = false,
 )
@@ -313,7 +318,9 @@ function load!(
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
     params = chop(repeat("?,", length(sch.names)))
-    kind = isnothing(on_conflict) ? (replace ? "REPLACE" : "INSERT") : "INSERT OR $on_conflict"
+    kind =
+        isnothing(on_conflict) ? (replace ? "REPLACE" : "INSERT") :
+        "INSERT OR $on_conflict"
     stmt = Stmt(
         db,
         "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)";
