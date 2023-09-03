@@ -506,6 +506,13 @@ function sqlite3_stmt_isexplain(pStmt)
     @ccall libsqlite.sqlite3_stmt_isexplain(pStmt::Ptr{sqlite3_stmt})::Cint
 end
 
+function sqlite3_stmt_explain(pStmt, eMode)
+    @ccall libsqlite.sqlite3_stmt_explain(
+        pStmt::Ptr{sqlite3_stmt},
+        eMode::Cint,
+    )::Cint
+end
+
 function sqlite3_stmt_busy(arg1)
     @ccall libsqlite.sqlite3_stmt_busy(arg1::Ptr{sqlite3_stmt})::Cint
 end
@@ -2147,11 +2154,11 @@ end
 
 # Skipping MacroDefinition: SQLITE_EXTERN extern
 
-const SQLITE_VERSION = "3.41.0"
+const SQLITE_VERSION = "3.43.0"
 
-const SQLITE_VERSION_NUMBER = 3041000
+const SQLITE_VERSION_NUMBER = 3043000
 
-const SQLITE_SOURCE_ID = "2023-02-21 18:09:37 05941c2a04037fc3ed2ffae11f5d2260706f89431f463518740f72ada350866d"
+const SQLITE_SOURCE_ID = "2023-08-24 12:36:59 0f80b798b3f4b81a7bb4233c58294edd0f1156f36b6ecf5ab8e83631d468778c"
 
 const SQLITE_OK = 0
 
@@ -2286,6 +2293,8 @@ const SQLITE_IOERR_ROLLBACK_ATOMIC = SQLITE_IOERR | 31 << 8
 const SQLITE_IOERR_DATA = SQLITE_IOERR | 32 << 8
 
 const SQLITE_IOERR_CORRUPTFS = SQLITE_IOERR | 33 << 8
+
+const SQLITE_IOERR_IN_PAGE = SQLITE_IOERR | 34 << 8
 
 const SQLITE_LOCKED_SHAREDCACHE = SQLITE_LOCKED | 1 << 8
 
@@ -2655,7 +2664,11 @@ const SQLITE_DBCONFIG_LEGACY_FILE_FORMAT = 1016
 
 const SQLITE_DBCONFIG_TRUSTED_SCHEMA = 1017
 
-const SQLITE_DBCONFIG_MAX = 1017
+const SQLITE_DBCONFIG_STMT_SCANSTATUS = 1018
+
+const SQLITE_DBCONFIG_REVERSE_SCANORDER = 1019
+
+const SQLITE_DBCONFIG_MAX = 1019
 
 const SQLITE_DENY = 1
 
@@ -2947,7 +2960,9 @@ const SQLITE_TESTCTRL_TUNE = 32
 
 const SQLITE_TESTCTRL_LOGEST = 33
 
-const SQLITE_TESTCTRL_LAST = 33
+const SQLITE_TESTCTRL_USELONGDOUBLE = 34
+
+const SQLITE_TESTCTRL_LAST = 34
 
 const SQLITE_STATUS_MEMORY_USED = 0
 
@@ -3028,6 +3043,8 @@ const SQLITE_VTAB_CONSTRAINT_SUPPORT = 1
 const SQLITE_VTAB_INNOCUOUS = 2
 
 const SQLITE_VTAB_DIRECTONLY = 3
+
+const SQLITE_VTAB_USES_ALL_SCHEMAS = 4
 
 const SQLITE_ROLLBACK = 1
 
