@@ -58,7 +58,7 @@ mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
     stmt_wrappers::WeakKeyDict{StmtWrapper,Nothing} # opened prepared statements
-    registered_UDFs::Vector{Any} # keep registered UDFs alive and not garbage collected
+    registered_UDF_data::Vector{Any} # keep registered UDFs alive and not garbage collected
 
     function DB(f::AbstractString)
         handle_ptr = Ref{DBHandle}()
