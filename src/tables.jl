@@ -149,6 +149,11 @@ function DBInterface.execute(
     allowduplicates::Bool = false,
     strict::Bool = false,
 )
+    if isa(params, NamedTuple) &&
+       isempty(setdiff(keys(params), [:strict, :allowduplicates]))
+        strict = get(params, :strict, false)
+        allowduplicates = get(params, :allowduplicates, false)
+    end
     status = execute(stmt, params)
     handle = _get_stmt_handle(stmt)
     cols = C.sqlite3_column_count(handle)

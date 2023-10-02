@@ -1,7 +1,7 @@
 name = "SQLite"
 uuid = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
 authors = ["Jacob Quinn <quinn.jacobd@gmail.com>", "JuliaData Contributors"]
-version = "1.6.0"
+version = "1.6.1"
 
 [deps]
 DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
