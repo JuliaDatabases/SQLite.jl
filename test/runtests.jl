@@ -1019,4 +1019,11 @@ end
     tbl_b = DBInterface.execute(db_b, "select myfunc(1) as x") |> columntable
     @test tbl_a.x == [2]
     @test tbl_b.x == [10]
+
+    # Throw an error when interfacing with a closed database
+    close(db_b)
+    @test_throws SQLiteException("DB is closed") DBInterface.execute(
+        db_b,
+        "select myfunc(1) as x",
+    )
 end
