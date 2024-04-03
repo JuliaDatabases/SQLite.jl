@@ -346,7 +346,7 @@ function bind!(stmt::Stmt, i::Integer, val::Bool)
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, Int32(val))
 end
-function bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})
+function bind!(stmt::Stmt, i::Integer, val::AbstractVector{UInt8})
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_blob(
         _get_stmt_handle(stmt),
