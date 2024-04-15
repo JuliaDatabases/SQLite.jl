@@ -346,7 +346,17 @@ function bind!(stmt::Stmt, i::Integer, val::Bool)
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, Int32(val))
 end
-function bind!(stmt::Stmt, i::Integer, val::AbstractVector{UInt8})
+function bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_blob(
+        _get_stmt_handle(stmt),
+        i,
+        val,
+        sizeof(val),
+        C.SQLITE_STATIC,
+    )
+end
+function bind!(stmt::Stmt, i::Integer, val::Base.ReinterpretArray{UInt8, 1, T, <:DenseVector{T}, false}) where T
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_blob(
         _get_stmt_handle(stmt),
