@@ -362,7 +362,7 @@ function bind!(stmt::Stmt, i::Integer, val::Base.ReinterpretArray{UInt8, 1, T, <
         _get_stmt_handle(stmt),
         i,
         val,
-        sizeof(val),
+        sizeof(eltype(val)) * length(val),
         C.SQLITE_STATIC,
     )
 end
