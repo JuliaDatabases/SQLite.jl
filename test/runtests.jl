@@ -906,6 +906,24 @@ end
         close(db)
         rm(dbfile)
     end
+
+    @testset "ReinterpretArray" begin
+        binddb = SQLite.DB()
+        DBInterface.execute(
+            binddb,
+            "CREATE TABLE temp (b BLOB)",
+        )
+        DBInterface.execute(
+            binddb,
+            "INSERT INTO temp VALUES (?)",
+            [reinterpret(UInt8, [0x6f46, 0x426f, 0x7261]),],
+        )
+        rr = DBInterface.execute(rowtable, binddb, "SELECT b FROM temp")
+        @test length(rr) == 1
+        r = first(rr)
+        @test r.b == codeunits("FooBar")
+        @test typeof.(Tuple(r)) == (Vector{UInt8},)
+    end
 end # @testset
 
 struct UnknownSchemaTable end
