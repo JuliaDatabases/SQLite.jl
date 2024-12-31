@@ -799,6 +799,18 @@ end
         @test_throws SQLiteException SQLite.load!(tbl3, db, "data")
     end
 
+    @testset "PR #XXX: strict (and only strict) tables should error if types don't match" begin
+        db = SQLite.DB()
+
+        tbl1 = (a = [1, 2, 3], b = [4, 5, 6])
+        SQLite.load!(tbl1, db, "data_default")
+        SQLite.load!(tbl1, db, "data_strict", strict=true)
+        
+        tbl2 = (a = ["a", "b", "c"], b=[7, 8, 9]
+        SQLite.load!(tbl2, db, "data_default")
+        @test_throws SQLiteException SQLite.load!(tbl2, db, "data_strict")
+    end
+
     @testset "Test busy_timeout" begin
         db = SQLite.DB()
         @test SQLite.busy_timeout(db, 300) == 0
