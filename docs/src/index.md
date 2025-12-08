@@ -5,7 +5,7 @@
 
 ## High-level interface
 ```@docs
-DBInterface.execute
+DBInterface.execute(::SQLite.Stmt, ::DBInterface.StatementParams)
 SQLite.load!
 ```
 

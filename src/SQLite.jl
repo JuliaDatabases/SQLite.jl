@@ -359,6 +359,16 @@ function bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})
         C.SQLITE_STATIC,
     )
 end
+function bind!(stmt::Stmt, i::Integer, val::Base.ReinterpretArray{UInt8, 1, T, <:DenseVector{T}, false}) where T
+    stmt.params[i] = val
+    @CHECK stmt.db C.sqlite3_bind_blob(
+        _get_stmt_handle(stmt),
+        i,
+        Ref(val, 1),
+        sizeof(eltype(val)) * length(val),
+        C.SQLITE_STATIC,
+    )
+end
 # Fallback is BLOB and defaults to serializing the julia value
 
 # internal wrapper mutable struct to, in-effect, mark something which has been serialized

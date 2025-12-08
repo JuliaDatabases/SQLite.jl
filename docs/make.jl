@@ -1,13 +1,24 @@
-using Documenter, SQLite
+import Pkg
+
+cd(@__DIR__)
+Pkg.activate(@__DIR__)
+Pkg.develop(path="..")
+Pkg.instantiate()
+
+using Documenter, SQLite, DBInterface
+
+DocMeta.setdocmeta!(SQLite, :DocTestSetup, :(using SQLite, DBInterface); recursive=true)
 
 makedocs(;
-    modules = [SQLite],
-    format = Documenter.HTML(),
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", nothing) == true,
+    ),
     pages = ["Home" => "index.md"],
-    repo = "https://github.com/JuliaDatabases/SQLite.jl/blob/{commit}{path}#L{line}",
+    repo = Remotes.GitHub("JuliaDatabases", "SQLite.jl"),
     sitename = "SQLite.jl",
     authors = "Jacob Quinn",
-    assets = String[],
 )
 
-deploydocs(; repo = "github.com/JuliaDatabases/SQLite.jl")
+deploydocs(
+    repo = "https://www.github.com/JuliaDatabases/SQLite.jl.git",
+)
