@@ -78,26 +78,34 @@ end
 end
 
 function getvalue(
-    q::Query{strict},
+    q::Query{true},
     col::Int,
     rownumber::Int,
     ::Type{T},
-) where {strict,T}
+)::Union{Missing,nonmissingtype(T)} where {T}
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _get_stmt_handle(q.stmt)
     t = C.sqlite3_column_type(handle, col - 1)
     if t == C.SQLITE_NULL
         return missing
-    elseif strict
-        return sqlitevalue(T, handle, col)
-    else
-        TT = juliatype(t) # native SQLite Int, Float, and Text types
-        return sqlitevalue(
-            ifelse(TT === Any && !isbitstype(T), T, TT),
-            handle,
-            col,
-        )
     end
+    sqlitevalue(nonmissingtype(T), handle, col)
+end
+
+function getvalue(
+    q::Query{false},
+    col::Int,
+    rownumber::Int,
+    ::Type{T},
+) where {T}
+    rownumber == q.current_rownumber[] || wrongrow(rownumber)
+    handle = _get_stmt_handle(q.stmt)
+    t = C.sqlite3_column_type(handle, col - 1)
+    if t == C.SQLITE_NULL
+        return missing
+    end
+    TT = juliatype(t) # native SQLite Int, Float, and Text types
+    return sqlitevalue(ifelse(TT === Any && !isbitstype(T), T, TT), handle, col)
 end
 
 function Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T}

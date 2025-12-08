@@ -154,7 +154,7 @@ mutable struct Stmt <: DBInterface.Statement
     end
 end
 
-_get_stmt_handle(stmt::Stmt) = stmt.stmt_wrapper[]
+_get_stmt_handle(stmt::Stmt)::StmtHandle = stmt.stmt_wrapper[]
 function _set_stmt_handle(stmt::Stmt, handle)
     stmt.stmt_wrapper[] = handle
 end
@@ -484,15 +484,15 @@ function sqlitevalue(
     ::Type{T},
     handle,
     col,
-) where {T<:Union{Base.BitSigned,Base.BitUnsigned}}
+)::T where {T<:Union{Base.BitSigned,Base.BitUnsigned}}
     convert(T, C.sqlite3_column_int64(handle, col - 1))
 end
 const FLOAT_TYPES = Union{Float16,Float32,Float64} # exclude BigFloat
-function sqlitevalue(::Type{T}, handle, col) where {T<:FLOAT_TYPES}
+function sqlitevalue(::Type{T}, handle, col)::T where {T<:FLOAT_TYPES}
     convert(T, C.sqlite3_column_double(handle, col - 1))
 end
 #TODO: test returning a WeakRefString instead of calling `unsafe_string`
-function sqlitevalue(::Type{T}, handle, col) where {T<:AbstractString}
+function sqlitevalue(::Type{T}, handle, col)::T where {T<:AbstractString}
     convert(T, unsafe_string(C.sqlite3_column_text(handle, col - 1)))
 end
 function sqlitevalue(::Type{T}, handle, col) where {T}

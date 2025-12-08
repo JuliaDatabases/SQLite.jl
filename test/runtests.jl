@@ -999,6 +999,48 @@ end
     tbl = DBInterface.execute(db, "select x from tmp") |> columntable
     @test isequal(tbl.x, [missing, :a])
 
+    # Symbol in TEXT type doesn't work 
+    # when strict and first row is NULL
+    tbl =
+        DBInterface.execute(
+            DBInterface.prepare(db, "select x from tmp"),
+            ();
+            strict = true,
+        ) |> columntable
+    @test isequal(tbl.x, [missing, "7JL\x1e\x04"])
+
+    # Symbol in BLOB type does work strict
+    db = SQLite.DB()
+    DBInterface.execute(db, "create table tmp ( x BLOB )")
+    DBInterface.execute(db, "insert into tmp values (?)", (nothing,))
+    DBInterface.execute(db, "insert into tmp values (?)", (:a,))
+    tbl = DBInterface.execute(db, "select x from tmp") |> columntable
+    @test isequal(tbl.x, [missing, :a])
+
+    tbl =
+        DBInterface.execute(
+            DBInterface.prepare(db, "select x from tmp"),
+            ();
+            strict = true,
+        ) |> columntable
+    @test isequal(tbl.x, [missing, :a])
+
+    # Symbol in TEXT always works when first row is not NULL
+    db = SQLite.DB()
+    DBInterface.execute(db, "create table tmp ( x TEXT )")
+    DBInterface.execute(db, "insert into tmp values (?)", (:a,))
+    DBInterface.execute(db, "insert into tmp values (?)", (nothing,))
+    tbl = DBInterface.execute(db, "select x from tmp") |> columntable
+    @test isequal(tbl.x, [:a, missing])
+
+    tbl =
+        DBInterface.execute(
+            DBInterface.prepare(db, "select x from tmp"),
+            ();
+            strict = true,
+        ) |> columntable
+    @test isequal(tbl.x, [:a, missing])
+
     db = SQLite.DB()
     DBInterface.execute(
         db,
