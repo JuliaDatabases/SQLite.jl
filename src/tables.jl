@@ -187,7 +187,7 @@ function DBInterface.execute(
 end
 
 """
-    SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true)
+    SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true, strict=false)
 
 Create a table in `db` with name `table_name`, according to `schema`, which is a set of column names and types, constructed like `Tables.Schema(names, types)`
 where `names` can be a vector or tuple of String/Symbol column names, and `types` is a vector or tuple of sqlite-compatible types (`Int`, `Float64`, `String`, or unions of `Missing`).
@@ -201,6 +201,7 @@ function createtable!(
     ::Tables.Schema{names,types};
     temp::Bool = false,
     ifnotexists::Bool = true,
+    strict::Bool = false
 ) where {names,types}
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
@@ -211,7 +212,7 @@ function createtable!(
             sqlitetype(types !== nothing ? fieldtype(types, i) : Any),
         ) for i in eachindex(names)
     ]
-    sql = "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ',')))"
+    sql = "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ','))) $(strict ? "STRICT" : "")"
     return execute(db, sql)
 end
 
@@ -311,6 +312,7 @@ function load!(
     st = nothing;
     temp::Bool = false,
     ifnotexists::Bool = false,
+    strict::Bool = false,
     on_conflict::Union{String,Nothing} = nothing,
     replace::Bool = false,
     analyze::Bool = false,
@@ -321,7 +323,7 @@ function load!(
     if db_tableinfo !== nothing
         checknames(sch, db_tableinfo.name)
     else
-        createtable!(db, name, sch; temp = temp, ifnotexists = ifnotexists)
+        createtable!(db, name, sch; temp = temp, ifnotexists = ifnotexists, strict = strict)
     end
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
