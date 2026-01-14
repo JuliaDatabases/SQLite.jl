@@ -300,6 +300,44 @@ end
         end
     end
 
+    @testset "Issue #341: load! inside transaction" begin
+        db = SQLite.DB()
+        # Test that load! works when called inside an existing transaction
+        data = [(a=1, b="x"), (a=2, b="y"), (a=3, b="z")]
+
+        # First verify load! works outside a transaction
+        SQLite.load!(data, db, "test_outside")
+        result = DBInterface.execute(db, "SELECT * FROM test_outside") |> columntable
+        @test result.a == [1, 2, 3]
+        @test result.b == ["x", "y", "z"]
+
+        # Now test load! inside a transaction (this is what issue #341 reported as failing)
+        DBInterface.transaction(db) do
+            data2 = [(c=10, d="hello"), (c=20, d="world")]
+            SQLite.load!(data2, db, "test_inside")
+        end
+        result2 = DBInterface.execute(db, "SELECT * FROM test_inside") |> columntable
+        @test result2.c == [10, 20]
+        @test result2.d == ["hello", "world"]
+
+        # Test nested transaction with rollback
+        DBInterface.transaction(db) do
+            data3 = [(e=100,)]
+            SQLite.load!(data3, db, "test_rollback")
+            # This table should exist within the transaction
+            @test DBInterface.execute(db, "SELECT * FROM test_rollback") |> columntable |> x -> x.e == [100]
+        end
+        # Table should still exist after commit
+        @test DBInterface.execute(db, "SELECT * FROM test_rollback") |> columntable |> x -> x.e == [100]
+
+        # Test intransaction helper
+        @test SQLite.intransaction(db) == false
+        SQLite.transaction(db)
+        @test SQLite.intransaction(db) == true
+        SQLite.commit(db)
+        @test SQLite.intransaction(db) == false
+    end
+
     @testset "Dates" begin
         setup_clean_test_db() do db
             DBInterface.execute(db, "create table temp as select * from album")
