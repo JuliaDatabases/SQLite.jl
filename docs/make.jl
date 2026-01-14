@@ -20,5 +20,5 @@ makedocs(;
 )
 
 deploydocs(
-    repo = "https://www.github.com/JuliaDatabases/SQLite.jl.git",
+    repo = "github.com/JuliaDatabases/SQLite.jl.git",
 )

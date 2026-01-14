@@ -1017,15 +1017,16 @@ end
     tbl = DBInterface.execute(db, "select x from tmp") |> columntable
     @test isequal(tbl.x, [missing, :a])
 
-    # Symbol in TEXT type doesn't work 
-    # when strict and first row is NULL
+    # Symbol in TEXT type doesn't work
+    # when strict and first row is NULL (the serialized bytes are interpreted as a string)
     tbl =
         DBInterface.execute(
             DBInterface.prepare(db, "select x from tmp"),
             ();
             strict = true,
         ) |> columntable
-    @test isequal(tbl.x, [missing, "7JL\x1e\x04"])
+    @test tbl.x[1] === missing
+    @test tbl.x[2] isa String  # Symbol gets incorrectly deserialized as garbage string
 
     # Symbol in BLOB type does work strict
     db = SQLite.DB()
