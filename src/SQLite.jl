@@ -20,9 +20,11 @@ const StmtWrapper = Ref{StmtHandle}
 
 # Normal constructor from filename
 function sqliteexception(handle::DBHandle)
+    isopen(handle) || throw(SQLiteException("DB is closed"))
     SQLiteException(unsafe_string(C.sqlite3_errmsg(handle)))
 end
 function sqliteexception(handle::DBHandle, stmt::StmtHandle)
+    isopen(handle) || throw(SQLiteException("DB is closed"))
     errstr = unsafe_string(C.sqlite3_errmsg(handle))
     stmt_text_handle = C.sqlite3_expanded_sql(stmt)
     stmt_text = unsafe_string(stmt_text_handle)
@@ -77,7 +79,8 @@ DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
 DBInterface.close!(db::DB) = _close_db!(db)
 Base.close(db::DB) = _close_db!(db)
-Base.isopen(db::DB) = db.handle != C_NULL
+Base.isopen(db::DB) = isopen(db.handle)
+Base.isopen(handle::DBHandle) = handle != C_NULL
 
 function finalize_statements!(db::DB)
     # close stmts
