@@ -854,6 +854,30 @@ end
         @test SQLite.busy_timeout(db, 300) == 0
     end
 
+    @testset "backup" begin
+        db = SQLite.DB()
+        DBInterface.execute(db, "CREATE TABLE backup_test (x INT)")
+        DBInterface.execute(db, "INSERT INTO backup_test VALUES (1), (2)")
+        tmp_path, tmp_io = mktemp()
+        close(tmp_io)
+        try
+            @test SQLite.backup(db, tmp_path; sleep_ms = 1) == tmp_path
+            db2 = SQLite.DB(tmp_path)
+            try
+                r = DBInterface.execute(
+                    db2,
+                    "SELECT x FROM backup_test ORDER BY x",
+                ) |> columntable
+                @test r.x == [1, 2]
+            finally
+                close(db2)
+            end
+        finally
+            close(db)
+            rm(tmp_path; force = true)
+        end
+    end
+
     @testset "Issue #253: Ensure query column names are unique by default" begin
         db = SQLite.DB()
         res =

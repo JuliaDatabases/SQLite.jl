@@ -90,6 +90,48 @@ Returns `true` if in a transaction, `false` if in autocommit mode.
 """
 intransaction(db::DB) = C.sqlite3_get_autocommit(db.handle) == 0
 
+"""
+    SQLite.backup(db::SQLite.DB, path::AbstractString; sleep_ms::Integer=250)
+
+Create a backup of `db` at `path` using the SQLite backup API.
+`sleep_ms` controls the delay when the backup encounters `SQLITE_BUSY`
+or `SQLITE_LOCKED`.
+Returns `path`.
+"""
+function backup(db::DB, path::AbstractString; sleep_ms::Integer = 250)
+    isopen(db) || throw(SQLiteException("DB is closed"))
+    dest = DB(path)
+    backup_handle = C.sqlite3_backup_init(dest.handle, "main", db.handle, "main")
+    if backup_handle == C_NULL
+        err = sqliteexception(dest)
+        close(dest)
+        throw(err)
+    end
+    rc = C.SQLITE_OK
+    finish_rc = C.SQLITE_OK
+    try
+        while true
+            rc = C.sqlite3_backup_step(backup_handle, -1)
+            if rc == C.SQLITE_OK
+                continue
+            elseif rc == C.SQLITE_BUSY || rc == C.SQLITE_LOCKED
+                C.sqlite3_sleep(Cint(sleep_ms))
+                continue
+            end
+            break
+        end
+    finally
+        finish_rc = C.sqlite3_backup_finish(backup_handle)
+    end
+    if rc != C.SQLITE_DONE || finish_rc != C.SQLITE_OK
+        err = sqliteexception(dest)
+        close(dest)
+        throw(err)
+    end
+    close(dest)
+    return path
+end
+
 function finalize_statements!(db::DB)
     # close stmts
     for stmt_wrapper in keys(db.stmt_wrappers)
