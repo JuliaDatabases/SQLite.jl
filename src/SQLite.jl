@@ -527,10 +527,8 @@ function juliatype(decl_typestr::AbstractString, default::Type = Any)
         return String
     elseif typeuc == "BLOB"
         return Any
-    elseif typeuc == "DATETIME"
-        return default # FIXME
-    elseif typeuc == "TIMESTAMP"
-        return default # FIXME
+    elseif typeuc in ("DATETIME", "TIMESTAMP")
+        return String
     elseif occursin(
         r"^N?V?A?R?Y?I?N?G?\s*CHARA?C?T?E?R?T?E?X?T?\s*\(?\d*\)?$"i,
         typeuc,

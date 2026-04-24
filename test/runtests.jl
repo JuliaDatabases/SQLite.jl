@@ -843,7 +843,7 @@ end
         tbl1 = (a = [1, 2, 3], b = [4, 5, 6])
         SQLite.load!(tbl1, db, "data_default")
         SQLite.load!(tbl1, db, "data_strict", strict=true)
-        
+
         tbl2 = (a = ["a", "b", "c"], b=[7, 8, 9])
         SQLite.load!(tbl2, db, "data_default")
         @test_throws SQLiteException SQLite.load!(tbl2, db, "data_strict")
@@ -1161,4 +1161,43 @@ end
         db_b,
         "select myfunc(1) as x",
     )
+
+    # DATETIME and TIMESTAMP declared types should map to String
+    @testset "DATETIME/TIMESTAMP juliatype" begin
+        # juliatype should return String regardless of the default
+        @test SQLite.juliatype("DATETIME") == String
+        @test SQLite.juliatype("TIMESTAMP") == String
+        @test SQLite.juliatype("DATETIME", Missing) == String
+        @test SQLite.juliatype("TIMESTAMP", Missing) == String
+        @test SQLite.juliatype("datetime") == String
+        @test SQLite.juliatype("timestamp") == String
+    end
+
+    @testset "DATETIME/TIMESTAMP strict mode with NULL" begin
+        db = SQLite.DB()
+        DBInterface.execute(db, "CREATE TABLE dt_test (id INTEGER, ts TIMESTAMP)")
+        # Insert NULL first, then a non-NULL value
+        DBInterface.execute(db, "INSERT INTO dt_test VALUES (1, NULL)")
+        DBInterface.execute(db, "INSERT INTO dt_test VALUES (2, '2024-01-01 00:00:00')")
+
+        # strict mode
+        tbl = DBInterface.execute(
+            DBInterface.prepare(db, "SELECT * FROM dt_test"),
+            ();
+            strict = true,
+        ) |> columntable
+        @test eltype(tbl.id) == Union{Missing,Int}
+        @test eltype(tbl.ts) == Union{Missing,String}
+        @test length(tbl.id) == 2
+        @test tbl.ts[1] === missing
+        @test tbl.ts[2] == "2024-01-01 00:00:00"
+
+        # non-strict
+        tbl2 = DBInterface.execute(db, "SELECT * FROM dt_test") |> columntable
+        @test eltype(tbl2.id) == Int
+        @test eltype(tbl2.ts) == Union{Missing,String}
+        @test length(tbl2.id) == 2
+        @test tbl2.ts[1] === missing
+        @test tbl2.ts[2] == "2024-01-01 00:00:00"
+    end
 end
