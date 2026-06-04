@@ -1154,6 +1154,74 @@ end
         end
     end
 
+    @testset "UDF value marshalling" begin
+        # These tests pin down SQLite.sqlvalue, which unmarshals a C
+        # sqlite3_value* into a Julia value on the UDF argument hot path. A
+        # registered `identity` UDF forces every argument through sqlvalue on
+        # the way in and sqlreturn on the way out, so `roundtrip(x)` exercises
+        # both marshalling directions for a single value and lets us assert
+        # exact round-trip equality. The Int64-boundary cases in particular
+        # cover the `Sys.WORD_SIZE == 64` branch of sqlvalue: on a 64-bit build
+        # the value must be read with sqlite3_value_int64; sqlite3_value_int
+        # would silently truncate anything outside the Int32 range.
+        db = SQLite.DB()
+        SQLite.register(db, identity; nargs = 1, name = "roundtrip")
+
+        roundtrip(v) = first(
+            DBInterface.execute(db, "SELECT roundtrip(?) AS v", (v,)) |>
+            columntable |>
+            t -> t.v,
+        )
+
+        @testset "Int64 boundary integers" begin
+            for v in (
+                typemax(Int64),
+                typemin(Int64),
+                Int64(2)^40,
+                Int64(2)^31,        # first value past Int32 max
+                Int64(2)^31 - 1,    # Int32 max itself
+                -(Int64(2)^31) - 1, # first value below Int32 min
+                0,
+                1,
+                -1,
+                42,
+                -42,
+            )
+                got = roundtrip(v)
+                @test got isa Int64
+                @test got == v
+            end
+        end
+
+        @testset "Float64 values" begin
+            for v in (0.0, 3.5, -2.25, 6.4, floatmax(Float64))
+                got = roundtrip(v)
+                @test got isa Float64
+                @test got == v
+            end
+        end
+
+        @testset "String values" begin
+            # includes multi-byte UTF-8: sqlite3_value_text returns bytes, so
+            # codeunit/character confusion would corrupt non-ASCII round-trips
+            for v in ("", "abc", "a longer string with spaces", "příliš žluťoučký kůň 🐎 ∀x")
+                got = roundtrip(v)
+                @test got isa String
+                @test got == v
+            end
+        end
+
+        @testset "blob values" begin
+            v = UInt8[0x00, 0x01, 0xfe, 0xff]
+            got = roundtrip(v)
+            @test got == v
+        end
+
+        @testset "NULL value" begin
+            @test roundtrip(missing) === missing
+        end
+    end
+
     @testset "serialization" begin
         @testset "serialization edgecases" begin
             db = SQLite.DB()
