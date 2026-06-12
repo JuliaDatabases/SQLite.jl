@@ -1091,8 +1091,8 @@ end
     tbl = DBInterface.execute(db, "select x from tmp") |> columntable
     @test isequal(tbl.x, [missing, :a])
 
-    # Symbol in TEXT type doesn't work
-    # when strict and first row is NULL (the serialized bytes are interpreted as a string)
+    # Symbol in TEXT type now works even when strict and first row is NULL,
+    # because juliatype scans multiple rows to find the actual stored type (BLOB)
     tbl =
         DBInterface.execute(
             DBInterface.prepare(db, "select x from tmp"),
@@ -1100,7 +1100,7 @@ end
             strict = true,
         ) |> columntable
     @test tbl.x[1] === missing
-    @test tbl.x[2] isa String  # Symbol gets incorrectly deserialized as garbage string
+    @test tbl.x[2] === :a
 
     # Symbol in BLOB type does work strict
     db = SQLite.DB()
