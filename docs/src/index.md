@@ -31,6 +31,7 @@ SQLite.sqlreturn
 SQLite.transaction
 SQLite.commit
 SQLite.rollback
+SQLite.backup
 ```
 
 ## User Defined Functions
@@ -238,3 +239,37 @@ You can also use lambdas; the following does the same as the previous code snipp
 ```julia
 julia> SQLite.register(db, 0, (p,c) -> p+c, p -> 2p, name="dsum")
 ```
+
+## Saving an in-memory database to a file
+
+An in-memory database (`SQLite.DB()` with no path) lives only for the
+lifetime of the connection. To persist it, use [`SQLite.backup`](@ref),
+which copies the database to `path` via the SQLite backup API:
+
+```julia
+julia> db = SQLite.DB();  # in-memory database
+
+julia> DBInterface.execute(db, "CREATE TABLE t (id INTEGER, name TEXT)");
+
+julia> DBInterface.execute(db, "INSERT INTO t VALUES (1, 'alice'), (2, 'bob')");
+
+julia> SQLite.backup(db, "snapshot.sqlite")
+"snapshot.sqlite"
+```
+
+The file can then be reopened as an ordinary on-disk database:
+
+```julia
+julia> db2 = SQLite.DB("snapshot.sqlite");
+
+julia> DBInterface.execute(db2, "SELECT * FROM t") |> DataFrame
+2×2 DataFrame
+ Row │ id     name
+     │ Int64  String
+─────┼───────────────
+   1 │     1  alice
+   2 │     2  bob
+```
+
+The same call works for any open `SQLite.DB`, not just in-memory ones —
+for example, snapshotting an on-disk database to a separate file.
