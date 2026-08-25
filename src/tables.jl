@@ -175,7 +175,7 @@ function DBInterface.execute(
             nm = newnm
         end
         header[i] = nm
-        types[i] = Union{juliatype(handle, i),Missing}
+        types[i] = Union{juliatype(handle, i, strict && status == C.SQLITE_ROW),Missing}
     end
     return Query{strict}(
         stmt,

@@ -889,6 +889,19 @@ end
     end
 
     @testset "strict mode" begin
+        @testset "Issue #353: ALTER TABLE on a STRICT table" begin
+            for strict in (false, true)
+                db = SQLite.DB()
+                DBInterface.execute(db, "CREATE TABLE t (a INTEGER) STRICT")
+                stmt = DBInterface.prepare(db, "ALTER TABLE t ADD COLUMN b INTEGER")
+                query = DBInterface.execute(stmt, (); strict = strict)
+
+                @test isempty(query)
+                info = DBInterface.execute(db, "PRAGMA table_info(t)") |> columntable
+                @test info.name == ["a", "b"]
+            end
+        end
+
         @testset "PR #343: strict (and only strict) tables should error if types don't match" begin
             db = SQLite.DB()
 

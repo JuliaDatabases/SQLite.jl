@@ -478,16 +478,14 @@ end
 #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
 # get julia type for given column of the given statement
-function juliatype(handle, col)
+function juliatype(handle, col, scanrows::Bool = false)
     stored_typeid = C.sqlite3_column_type(handle, col - 1)
     did_row_scan = false
-    while stored_typeid == C.SQLITE_NULL
+    while scanrows && stored_typeid == C.SQLITE_NULL
         # Scan forward through the rows until we find a non-NULL value for this column
         st = C.sqlite3_step(handle)
         did_row_scan = true
-        if st == C.SQLITE_DONE
-            break
-        end
+        st == C.SQLITE_ROW || break
         stored_typeid = C.sqlite3_column_type(handle, col - 1)
         if stored_typeid != C.SQLITE_NULL
             break
