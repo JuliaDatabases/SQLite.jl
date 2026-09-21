@@ -150,6 +150,7 @@ The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tab
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
 
 Passing `strict=true` to `DBInterface.execute` will cause the resultset iterator to return values of the exact type specified by SQLite.
+While more type-stable, determining the exact types of the results can be more expensive as it will iterate through each column to find the first non-NULL value to determine the type.
 """
 function DBInterface.execute(
     stmt::Stmt,
@@ -174,7 +175,7 @@ function DBInterface.execute(
             nm = newnm
         end
         header[i] = nm
-        types[i] = Union{juliatype(handle, i),Missing}
+        types[i] = Union{juliatype(handle, i, strict && status == C.SQLITE_ROW),Missing}
     end
     return Query{strict}(
         stmt,

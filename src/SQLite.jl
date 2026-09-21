@@ -478,15 +478,35 @@ end
 #int sqlite3_bind_value(sqlite3_stmt*, int, const sqlite3_value*);
 
 # get julia type for given column of the given statement
-function juliatype(handle, col)
+function juliatype(handle, col, scanrows::Bool = false)
     stored_typeid = C.sqlite3_column_type(handle, col - 1)
+    did_row_scan = false
+    while scanrows && stored_typeid == C.SQLITE_NULL
+        # Scan forward through the rows until we find a non-NULL value for this column
+        st = C.sqlite3_step(handle)
+        did_row_scan = true
+        st == C.SQLITE_ROW || break
+        stored_typeid = C.sqlite3_column_type(handle, col - 1)
+        if stored_typeid != C.SQLITE_NULL
+            break
+        end
+    end
     if stored_typeid == C.SQLITE_BLOB
         # blobs are serialized julia types, so just try to deserialize it
+        # when forward scanning we need to use the current step to deserialize
         deser_val = sqlitevalue(Any, handle, col)
         # FIXME deserialized type have priority over declared type, is it fine?
+        if did_row_scan
+            C.sqlite3_reset(handle)
+            C.sqlite3_step(handle)
+        end
         return typeof(deser_val)
     else
         stored_type = juliatype(stored_typeid)
+    end
+    if did_row_scan
+        C.sqlite3_reset(handle)
+        C.sqlite3_step(handle)
     end
     decl_typestr = C.sqlite3_column_decltype(handle, col - 1)
     if decl_typestr != C_NULL
