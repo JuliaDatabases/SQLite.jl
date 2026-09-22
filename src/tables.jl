@@ -238,12 +238,28 @@ end
     SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
+By default, rows are appended to an existing table. The source column names must
+match the existing table, but their order may differ. Table constraints and the
+selected conflict resolution algorithm still apply.
 
   * `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
-  * `ifnotexists=false` will throw an error if `tablename` already exists in `db`
+  * `ifnotexists` is passed to `createtable!` when creating a table. It does not prevent appending to an existing table.
   * `on_conflict=nothing` allows to specify an alternative [constraint conflict resolution algorithm](https://sqlite.org/lang_conflict.html): "ABORT", "FAIL", "IGNORE", "REPLACE", or "ROLLBACK".
   * `replace=false` controls whether an `INSERT INTO ...` statement is generated or a `REPLACE INTO ...`. This keyword argument exists for backward compatibility, and is overridden if an algorithm is selected using the `on_conflict` keyword.
   * `analyze=true` will execute `ANALYZE` at the end of the insert
+
+```jldoctest
+julia> db = SQLite.DB();
+
+julia> SQLite.load!((id = [1, 2],), db, "items");
+
+julia> SQLite.load!((id = [3],), db, "items");
+
+julia> Tuple(row.id for row in DBInterface.execute(db, "SELECT id FROM items ORDER BY id"))
+(1, 2, 3)
+
+julia> DBInterface.close!(db)
+```
 """
 function load! end
 
