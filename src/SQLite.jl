@@ -261,6 +261,9 @@ Additional methods exist for working individual SQL parameters:
 * `SQLite.bind!(stmt, name, val)`: bind a single value to a named SQL parameter
 * `SQLite.bind!(stmt, index, val)`: bind a single value to a SQL parameter by index number
 
+Integer parameters use SQLite's signed 64-bit integer range.
+Values outside the signed 64-bit range throw an `InexactError`.
+
 From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
 
 > Usually, though,
@@ -356,6 +359,7 @@ function bind!(stmt::Stmt, i::Integer, val::Int64)
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int64(_get_stmt_handle(stmt), i, val)
 end
+bind!(stmt::Stmt, i::Integer, val::Integer) = bind!(stmt, i, Int64(val))
 function bind!(stmt::Stmt, i::Integer, val::Missing)
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
