@@ -721,8 +721,6 @@ function transaction end
 
 function transaction(db::DB, mode = "DEFERRED")
     already_in_transaction = intransaction(db)
-    # PRAGMA statements cannot be executed inside a transaction
-    already_in_transaction || execute(db, "PRAGMA temp_store=MEMORY;")
     if uppercase(mode) in ["", "DEFERRED", "IMMEDIATE", "EXCLUSIVE"]
         if already_in_transaction
             # If already in a transaction, use a savepoint instead

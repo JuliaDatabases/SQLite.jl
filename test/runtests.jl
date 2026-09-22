@@ -685,6 +685,60 @@ end
             end
         end
 
+        @testset "Issue #330: transactions preserve temporary tables" begin
+            for temp_store in (0, 1, 2)
+                db = SQLite.DB()
+                try
+                    SQLite.execute(db, "PRAGMA temp_store=$temp_store")
+                    SQLite.createtable!(
+                        db, "scratch", Tables.Schema((:x,), (Int,)); temp = true,
+                    )
+                    SQLite.execute(db, "INSERT INTO scratch VALUES (1)")
+                    SQLite.transaction(db)
+                    @test columntable(
+                        DBInterface.execute(db, "SELECT x FROM scratch"),
+                    ).x == [1]
+                    SQLite.execute(db, "INSERT INTO scratch VALUES (2)")
+                    SQLite.rollback(db)
+                    @test columntable(
+                        DBInterface.execute(db, "SELECT x FROM scratch"),
+                    ).x == [1]
+                    DBInterface.transaction(db) do
+                        SQLite.execute(db, "INSERT INTO scratch VALUES (3)")
+                        @test_throws ErrorException DBInterface.transaction(db) do
+                            SQLite.execute(db, "INSERT INTO scratch VALUES (4)")
+                            error("roll back nested insert")
+                        end
+                    end
+                    @test columntable(
+                        DBInterface.execute(db, "SELECT x FROM scratch ORDER BY x"),
+                    ).x == [1, 3]
+                    @test columntable(
+                        DBInterface.execute(db, "PRAGMA temp_store"),
+                    ).temp_store == [temp_store]
+                finally
+                    close(db)
+                end
+            end
+        end
+
+        @testset "Issue #330: load! on a fresh connection" begin
+            db = SQLite.DB()
+            try
+                @test SQLite.load!(
+                    (x = [1, 2],), db, "scratch"; temp = true,
+                ) == "scratch"
+                @test columntable(
+                    DBInterface.execute(db, "SELECT x FROM temp.scratch ORDER BY x"),
+                ).x == [1, 2]
+                @test_throws SQLiteException DBInterface.execute(
+                    db, "SELECT x FROM main.scratch",
+                )
+            finally
+                close(db)
+            end
+        end
+
         @testset "Issue #341: load! inside transaction" begin
             db = SQLite.DB()
             # Test that load! works when called inside an existing transaction
