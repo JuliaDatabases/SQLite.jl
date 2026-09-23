@@ -53,8 +53,24 @@ All other SQLite.jl functions take an `SQLite.DB` as the first argument as conte
 
 To create an in-memory temporary database, call `SQLite.DB()`.
 
-The `SQLite.DB` will be automatically closed/shutdown when it goes out of scope
-(i.e. the end of the Julia session, end of a function call wherein it was created, etc.)
+Call `close(db)` or `DBInterface.close!(db)` to close the connection and finalize
+its registered prepared statements. A finalizer also closes an unreachable
+connection, but its timing is not guaranteed. Leaving a function or scope does
+not guarantee that the connection is closed. Use `try`/`finally` for deterministic
+cleanup, including when an operation throws:
+
+```jldoctest
+julia> db = SQLite.DB();
+
+julia> try
+           DBInterface.execute(db, "CREATE TABLE results (value INTEGER)")
+       finally
+           close(db)
+       end;
+
+julia> isopen(db)
+false
+```
 """
 mutable struct DB <: DBInterface.Connection
     file::String
@@ -181,9 +197,9 @@ Julia object that holds a reference to the prepared statement.
 (mainly for usage where the same statement is executed multiple times
 with different parameters bound as values).
 
-The `SQLite.Stmt` will be automatically closed/shutdown when it goes out of scope
-(i.e. the end of the Julia session, end of a function call wherein it was created, etc.).
-One can also call `DBInterface.close!(stmt)` to immediately close it.
+Call `DBInterface.close!(stmt)` to immediately close the statement. A finalizer
+also closes an unreachable statement, but its timing is not guaranteed by leaving
+a function or scope. A statement keeps its database connection reachable.
 
 The keyword argument `register` controls whether the created `Stmt` is registered in the
 provided SQLite3 database `db`. All registered and unclosed statements of a given DB
