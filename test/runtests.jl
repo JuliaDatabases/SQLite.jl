@@ -1259,6 +1259,8 @@ end
         end
     end
 
+    include("udf_errors.jl")
+
     @testset "UDF value marshalling" begin
         # These tests pin down SQLite.sqlvalue, which unmarshals a C
         # sqlite3_value* into a Julia value on the UDF argument hot path. A
