@@ -72,6 +72,44 @@ end
 
 @testset "SQLite" begin
     @testset "type conversion" begin
+        @testset "Integer parameters (issue #313)" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE integers (x INTEGER)")
+            DBInterface.execute(db, "INSERT INTO integers VALUES (42)")
+            for T in (Int8, Int16, Int32, Int64, Int128,
+                      UInt8, UInt16, UInt32, UInt64, UInt128, BigInt)
+                x = T(42)
+                for params in ((x,), [x], (x = x,), Dict(:x => x))
+                    result = DBInterface.execute(
+                        columntable, db, "SELECT x FROM integers WHERE x = :x", params,
+                    )
+                    @test result.x == [42]
+                end
+                result = DBInterface.execute(
+                    rowtable, db, "SELECT typeof(?1) AS storage, ?1 AS value", (x,),
+                )
+                @test only(result) === (storage = "integer", value = Int64(42))
+                SQLite.load!((x = [x],), db, "loaded"; strict = true)
+                result = DBInterface.execute(columntable, db, "SELECT x FROM loaded")
+                @test result.x == [42]
+                SQLite.drop!(db, "loaded")
+            end
+            stmt = SQLite.Stmt(db, "SELECT :x AS x")
+            for x in (false, true, typemin(Int64), typemax(Int64),
+                      UInt64(typemax(Int64)), Int128(typemin(Int64)),
+                      UInt128(typemax(Int64)), BigInt(typemax(Int64)))
+                @test only(DBInterface.execute(columntable, stmt, (x,)).x) === Int64(x)
+            end
+            for x in (UInt64(typemax(Int64)) + 1, typemax(UInt64),
+                      Int128(typemin(Int64)) - 1, Int128(typemax(Int64)) + 1,
+                      typemax(UInt128), BigInt(typemin(Int64)) - 1,
+                      BigInt(typemax(Int64)) + 1)
+                @test_throws InexactError DBInterface.execute(stmt, (x,))
+            end
+            DBInterface.close!(stmt)
+            DBInterface.close!(db)
+        end
+
         @testset "Julia to SQLite3 type conversion" begin
             @test SQLite.sqlitetype(Int) == "INT NOT NULL"
             @test SQLite.sqlitetype(Union{Float64,Missing}) == "REAL"
