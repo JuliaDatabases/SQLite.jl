@@ -273,3 +273,4 @@ julia> DBInterface.execute(db2, "SELECT * FROM t") |> DataFrame
 
 The same call works for any open `SQLite.DB`, not just in-memory ones —
 for example, snapshotting an on-disk database to a separate file.
+If `path` already holds a database, `SQLite.backup` replaces its contents.
