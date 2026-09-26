@@ -40,6 +40,64 @@ end
     return SQLite.Blob(db, "files", "data", 1), WeakRef(db)
 end
 
+@noinline function populate_handles!(blobs, statements, db, i)
+    blob = SQLite.Blob(db, "files", "data", 1)
+    stmt = SQLite.Stmt(db, "SELECT 1")
+    if i % 3 == 0
+        push!(blobs, blob)
+        push!(statements, stmt)
+    else
+        ABANDONED[] = (blob, stmt)
+        ABANDONED[] = nothing
+    end
+    return nothing
+end
+
+function callback_blob_finalizer_overlap()
+    db = database()
+    discarded = SQLite.Blob(db, "files", "data", 1; writable=true)
+    entered = Threads.Atomic{Bool}(false)
+    finished = Threads.Atomic{Bool}(false)
+    stopped = Threads.Atomic{Bool}(false)
+    SQLite.register(db, function (x)
+        entered[] = true
+        deadline = time() + 5
+        while !finished[]
+            time() < deadline || error("BLOB finalizer blocked during a query callback")
+            GC.safepoint()
+        end
+        # Both resource kinds use the lock already held by query execution.
+        SQLite.Blob(db, "files", "data", 1) do blob
+            read(blob, UInt8) == 0 || error("callback BLOB contents")
+        end
+        temporary = SQLite.Stmt(db, "SELECT 1")
+        DBInterface.close!(temporary)
+        return x
+    end; name="blob_finalizer_overlap", nargs=1)
+    worker = Threads.@spawn begin
+        while !entered[] && !stopped[]
+            GC.safepoint()
+        end
+        if entered[]
+            finalize(discarded)
+            finished[] = true
+        end
+    end
+    try
+        @test scalar(db, "SELECT blob_finalizer_overlap(7)") == 7
+        @test entered[] && finished[]
+        @test isopen(discarded)
+        @test length(db.blob_handles) == 1
+        finalize(discarded)
+        @test !isopen(discarded)
+        @test isempty(db.blob_handles)
+    finally
+        stopped[] = true
+        fetch(worker)
+        close(db)
+    end
+end
+
 @testset "Incremental BLOB IO" begin
     @testset "Base IO, positions, and buffer ownership" begin
         db = database()
@@ -270,6 +328,68 @@ end
         @test weak.value === nothing
         @test isempty(db.blob_handles)
         close(db)
+    end
+
+    @testset "BLOB finalizers defer under the shared lifecycle lock" begin
+        db = database()
+        blob = SQLite.Blob(db, "files", "data", 1)
+        lock(db.lock)
+        try
+            finalize(blob)
+            @test isopen(blob)
+            @test length(db.blob_handles) == 1
+            worker = Threads.@spawn finalize(blob)
+            @test timedwait(() -> istaskdone(worker), 5) == :ok
+            fetch(worker)
+            @test isopen(blob)
+            @test length(db.blob_handles) == 1
+        finally
+            unlock(db.lock)
+        end
+        finalize(blob)
+        @test !isopen(blob)
+        @test isempty(db.blob_handles)
+        close(db)
+    end
+
+    @testset "Statement callbacks and BLOB finalizers share lock ordering" begin
+        if Threads.nthreads() < 2
+            @test_skip Threads.nthreads() >= 2
+        else
+            callback_blob_finalizer_overlap()
+        end
+    end
+
+    @testset "Mixed handle registries remain consistent during GC" begin
+        db = database()
+        blobs = SQLite.Blob[]
+        statements = SQLite.Stmt[]
+        finished = Threads.Atomic{Bool}(false)
+        collector = Threads.@spawn begin
+            for _ in 1:32
+                finished[] && break
+                GC.gc(false)
+                yield()
+            end
+        end
+        try
+            for i in 1:2048
+                populate_handles!(blobs, statements, db, i)
+                i % 64 == 0 && yield()
+            end
+        finally
+            finished[] = true
+            fetch(collector)
+        end
+        GC.gc(true)
+        GC.gc(true)
+        @test length(db.blob_handles) == length(blobs)
+        @test length(collect(keys(db.blob_handles))) == length(blobs)
+        @test length(db.stmt_wrappers) == length(statements)
+        close(db)
+        @test all(blob -> !isopen(blob), blobs)
+        @test all(stmt -> !SQLite.isready(stmt), statements)
+        @test isempty(db.blob_handles) && isempty(db.stmt_wrappers)
     end
 
     @testset "Close errors consume handles and preserve callback failures" begin

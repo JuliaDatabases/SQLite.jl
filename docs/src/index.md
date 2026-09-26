@@ -97,7 +97,8 @@ transaction and report a failure. The stream is closed even if `close` throws.
 Closing the database first closes its tracked BLOB streams, reports their close
 errors, and invalidates them; a later stream close does no additional work.
 `flush` does not commit. Finalizers are best-effort cleanup and cannot report
-commit failures.
+commit failures. BLOB and prepared-statement cleanup share the database's
+lifecycle lock; finalizers defer while it is in use.
 
 A do-block ensures closure, but does not roll back earlier writes when the body
 throws. Composed writes can also leave a written prefix when a later write

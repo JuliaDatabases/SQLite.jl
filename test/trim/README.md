@@ -1,8 +1,10 @@
-# Native statement core
+# Native statement and BLOB core
 
 This workload compiles database creation, prepared execution, parameter binding,
-error recovery, and statement/database cleanup with JuliaC safe trimming. It uses
-raw SQLite column reads to check the returned values. It does not cover
+error recovery, and statement/database cleanup with JuliaC safe trimming. Prepared
+query results use raw SQLite column reads for their value checks. The workload
+also opens a public `SQLite.Blob`, writes and reads a reusable byte buffer, seeks,
+and checks both explicit stream close and database-owned stream close. It does not cover
 `DBInterface` query materialization, Tables integration, or all SQLite APIs.
 
 With Julia 1.13, run these commands from the repository root:

@@ -29,10 +29,25 @@ function @main(args::Vector{String})::Cint
     output == bytes || return 9
     DBInterface.close!(select)
     isempty(db.stmt_wrappers) && return 10
+    SQLite.execute(db, "CREATE TABLE files (data BLOB)")
+    SQLite.execute(db, "INSERT INTO files VALUES (zeroblob(?))", (length(bytes),))
+    blob = SQLite.Blob(db, "files", "data", 1; writable=true)
+    write(blob, bytes) == length(bytes) || return 13
+    seekstart(blob)
+    read!(blob, output)
+    output == bytes || return 14
+    eof(blob) || return 15
+    close(blob)
+    isempty(db.blob_handles) || return 16
+    reader = SQLite.Blob(db, "files", "data", 1)
+    read(reader, UInt8) == bytes[1] || return 17
     close(db)
     SQLite.isready(insert) && return 11
     DBInterface.close!(insert)
     isempty(db.stmt_wrappers) || return 12
+    isopen(reader) && return 18
+    close(reader)
+    isempty(db.blob_handles) || return 19
     GC.gc()
     return 0
 end

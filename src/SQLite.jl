@@ -175,14 +175,17 @@ function _close_db!(db::DB, report_errors::Bool = false)
     Base.@lock db.lock begin
         finalize_statements!(db)
         errors = nothing
-        for handle in keys(db.blob_handles)
-            err = _close_blob_handle!(db, handle, report_errors)
-            if err !== nothing
-                errors === nothing && (errors = Any[])
-                push!(errors, err)
+        while !isempty(db.blob_handles)
+            batch = db.blob_handles
+            db.blob_handles = IdDict{BlobWrapper,Nothing}()
+            for handle in keys(batch)
+                err = _close_blob_handle!(db, handle, report_errors)
+                if err !== nothing
+                    errors === nothing && (errors = Any[])
+                    push!(errors, err)
+                end
             end
         end
-        empty!(db.blob_handles)
         C.sqlite3_close_v2(db.handle)
         db.handle = C_NULL
         if errors !== nothing

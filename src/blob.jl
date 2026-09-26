@@ -17,6 +17,8 @@ Call `close(io)` to release the stream. Closing a writable stream can commit an
 implicit transaction and can throw, even though the stream is then closed.
 Closing its database also closes all its BLOB streams and reports close errors.
 A finalizer provides best-effort cleanup, but cannot report commit failures.
+Handle cleanup shares the database's lifecycle lock with prepared statements;
+finalizers defer when that lock is busy.
 `flush` does not commit. A do-block closes the stream even if `f` throws, but does
 not roll back prior writes. Use an explicit transaction for atomic changes and
 close the stream before committing that transaction.
@@ -39,12 +41,14 @@ mutable struct Blob <: IO
             occursin('\0', name) && throw(ArgumentError("BLOB names cannot contain NUL"))
         end
         id = Int64(rowid)
-        handle = Ref{BlobHandle}(C_NULL)
-        @CHECK db C.sqlite3_blob_open(db.handle, schema, table, column, id, writable, handle)
-        blob = new(db, handle, 0, Int(C.sqlite3_blob_bytes(handle[])), writable)
-        finalizer(_finalize_blob!, blob)
-        db.blob_handles[handle] = nothing
-        return blob
+        Base.@lock db.lock begin
+            handle = Ref{BlobHandle}(C_NULL)
+            @CHECK db C.sqlite3_blob_open(db.handle, schema, table, column, id, writable, handle)
+            blob = new(db, handle, 0, Int(C.sqlite3_blob_bytes(handle[])), writable)
+            finalizer(_finalize_blob!, blob)
+            db.blob_handles[handle] = nothing
+            return blob
+        end
     end
 end
 
@@ -69,8 +73,9 @@ end
 function _close_blob_handle!(db::DB, handle::BlobWrapper, report_errors::Bool)
     ptr = handle[]
     ptr == C_NULL && return nothing
-    # SQLite consumes the handle even when committing its writes fails.
+    # The caller holds db.lock. SQLite consumes the handle even when commit fails.
     handle[] = C_NULL
+    delete!(db.blob_handles, handle)
     rc = C.sqlite3_blob_close(ptr)
     if report_errors && rc != C.SQLITE_OK
         return isopen(db) ? sqliteexception(db) : SQLiteException(unsafe_string(C.sqlite3_errstr(rc)))
@@ -79,15 +84,23 @@ function _close_blob_handle!(db::DB, handle::BlobWrapper, report_errors::Bool)
 end
 
 function Base.close(blob::Blob)
-    err = _close_blob_handle!(blob.db, blob.handle, true)
-    delete!(blob.db.blob_handles, blob.handle)
-    err === nothing || throw(err)
+    Base.@lock blob.db.lock begin
+        err = _close_blob_handle!(blob.db, blob.handle, true)
+        err === nothing || throw(err)
+    end
     return nothing
 end
 
 function _finalize_blob!(blob::Blob)
-    _close_blob_handle!(blob.db, blob.handle, false)
-    delete!(blob.db.blob_handles, blob.handle)
+    if islocked(blob.db.lock) || !trylock(blob.db.lock)
+        finalizer(_finalize_blob!, blob)
+        return nothing
+    end
+    try
+        _close_blob_handle!(blob.db, blob.handle, false)
+    finally
+        unlock(blob.db.lock)
+    end
     return nothing
 end
 
