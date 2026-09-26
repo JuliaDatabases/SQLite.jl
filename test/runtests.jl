@@ -2,6 +2,7 @@ using SQLite
 using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
 
 include("statement_lifetime.jl")
+include("blob.jl")
 
 import Base: +, ==
 
