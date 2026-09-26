@@ -1,0 +1,7 @@
+[deps]
+JuliaC = "acedd4c2-ced6-4a15-accc-2607eb759ba2"
+SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
+
+[compat]
+JuliaC = "0.3"
+julia = "1.13"

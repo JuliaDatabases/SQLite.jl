@@ -1,6 +1,8 @@
 using SQLite
 using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
 
+include("statement_lifetime.jl")
+
 import Base: +, ==
 
 mutable struct Point{T}
