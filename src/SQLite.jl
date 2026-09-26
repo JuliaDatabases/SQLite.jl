@@ -17,6 +17,8 @@ const DBHandle = Ptr{C.sqlite3}
 const StmtHandle = Ptr{C.sqlite3_stmt}
 
 const StmtWrapper = Ref{StmtHandle}
+const BlobHandle = Ptr{C.sqlite3_blob}
+const BlobWrapper = Base.RefValue{BlobHandle}
 
 # Normal constructor from filename
 function sqliteexception(handle::DBHandle)
@@ -53,8 +55,11 @@ All other SQLite.jl functions take an `SQLite.DB` as the first argument as conte
 
 To create an in-memory temporary database, call `SQLite.DB()`.
 
-Call `close(db)` or `DBInterface.close!(db)` to close the connection and finalize
-its registered prepared statements. A finalizer also closes an unreachable
+Call `close(db)` or `DBInterface.close!(db)` to close the connection, its BLOB
+streams, and its registered prepared statements. Closing writable BLOB streams
+can commit an implicit transaction; close errors are reported after all tracked
+handles are closed. An open explicit transaction is rolled back by connection
+teardown. A finalizer also closes an unreachable
 connection, but its timing is not guaranteed. Leaving a function or scope does
 not guarantee that the connection is closed. Use `try`/`finally` for deterministic
 cleanup, including when an operation throws:
@@ -76,13 +81,14 @@ mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
     stmt_wrappers::WeakKeyDict{StmtWrapper,Nothing} # opened prepared statements
+    blob_handles::IdDict{BlobWrapper,Nothing} # retain handles until close, including pending finalizers
     registered_UDF_data::Vector{Any} # keep registered UDFs alive and not garbage collected
 
     function DB(f::AbstractString)
         handle_ptr = Ref{DBHandle}()
         f = String(isempty(f) ? f : expanduser(f))
         if @OK C.sqlite3_open(f, handle_ptr)
-            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}(), Any[])
+            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}(), IdDict{BlobWrapper,Nothing}(), Any[])
             finalizer(_close_db!, db)
             return db
         else # error
@@ -93,8 +99,8 @@ end
 DB() = DB(":memory:")
 DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
-DBInterface.close!(db::DB) = _close_db!(db)
-Base.close(db::DB) = _close_db!(db)
+DBInterface.close!(db::DB) = _close_db!(db, true)
+Base.close(db::DB) = _close_db!(db, true)
 Base.isopen(db::DB) = isopen(db.handle)
 Base.isopen(handle::DBHandle) = handle != C_NULL
 
@@ -157,17 +163,33 @@ function finalize_statements!(db::DB)
     empty!(db.stmt_wrappers)
 end
 
-function _close_db!(db::DB)
+function _close_db!(db::DB, report_errors::Bool = false)
     finalize_statements!(db)
+    errors = nothing
+    for handle in keys(db.blob_handles)
+        err = _close_blob_handle!(db, handle, report_errors)
+        if err !== nothing
+            errors === nothing && (errors = Any[])
+            push!(errors, err)
+        end
+    end
+    empty!(db.blob_handles)
 
     # close DB
     C.sqlite3_close_v2(db.handle)
     db.handle = C_NULL
 
+    if errors !== nothing
+        length(errors) == 1 && throw(only(errors))
+        throw(CompositeException(errors))
+    end
+
     return
 end
 
 sqliteexception(db::DB) = sqliteexception(db.handle)
+
+include("blob.jl")
 
 function Base.show(io::IO, db::DB)
     print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
