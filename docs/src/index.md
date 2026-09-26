@@ -14,6 +14,7 @@ SQLite.load!
 ```@docs
 SQLite.DB
 SQLite.Stmt
+SQLite.Blob
 SQLite.bind!
 SQLite.createtable!
 SQLite.drop!
@@ -33,6 +34,77 @@ SQLite.commit
 SQLite.rollback
 SQLite.backup
 ```
+
+## Incremental BLOB IO
+
+Use `SQLite.Blob` to read or overwrite part of a stored value without copying the
+whole value into a Julia array. It implements the usual Julia IO operations.
+The value must already exist, and its size is fixed while open. Use SQL
+`zeroblob(n)` to reserve space:
+
+```jldoctest
+julia> using SQLite
+
+julia> db = SQLite.DB();
+
+julia> SQLite.execute(db, "CREATE TABLE files (id INTEGER PRIMARY KEY, data BLOB)");
+
+julia> SQLite.execute(db, "INSERT INTO files VALUES (1, zeroblob(8192))");
+
+julia> chunk = fill(UInt8(0x2a), 4096);
+
+julia> SQLite.Blob(db, "files", "data", 1; writable=true) do blob
+           seek(blob, 4096)
+           write(blob, chunk)
+       end
+4096
+
+julia> SQLite.Blob(db, "files", "data", 1) do blob
+           seek(blob, 4096)
+           read!(blob, chunk)
+           all(==(0x2a), chunk)
+       end
+true
+
+julia> close(db);
+```
+
+Positions are zero-based byte offsets. Streams are read-only by default;
+`writable=true` allows reading and overwriting existing bytes. `schema` selects
+`"main"`, `"temp"`, or an attached database name. BLOB and TEXT values are exposed
+as raw bytes, including serialized Julia values; ordinary query results keep
+their existing conversion behavior. Updating or deleting the row expires an
+open stream, even if the changed column is different.
+
+For bounded memory use, reuse a buffer. For example, with an existing output
+stream `output`:
+
+```julia
+SQLite.Blob(db, "files", "data", 1) do blob
+    buffer = Vector{UInt8}(undef, 64 * 1024)
+    while !eof(blob)
+        n = readbytes!(blob, buffer)
+        write(output, view(buffer, 1:n))
+    end
+end
+```
+
+`read(blob)` and `readavailable(blob)` allocate all remaining bytes. Incremental
+IO still copies bytes between SQLite and the caller's buffer.
+
+Close writable streams explicitly, since closing can commit an implicit
+transaction and report a failure. The stream is closed even if `close` throws.
+Closing the database first closes its tracked BLOB streams, reports their close
+errors, and invalidates them; a later stream close does no additional work.
+`flush` does not commit. Finalizers are best-effort cleanup and cannot report
+commit failures. BLOB and prepared-statement cleanup share the database's
+lifecycle lock; finalizers defer while it is in use.
+
+A do-block ensures closure, but does not roll back earlier writes when the body
+throws. Composed writes can also leave a written prefix when a later write
+fails. For atomic changes, use an explicit transaction and close the BLOB inside
+it before committing. Operations on the same stream or connection require
+caller synchronization.
 
 ## User Defined Functions
 
