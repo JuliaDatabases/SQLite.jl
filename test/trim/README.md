@@ -5,7 +5,7 @@ error recovery, and statement/database cleanup with JuliaC safe trimming. It use
 raw SQLite column reads to check the returned values. It does not cover
 `DBInterface` query materialization, Tables integration, or all SQLite APIs.
 
-With Julia 1.13 or a supported nightly, run these commands from the repository root:
+With Julia 1.13, run these commands from the repository root:
 
 ```sh
 julia --project=test/trim -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
@@ -13,5 +13,5 @@ julia --project=test/trim -e 'using JuliaC; JuliaC.main(ARGS)' -- --output-exe s
 JULIA_LOAD_CODEGEN_LIB=0 ./sqlite_core 'runtime input'
 ```
 
-The native CI job runs this check with a ten-minute timeout. The runtime argument
+The native CI job uses Julia 1.13 with a ten-minute timeout. The runtime argument
 keeps text and BLOB roundtrips dependent on input provided after compilation.

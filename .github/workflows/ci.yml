@@ -54,14 +54,14 @@ jobs:
         with:
           file: lcov.info
   native:
-    name: Native statement core
+    name: Native statement core (Julia 1.13)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: 'nightly'
+          version: '1.13'
       - name: Prepare native test environment
         run: julia --startup-file=no --project=test/trim -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
       - name: Compile with safe trimming
