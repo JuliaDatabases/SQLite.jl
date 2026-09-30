@@ -3,6 +3,7 @@ using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
 
 include("statement_lifetime.jl")
 include("aggregate_state.jl")
+include("blob.jl")
 
 import Base: +, ==
 
