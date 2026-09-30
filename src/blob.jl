@@ -17,8 +17,6 @@ Call `close(io)` to release the stream. Closing a writable stream can commit an
 implicit transaction and can throw, even though the stream is then closed.
 Closing its database also closes all its BLOB streams and reports close errors.
 A finalizer provides best-effort cleanup, but cannot report commit failures.
-Handle cleanup shares the database's lifecycle lock with prepared statements;
-finalizers defer when that lock is busy.
 `flush` does not commit. A do-block closes the stream even if `f` throws, but does
 not roll back prior writes. Use an explicit transaction for atomic changes and
 close the stream before committing that transaction.
