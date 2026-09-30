@@ -224,6 +224,18 @@ will be the return value of the previous function
 The final function must take a single argument
 which will be the return value of the last step function.
 
+For each nonempty group, SQLite.jl serializes the first step's return value and
+deserializes it before the next step, or before the final callback for a one-row
+group. Later intermediate values are retained by reference: their `Serialization`
+methods are not called after each row, and a callback that keeps a reference to a
+mutable accumulator can observe its later mutations. SQL argument and final-result
+conversion are unchanged. If no rows are selected, the initial value is returned
+without calling the final function.
+
+The initial value itself is shared across groups and executions. Mutating it in
+the first step also changes it for later groups. For independent mutable state,
+use an immutable seed such as `nothing` and create the accumulator in the first step.
+
 ```julia
 julia> dsum(prev, cur) = prev + cur
 

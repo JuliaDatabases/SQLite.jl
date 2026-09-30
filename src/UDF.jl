@@ -48,10 +48,16 @@ mutable struct ScalarUDFData
     func::Function
 end
 
+mutable struct AggregateState
+    value::Any
+    serialized::Bool # first snapshot, decoded by the next step or final callback
+end
+
 mutable struct AggregateUDFData
     init::Any
     step::Function
     final::Function
+    states::IdDict{AggregateState,Nothing} # roots only active aggregate contexts
 end
 
 # A callback must report errors to SQLite, not unwind through its C caller.
@@ -91,88 +97,59 @@ function wrap_scalarfunc(
     nothing
 end
 
-# convert a byteptr to an int, assumes little-endian
-function bytestoint(ptr::Ptr{UInt8}, start::Int, len::Int)
-    s = 0
-    for i in start:start+len-1
-        v = unsafe_load(ptr, i)
-        s += v * 256^(i - start)
-    end
-
-    # swap byte-order on big-endian machines
-    # TODO: this desperately needs testing on a big-endian machine!!!!!
-    return htol(s)
-end
-
-# Transfer ownership to the callback before any operation that may throw.
-# A cleared context also tells xFinal that a failed step has no state to finalize.
-function take_aggregate_buffer!(acptr)
-    valsize = bytestoint(acptr, 1, sizeof(Int))
-    valptr =
-        reinterpret(Ptr{UInt8}, bytestoint(acptr, sizeof(Int) + 1, sizeof(Ptr)))
-    unsafe_store!(Ptr{Int}(acptr), 0)
-    unsafe_store!(Ptr{Ptr{UInt8}}(acptr + sizeof(Int)), C_NULL)
-    return valsize, valptr
-end
-
 function wrap_stepfunc(
     context::Ptr{Cvoid},
     nargs::Cint,
     values::Ptr{Ptr{Cvoid}},
 )
-    valptr = Ptr{UInt8}(C_NULL)
+    acptr = Ptr{Ptr{Cvoid}}(C_NULL)
+    state = nothing
+    udf_data = nothing
     try
-        acptr = convert(
-            Ptr{UInt8},
-            C.sqlite3_aggregate_context(context, sizeof(Int) + sizeof(Ptr)),
-        )
-        acptr == C_NULL && throw(OutOfMemoryError())
-        valsize, valptr = take_aggregate_buffer!(acptr)
-
         udf_data = unsafe_pointer_to_objref(
             C.sqlite3_user_data(context),
         )::AggregateUDFData
+        acptr = convert(
+            Ptr{Ptr{Cvoid}},
+            C.sqlite3_aggregate_context(context, sizeof(Ptr{Cvoid})),
+        )
+        acptr == C_NULL && throw(OutOfMemoryError())
+        stateptr = unsafe_load(acptr)
+        if stateptr != C_NULL
+            state = unsafe_pointer_to_objref(stateptr)::AggregateState
+        end
         args = [sqlvalue(values, i) for i in 1:nargs]
-        if valptr == C_NULL
-            acval = udf_data.init
-            valsize = 256
-            valptr = convert(Ptr{UInt8}, Libc.malloc(valsize))
-            valptr == C_NULL && throw(OutOfMemoryError())
+        if state === nothing
+            # Snapshot the first return, not init: the first callback may consume
+            # a seed that cannot itself be copied or serialized.
+            value = sqlserialize(udf_data.step(udf_data.init, args...))
+            # A custom serializer may retain its output buffer.
+            state = AggregateState(copy(value), true)
+            udf_data.states[state] = nothing
+            unsafe_store!(acptr, pointer_from_objref(state))
         else
-            acvalbuf = zeros(UInt8, valsize)
-            unsafe_copyto!(pointer(acvalbuf), valptr, valsize)
-            acval = sqldeserialize(acvalbuf)
+            acval = state.serialized ? sqldeserialize(state.value) : state.value
+            state.value = udf_data.step(acval, args...)
+            state.serialized = false
         end
-
-        funcret = sqlserialize(udf_data.step(acval, args...))
-        newsize = sizeof(funcret)
-        if newsize > valsize
-            tmp = convert(Ptr{UInt8}, Libc.realloc(valptr, newsize))
-            tmp == C_NULL && throw(OutOfMemoryError())
-            valptr = tmp
-        end
-        GC.@preserve funcret unsafe_copyto!(valptr, pointer(funcret), newsize)
-
-        # Publish the new state only after the step and serialization succeed.
-        unsafe_store!(Ptr{Int}(acptr), newsize)
-        unsafe_store!(Ptr{Ptr{UInt8}}(acptr + sizeof(Int)), valptr)
-        valptr = Ptr{UInt8}(C_NULL)
     catch err
+        # Release roots before error formatting can invoke another Julia callback.
+        # A cleared context tells xFinal to preserve the failed step's error.
+        acptr != C_NULL && unsafe_store!(acptr, Ptr{Cvoid}(C_NULL))
+        state !== nothing && delete!(udf_data.states, state)
         udf_error(context, err)
-    finally
-        Libc.free(valptr)
     end
     nothing
 end
 
 function wrap_finalfunc(context::Ptr{Cvoid})
-    valptr = Ptr{UInt8}(C_NULL)
     try
-        acptr = convert(Ptr{UInt8}, C.sqlite3_aggregate_context(context, 0))
+        acptr = convert(Ptr{Ptr{Cvoid}}, C.sqlite3_aggregate_context(context, 0))
         if acptr != C_NULL
-            valsize, valptr = take_aggregate_buffer!(acptr)
+            stateptr = unsafe_load(acptr)
+            unsafe_store!(acptr, Ptr{Cvoid}(C_NULL))
             # SQLite still calls xFinal after a failed xStep. Preserve that error.
-            valptr == C_NULL && return nothing
+            stateptr == C_NULL && return nothing
         end
         udf_data = unsafe_pointer_to_objref(
             C.sqlite3_user_data(context),
@@ -181,15 +158,13 @@ function wrap_finalfunc(context::Ptr{Cvoid})
             # Preserve the initial value when no rows reached xStep.
             sqlreturn(context, udf_data.init)
         else
-            acvalbuf = zeros(UInt8, valsize)
-            unsafe_copyto!(pointer(acvalbuf), valptr, valsize)
-            acval = sqldeserialize(acvalbuf)
+            state = unsafe_pointer_to_objref(stateptr)::AggregateState
+            delete!(udf_data.states, state)
+            acval = state.serialized ? sqldeserialize(state.value) : state.value
             sqlreturn(context, udf_data.final(acval))
         end
     catch err
         udf_error(context, err)
-    finally
-        Libc.free(valptr)
     end
     nothing
 end
@@ -264,7 +239,7 @@ function register(
     nargs < -1 && (nargs = -1)
     @assert sizeof(name) <= 255 "size of function name must be <= 255 chars"
 
-    udf_data = AggregateUDFData(init, step, final)
+    udf_data = AggregateUDFData(init, step, final, IdDict{AggregateState,Nothing}())
     push!(db.registered_UDF_data, udf_data)
     udf_data_ptr = pointer_from_objref(udf_data)
 
