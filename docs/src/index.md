@@ -6,6 +6,7 @@
 ## High-level interface
 ```@docs
 DBInterface.execute(::SQLite.Stmt, ::DBInterface.StatementParams)
+DBInterface.executemultiple(::SQLite.DB, ::AbstractString, ::DBInterface.StatementParams)
 SQLite.load!
 ```
 
