@@ -51,18 +51,18 @@ Base.IteratorSize(::Type{<:Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
-    C.sqlite3_reset(_get_stmt_handle(q.stmt))
+    Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
     q.status[] = execute(q.stmt)
 end
 
 function DBInterface.close!(q::Query)
-    C.sqlite3_reset(_get_stmt_handle(q.stmt))
+    Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
 end
 
 function done(q::Query)
     st = q.status[]
     if st == C.SQLITE_DONE
-        C.sqlite3_reset(_get_stmt_handle(q.stmt))
+        Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
         return true
     end
     st == C.SQLITE_ROW || sqliteerror(q.stmt.db)
@@ -126,8 +126,8 @@ function Base.iterate(q::Query)
     return Row(q, 1), 2
 end
 
-function Base.iterate(q::Query, rownumber)
-    q.status[] = C.sqlite3_step(_get_stmt_handle(q.stmt))
+@inline function Base.iterate(q::Query, rownumber)
+    q.status[] = Base.@lock q.stmt.db.lock C.sqlite3_step(_get_stmt_handle(q.stmt))
     done(q) && return nothing
     q.current_rownumber[] = rownumber
     return Row(q, rownumber), rownumber + 1
@@ -175,7 +175,8 @@ function DBInterface.execute(
             nm = newnm
         end
         header[i] = nm
-        types[i] = Union{juliatype(handle, i, strict && status == C.SQLITE_ROW),Missing}
+        type = Base.@lock stmt.db.lock juliatype(handle, i, strict && status == C.SQLITE_ROW)
+        types[i] = Union{type,Missing}
     end
     return Query{strict}(
         stmt,
@@ -365,12 +366,12 @@ function load!(
             Tables.eachcolumn(sch, row) do val, col, _
                 bind!(stmt, col, val)
             end
-            r = GC.@preserve row C.sqlite3_step(handle)
+            r = Base.@lock db.lock GC.@preserve row C.sqlite3_step(handle)
             if r == C.SQLITE_DONE
-                C.sqlite3_reset(handle)
+                Base.@lock db.lock C.sqlite3_reset(handle)
             elseif r != C.SQLITE_ROW
                 e = sqliteexception(db, stmt)
-                C.sqlite3_reset(handle)
+                Base.@lock db.lock C.sqlite3_reset(handle)
                 throw(e)
             end
             state = iterate(rows, st)

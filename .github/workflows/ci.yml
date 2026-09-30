@@ -11,6 +11,8 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    env:
+      JULIA_NUM_THREADS: '2'
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +53,23 @@ jobs:
       - uses: codecov/codecov-action@v4
         with:
           file: lcov.info
+  native:
+    name: Native statement core (Julia 1.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - name: Prepare native test environment
+        run: julia --startup-file=no --project=test/trim -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
+      - name: Compile with safe trimming
+        run: julia --startup-file=no --project=test/trim -e 'using JuliaC; JuliaC.main(ARGS)' -- --output-exe sqlite_core --project=test/trim --experimental --trim=safe test/trim/statement_core.jl
+      - name: Run without runtime code generation
+        env:
+          JULIA_LOAD_CODEGEN_LIB: '0'
+        run: ./sqlite_core 'native input λ🙂'
   docs:
     name: Documentation
     runs-on: ubuntu-latest

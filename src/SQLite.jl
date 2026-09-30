@@ -16,7 +16,7 @@ const DBHandle = Ptr{C.sqlite3}
 # SQLite3 statement handle
 const StmtHandle = Ptr{C.sqlite3_stmt}
 
-const StmtWrapper = Ref{StmtHandle}
+const StmtWrapper = Base.RefValue{StmtHandle}
 
 # Normal constructor from filename
 function sqliteexception(handle::DBHandle)
@@ -75,15 +75,16 @@ false
 mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
-    stmt_wrappers::WeakKeyDict{StmtWrapper,Nothing} # opened prepared statements
+    stmt_wrappers::IdDict{StmtWrapper,Nothing} # handles, including those with pending finalizers
+    lock::ReentrantLock # acquired before native calls that can invoke Julia callbacks
     registered_UDF_data::Vector{Any} # keep registered UDFs alive and not garbage collected
 
     function DB(f::AbstractString)
         handle_ptr = Ref{DBHandle}()
         f = String(isempty(f) ? f : expanduser(f))
         if @OK C.sqlite3_open(f, handle_ptr)
-            db = new(f, handle_ptr[], WeakKeyDict{StmtWrapper,Nothing}(), Any[])
-            finalizer(_close_db!, db)
+            db = new(f, handle_ptr[], IdDict{StmtWrapper,Nothing}(), ReentrantLock(), Any[])
+            finalizer(_finalize!, db)
             return db
         else # error
             sqliteerror(handle_ptr[])
@@ -149,21 +150,41 @@ function backup(db::DB, path::AbstractString; sleep_ms::Integer = 250)
 end
 
 function finalize_statements!(db::DB)
-    # close stmts
-    for stmt_wrapper in keys(db.stmt_wrappers)
-        C.sqlite3_finalize(stmt_wrapper[])
-        stmt_wrapper[] = C_NULL
+    Base.@lock db.lock begin
+        # Native finalizers may register or close statements through Julia callbacks.
+        while !isempty(db.stmt_wrappers)
+            batch = db.stmt_wrappers
+            db.stmt_wrappers = IdDict{StmtWrapper,Nothing}()
+            for stmt_wrapper in keys(batch)
+                handle = stmt_wrapper[]
+                stmt_wrapper[] = C_NULL
+                C.sqlite3_finalize(handle)
+            end
+        end
+        return db.stmt_wrappers
     end
-    empty!(db.stmt_wrappers)
 end
 
 function _close_db!(db::DB)
-    finalize_statements!(db)
+    Base.@lock db.lock begin
+        finalize_statements!(db)
+        C.sqlite3_close_v2(db.handle)
+        db.handle = C_NULL
+    end
+    return
+end
 
-    # close DB
-    C.sqlite3_close_v2(db.handle)
-    db.handle = C_NULL
-
+function _finalize!(db::DB)
+    # Finalizers must defer rather than wait for another task's cleanup.
+    if islocked(db.lock) || !trylock(db.lock)
+        finalizer(_finalize!, db)
+        return
+    end
+    try
+        _close_db!(db)
+    finally
+        unlock(db.lock)
+    end
     return
 end
 
@@ -205,6 +226,11 @@ The keyword argument `register` controls whether the created `Stmt` is registere
 provided SQLite3 database `db`. All registered and unclosed statements of a given DB
 connection are automatically closed when the DB is garbage collected or closed explicitly
 after calling `close(db)` or `DBInterface.close!(db)`.
+The DB retains handle references without keeping statement objects or bound values alive.
+This includes unreachable statements whose finalizers have not run yet, so their native
+cleanup is completed during explicit DB close. An unfinished write can commit an implicit
+transaction when finalized; use an explicit transaction when rollback is required.
+With `register=false`, the caller remains responsible for closing the statement.
 """
 mutable struct Stmt <: DBInterface.Statement
     db::DB
@@ -215,10 +241,10 @@ mutable struct Stmt <: DBInterface.Statement
     function Stmt(db::DB, sql::AbstractString; register::Bool = true)
         stmt_wrapper = prepare_stmt_wrapper(db, sql)
         if register
-            db.stmt_wrappers[stmt_wrapper] = nothing
+            Base.@lock db.lock db.stmt_wrappers[stmt_wrapper] = nothing
         end
         stmt = new(db, stmt_wrapper, Dict{Int,Any}())
-        finalizer(_close_stmt!, stmt)
+        finalizer(_finalize!, stmt)
         return stmt
     end
 end
@@ -232,8 +258,26 @@ end
 isready(stmt::Stmt) = _get_stmt_handle(stmt) != C_NULL
 
 function _close_stmt!(stmt::Stmt)
-    C.sqlite3_finalize(_get_stmt_handle(stmt))
-    _set_stmt_handle(stmt, C_NULL)
+    Base.@lock stmt.db.lock begin
+        handle = _get_stmt_handle(stmt)
+        _set_stmt_handle(stmt, C_NULL)
+        delete!(stmt.db.stmt_wrappers, stmt.stmt_wrapper)
+        C.sqlite3_finalize(handle)
+    end
+    return C_NULL
+end
+
+function _finalize!(stmt::Stmt)
+    if islocked(stmt.db.lock) || !trylock(stmt.db.lock)
+        finalizer(_finalize!, stmt)
+        return
+    end
+    try
+        _close_stmt!(stmt)
+    finally
+        unlock(stmt.db.lock)
+    end
+    return
 end
 
 function sqliteexception(db::DB, stmt::Stmt)
@@ -636,18 +680,20 @@ To get the results of a SQL query, it is recommended to use [`DBInterface.execut
 function execute end
 
 function execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams = ())
-    handle = _get_stmt_handle(stmt)
-    C.sqlite3_reset(handle)
-    bind!(stmt, params)
-    r = C.sqlite3_step(handle)
-    if r == C.SQLITE_DONE
+    Base.@lock db.lock begin
+        handle = _get_stmt_handle(stmt)
         C.sqlite3_reset(handle)
-    elseif r != C.SQLITE_ROW
-        e = sqliteexception(db)
-        C.sqlite3_reset(handle)
-        throw(e)
+        bind!(stmt, params)
+        r = C.sqlite3_step(handle)
+        if r == C.SQLITE_DONE
+            C.sqlite3_reset(handle)
+        elseif r != C.SQLITE_ROW
+            e = sqliteexception(db)
+            C.sqlite3_reset(handle)
+            throw(e)
+        end
+        return r
     end
-    return r
 end
 
 function execute(stmt::Stmt, params::DBInterface.StatementParams)
