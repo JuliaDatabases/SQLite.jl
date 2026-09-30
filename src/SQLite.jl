@@ -195,16 +195,35 @@ function Base.show(io::IO, db::DB)
 end
 
 # prepare given sql statement
+# Prepare the first statement in `sql` at or after byte `offset`. Returns its handle,
+# or C_NULL if only whitespace and comments remain, and the offset just past it.
+function prepare_next(db::DB, sql::String, offset::Int)
+    handle = Ref{StmtHandle}(C_NULL)
+    tail = Ref{Ptr{Cchar}}(C_NULL)
+    GC.@preserve sql begin
+        start = pointer(sql) + offset
+        @CHECK db C.sqlite3_prepare_v2(db.handle, start, sizeof(sql) - offset, handle, tail)
+        return handle[], Int(tail[] - pointer(sql))
+    end
+end
+
 function prepare_stmt_wrapper(db::DB, sql::AbstractString)
-    handle_ptr = Ref{StmtHandle}()
-    @CHECK db C.sqlite3_prepare_v2(
-        db.handle,
-        sql,
-        sizeof(sql),
-        handle_ptr,
-        C_NULL,
-    )
-    return handle_ptr
+    sql = String(sql)
+    handle, offset = prepare_next(db, sql, 0)
+    if offset < sizeof(sql)
+        # Anything but whitespace and comments after the first statement would be ignored.
+        next = try
+            prepare_next(db, sql, offset)[1]
+        catch
+            nothing # a statement that can't be prepared yet, e.g. using a table the first creates
+        end
+        if next != C_NULL
+            next === nothing || C.sqlite3_finalize(next)
+            C.sqlite3_finalize(handle)
+            throw(ArgumentError("SQL contains multiple statements; use `DBInterface.executemultiple` to run them all"))
+        end
+    end
+    return StmtWrapper(handle)
 end
 
 """
@@ -238,8 +257,7 @@ mutable struct Stmt <: DBInterface.Statement
     # used for holding references to bound statement values via bind!
     params::Dict{Int,Any}
 
-    function Stmt(db::DB, sql::AbstractString; register::Bool = true)
-        stmt_wrapper = prepare_stmt_wrapper(db, sql)
+    function Stmt(db::DB, stmt_wrapper::StmtWrapper; register::Bool = true)
         if register
             Base.@lock db.lock db.stmt_wrappers[stmt_wrapper] = nothing
         end
@@ -248,6 +266,9 @@ mutable struct Stmt <: DBInterface.Statement
         return stmt
     end
 end
+
+Stmt(db::DB, sql::AbstractString; register::Bool = true) =
+    Stmt(db, prepare_stmt_wrapper(db, sql); register)
 
 _get_stmt_handle(stmt::Stmt)::StmtHandle = stmt.stmt_wrapper[]
 function _set_stmt_handle(stmt::Stmt, handle)
@@ -292,6 +313,26 @@ See `DBInterface.execute`(@ref) for information on executing a prepared statemen
 A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
 """
 DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
+
+"""
+    DBInterface.executemultiple(db::SQLite.DB, sql::AbstractString, [params]) -> Vector{SQLite.Query}
+
+Run each statement in `sql` in order and return their result cursors. Each statement is
+prepared after the previous one runs, so it can use tables created earlier in `sql`.
+`params` are bound to every statement; use named parameters when statements take different ones.
+Statements that ran before an error are not rolled back unless they're in a transaction.
+"""
+function DBInterface.executemultiple(db::DB, sql::AbstractString, params::DBInterface.StatementParams = ())
+    sql = String(sql)
+    results = Query[]
+    offset = 0
+    while offset < sizeof(sql)
+        handle, offset = prepare_next(db, sql, offset)
+        handle == C_NULL && break
+        push!(results, DBInterface.execute(Stmt(db, StmtWrapper(handle)), params))
+    end
+    return results
+end
 DBInterface.getconnection(stmt::Stmt) = stmt.db
 DBInterface.close!(stmt::Stmt) = _close_stmt!(stmt)
 
