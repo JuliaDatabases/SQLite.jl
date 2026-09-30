@@ -3,6 +3,7 @@ using Test, Dates, Random, WeakRefStrings, Tables, DBInterface
 
 include("statement_lifetime.jl")
 include("aggregate_state.jl")
+include("blob.jl")
 
 import Base: +, ==
 
@@ -1466,3 +1467,27 @@ end
         rm(dbfile)
     end
 end # @testset "SQLite"
+
+# https://github.com/JuliaDatabases/SQLite.jl/issues/303
+@testset "multiple statements" begin
+    db = SQLite.DB()
+    @test_throws ArgumentError DBInterface.execute(db, "CREATE TABLE m(a); INSERT INTO m VALUES (1)")
+    @test_throws ArgumentError DBInterface.execute(db, "SELECT 1; SELECT 2")
+    @test_throws ArgumentError DBInterface.prepare(db, "SELECT 1; SELECT 2")
+    @test_throws ArgumentError SQLite.execute(db, "SELECT 1; SELECT 2")
+    @test isempty(SQLite.tables(db))                    # nothing ran
+    # trailing whitespace, semicolons, and comments are fine
+    for sql in ("SELECT 1 AS a;", "SELECT 1 AS a;  \n", "SELECT 1 AS a; -- note", "SELECT 1 AS a /* x */;;")
+        @test Tables.columntable(DBInterface.execute(db, sql)).a == [1]
+    end
+    rs = DBInterface.executemultiple(db, "CREATE TABLE m(a); INSERT INTO m VALUES (1), (2);\n-- c\nSELECT sum(a) AS s FROM m; SELECT 'x' AS y")
+    @test length(rs) == 4
+    @test Tables.columntable(rs[3]).s == [3]
+    @test Tables.columntable(rs[4]).y == ["x"]
+    @test length(DBInterface.executemultiple(db, "SELECT 1")) == 1
+    @test isempty(DBInterface.executemultiple(db, "  -- nothing\n"))
+    rs = DBInterface.executemultiple(db, "INSERT INTO m VALUES (:v); SELECT count(*) AS n FROM m WHERE a = :v"; v = 7)
+    @test Tables.columntable(rs[2]).n == [1]
+    @test_throws SQLiteException DBInterface.executemultiple(db, "INSERT INTO m VALUES (9); SELEC oops")
+    @test Tables.columntable(DBInterface.execute(db, "SELECT count(*) AS n FROM m WHERE a = 9")).n == [1] # first ran
+end

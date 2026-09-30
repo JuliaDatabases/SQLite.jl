@@ -17,6 +17,8 @@ const DBHandle = Ptr{C.sqlite3}
 const StmtHandle = Ptr{C.sqlite3_stmt}
 
 const StmtWrapper = Base.RefValue{StmtHandle}
+const BlobHandle = Ptr{C.sqlite3_blob}
+const BlobWrapper = Base.RefValue{BlobHandle}
 
 # Normal constructor from filename
 function sqliteexception(handle::DBHandle)
@@ -53,8 +55,11 @@ All other SQLite.jl functions take an `SQLite.DB` as the first argument as conte
 
 To create an in-memory temporary database, call `SQLite.DB()`.
 
-Call `close(db)` or `DBInterface.close!(db)` to close the connection and finalize
-its registered prepared statements. A finalizer also closes an unreachable
+Call `close(db)` or `DBInterface.close!(db)` to close the connection, its BLOB
+streams, and its registered prepared statements. Closing writable BLOB streams
+can commit an implicit transaction; close errors are reported after all tracked
+handles are closed. An open explicit transaction is rolled back by connection
+teardown. A finalizer also closes an unreachable
 connection, but its timing is not guaranteed. Leaving a function or scope does
 not guarantee that the connection is closed. Use `try`/`finally` for deterministic
 cleanup, including when an operation throws:
@@ -76,6 +81,7 @@ mutable struct DB <: DBInterface.Connection
     file::String
     handle::DBHandle
     stmt_wrappers::IdDict{StmtWrapper,Nothing} # handles, including those with pending finalizers
+    blob_handles::IdDict{BlobWrapper,Nothing} # retain handles until close, including pending finalizers
     lock::ReentrantLock # acquired before native calls that can invoke Julia callbacks
     registered_UDF_data::Vector{Any} # keep registered UDFs alive and not garbage collected
 
@@ -83,7 +89,7 @@ mutable struct DB <: DBInterface.Connection
         handle_ptr = Ref{DBHandle}()
         f = String(isempty(f) ? f : expanduser(f))
         if @OK C.sqlite3_open(f, handle_ptr)
-            db = new(f, handle_ptr[], IdDict{StmtWrapper,Nothing}(), ReentrantLock(), Any[])
+            db = new(f, handle_ptr[], IdDict{StmtWrapper,Nothing}(), IdDict{BlobWrapper,Nothing}(), ReentrantLock(), Any[])
             finalizer(_finalize!, db)
             return db
         else # error
@@ -94,8 +100,8 @@ end
 DB() = DB(":memory:")
 DBInterface.connect(::Type{DB}) = DB()
 DBInterface.connect(::Type{DB}, f::AbstractString) = DB(f)
-DBInterface.close!(db::DB) = _close_db!(db)
-Base.close(db::DB) = _close_db!(db)
+DBInterface.close!(db::DB) = _close_db!(db, true)
+Base.close(db::DB) = _close_db!(db, true)
 Base.isopen(db::DB) = isopen(db.handle)
 Base.isopen(handle::DBHandle) = handle != C_NULL
 
@@ -165,11 +171,27 @@ function finalize_statements!(db::DB)
     end
 end
 
-function _close_db!(db::DB)
+function _close_db!(db::DB, report_errors::Bool = false)
     Base.@lock db.lock begin
         finalize_statements!(db)
+        errors = nothing
+        while !isempty(db.blob_handles)
+            batch = db.blob_handles
+            db.blob_handles = IdDict{BlobWrapper,Nothing}()
+            for handle in keys(batch)
+                err = _close_blob_handle!(db, handle, report_errors)
+                if err !== nothing
+                    errors === nothing && (errors = Any[])
+                    push!(errors, err)
+                end
+            end
+        end
         C.sqlite3_close_v2(db.handle)
         db.handle = C_NULL
+        if errors !== nothing
+            length(errors) == 1 && throw(only(errors))
+            throw(CompositeException(errors))
+        end
     end
     return
 end
@@ -190,21 +212,42 @@ end
 
 sqliteexception(db::DB) = sqliteexception(db.handle)
 
+include("blob.jl")
+
 function Base.show(io::IO, db::DB)
     print(io, string("SQLite.DB(", "\"$(db.file)\"", ")"))
 end
 
 # prepare given sql statement
+# Prepare the first statement in `sql` at or after byte `offset`. Returns its handle,
+# or C_NULL if only whitespace and comments remain, and the offset just past it.
+function prepare_next(db::DB, sql::String, offset::Int)
+    handle = Ref{StmtHandle}(C_NULL)
+    tail = Ref{Ptr{Cchar}}(C_NULL)
+    GC.@preserve sql begin
+        start = pointer(sql) + offset
+        @CHECK db C.sqlite3_prepare_v2(db.handle, start, sizeof(sql) - offset, handle, tail)
+        return handle[], Int(tail[] - pointer(sql))
+    end
+end
+
 function prepare_stmt_wrapper(db::DB, sql::AbstractString)
-    handle_ptr = Ref{StmtHandle}()
-    @CHECK db C.sqlite3_prepare_v2(
-        db.handle,
-        sql,
-        sizeof(sql),
-        handle_ptr,
-        C_NULL,
-    )
-    return handle_ptr
+    sql = String(sql)
+    handle, offset = prepare_next(db, sql, 0)
+    if offset < sizeof(sql)
+        # Anything but whitespace and comments after the first statement would be ignored.
+        next = try
+            prepare_next(db, sql, offset)[1]
+        catch
+            nothing # a statement that can't be prepared yet, e.g. using a table the first creates
+        end
+        if next != C_NULL
+            next === nothing || C.sqlite3_finalize(next)
+            C.sqlite3_finalize(handle)
+            throw(ArgumentError("SQL contains multiple statements; use `DBInterface.executemultiple` to run them all"))
+        end
+    end
+    return StmtWrapper(handle)
 end
 
 """
@@ -238,8 +281,7 @@ mutable struct Stmt <: DBInterface.Statement
     # used for holding references to bound statement values via bind!
     params::Dict{Int,Any}
 
-    function Stmt(db::DB, sql::AbstractString; register::Bool = true)
-        stmt_wrapper = prepare_stmt_wrapper(db, sql)
+    function Stmt(db::DB, stmt_wrapper::StmtWrapper; register::Bool = true)
         if register
             Base.@lock db.lock db.stmt_wrappers[stmt_wrapper] = nothing
         end
@@ -248,6 +290,9 @@ mutable struct Stmt <: DBInterface.Statement
         return stmt
     end
 end
+
+Stmt(db::DB, sql::AbstractString; register::Bool = true) =
+    Stmt(db, prepare_stmt_wrapper(db, sql); register)
 
 _get_stmt_handle(stmt::Stmt)::StmtHandle = stmt.stmt_wrapper[]
 function _set_stmt_handle(stmt::Stmt, handle)
@@ -292,6 +337,26 @@ See `DBInterface.execute`(@ref) for information on executing a prepared statemen
 A `SQLite.Stmt` object can be closed (resources freed) using `DBInterface.close!`(@ref).
 """
 DBInterface.prepare(db::DB, sql::AbstractString) = Stmt(db, sql)
+
+"""
+    DBInterface.executemultiple(db::SQLite.DB, sql::AbstractString, [params]) -> Vector{SQLite.Query}
+
+Run each statement in `sql` in order and return their result cursors. Each statement is
+prepared after the previous one runs, so it can use tables created earlier in `sql`.
+`params` are bound to every statement; use named parameters when statements take different ones.
+Statements that ran before an error are not rolled back unless they're in a transaction.
+"""
+function DBInterface.executemultiple(db::DB, sql::AbstractString, params::DBInterface.StatementParams = ())
+    sql = String(sql)
+    results = Query[]
+    offset = 0
+    while offset < sizeof(sql)
+        handle, offset = prepare_next(db, sql, offset)
+        handle == C_NULL && break
+        push!(results, DBInterface.execute(Stmt(db, StmtWrapper(handle)), params))
+    end
+    return results
+end
 DBInterface.getconnection(stmt::Stmt) = stmt.db
 DBInterface.close!(stmt::Stmt) = _close_stmt!(stmt)
 
