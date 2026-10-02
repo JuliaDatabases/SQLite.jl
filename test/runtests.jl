@@ -114,6 +114,42 @@ end
             DBInterface.close!(db)
         end
 
+        @testset "TEXT byte lengths" begin
+            values = [missing, "", "plain", "é🚀", "\0", "\0lead", "tail\0", "a\0b\0c", "é\0🚀"]
+            expected_bytes = [ismissing(v) ? missing : ncodeunits(v) for v in values]
+            expected_hex = [ismissing(v) ? "" : uppercase(bytes2hex(codeunits(v))) for v in values]
+            db = SQLite.DB()
+            saved_values = []
+            try
+                SQLite.execute(db, "CREATE TABLE text_values (value TEXT)")
+                insert = SQLite.Stmt(db, "INSERT INTO text_values VALUES (?)")
+                for value in values
+                    SQLite.execute(insert, (value,))
+                end
+                SQLite.register(db, v -> ismissing(v) ? missing : ncodeunits(v);
+                    name = "text_bytes", nargs = 1)
+                SQLite.register(db, 0, (n, v) -> n + (ismissing(v) ? 0 : ncodeunits(v));
+                    name = "total_text_bytes", nargs = 1)
+                select = SQLite.Stmt(db,
+                    "SELECT value, hex(value) AS bytes, text_bytes(value) AS byte_count FROM text_values ORDER BY rowid")
+                for strict in (false, true)
+                    result = Tables.columntable(DBInterface.execute(select, (); strict = strict))
+                    @test isequal(result.value, values)
+                    @test result.bytes == expected_hex
+                    @test isequal(result.byte_count, expected_bytes)
+                    push!(saved_values, result.value)
+                end
+                result = DBInterface.execute(columntable, db,
+                    "SELECT total_text_bytes(value) AS n FROM text_values")
+                @test only(result.n) == sum(skipmissing(expected_bytes))
+            finally
+                close(db)
+            end
+            for result in saved_values
+                @test isequal(result, values)
+            end
+        end
+
         @testset "Julia to SQLite3 type conversion" begin
             @test SQLite.sqlitetype(Int) == "INT NOT NULL"
             @test SQLite.sqlitetype(Union{Float64,Missing}) == "REAL"
