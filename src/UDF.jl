@@ -11,7 +11,9 @@ function sqlvalue(values, i)
     elseif valuetype == C.SQLITE_FLOAT
         return C.sqlite3_value_double(temp_val_ptr)
     elseif valuetype == C.SQLITE_TEXT
-        return unsafe_string(C.sqlite3_value_text(temp_val_ptr))
+        text = C.sqlite3_value_text(temp_val_ptr)
+        nbytes = C.sqlite3_value_bytes(temp_val_ptr)
+        return unsafe_string(text, nbytes)
     elseif valuetype == C.SQLITE_BLOB
         nbytes = C.sqlite3_value_bytes(temp_val_ptr)
         blob = C.sqlite3_value_blob(temp_val_ptr)

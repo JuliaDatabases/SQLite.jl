@@ -705,7 +705,9 @@ function sqlitevalue(::Type{T}, handle, col)::T where {T<:FLOAT_TYPES}
 end
 #TODO: test returning a WeakRefString instead of calling `unsafe_string`
 function sqlitevalue(::Type{T}, handle, col)::T where {T<:AbstractString}
-    convert(T, unsafe_string(C.sqlite3_column_text(handle, col - 1)))
+    text = C.sqlite3_column_text(handle, col - 1)
+    nbytes = C.sqlite3_column_bytes(handle, col - 1)
+    convert(T, unsafe_string(text, nbytes))
 end
 function sqlitevalue(::Type{T}, handle, col) where {T}
     blob = convert(Ptr{UInt8}, C.sqlite3_column_blob(handle, col - 1))
