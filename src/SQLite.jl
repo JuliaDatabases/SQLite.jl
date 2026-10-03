@@ -589,7 +589,7 @@ function sqldeserialize(r)
     )
     if ret == 0
         try
-            v = Serialization.deserialize(IOBuffer(r))
+            v = Base.invokelatest(Serialization.deserialize, IOBuffer(r))
             return v.object
         catch e
             throw(
