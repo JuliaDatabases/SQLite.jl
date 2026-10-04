@@ -848,7 +848,9 @@ If `mode` is one of "", "DEFERRED", "IMMEDIATE" or "EXCLUSIVE" then a
 transaction of that (or the default) mutable struct is started. Otherwise a savepoint
 is created whose name is `mode` converted to AbstractString.
 
-In the second method, `func` is executed within a transaction (the transaction being committed upon successful execution)
+In the second method, `func` is executed within a transaction, committed upon
+successful execution and rolled back if `func` throws. The connection's
+`PRAGMA synchronous` setting is used unchanged.
 """
 function transaction end
 
@@ -871,9 +873,6 @@ DBInterface.transaction(f, db::DB) = transaction(f, db)
 @inline function transaction(f::Function, db::DB)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
-    already_in_transaction = intransaction(db)
-    # PRAGMA statements cannot be executed inside a transaction
-    already_in_transaction || execute(db, "PRAGMA synchronous = OFF;")
     transaction(db, name)
     try
         f()
@@ -883,7 +882,6 @@ DBInterface.transaction(f, db::DB) = transaction(f, db)
     finally
         # savepoints are not released on rollback
         commit(db, name)
-        already_in_transaction || execute(db, "PRAGMA synchronous = ON;")
     end
 end
 
