@@ -763,6 +763,53 @@ end
             end
         end
 
+        @testset "Transactions preserve synchronous setting" begin
+            mktempdir() do dir
+                for journal in ("DELETE", "WAL"), level in 0:3
+                    db = SQLite.DB(joinpath(dir, "$journal-$level.sqlite"))
+                    try
+                        SQLite.execute(db, "PRAGMA journal_mode=$journal")
+                        SQLite.execute(db, "PRAGMA synchronous=$level")
+                        synchronous() = only(columntable(
+                            DBInterface.execute(db, "PRAGMA synchronous"),
+                        ).synchronous)
+                        @test synchronous() == level
+                        SQLite.execute(db, "CREATE TABLE durable (value INTEGER)")
+                        result = SQLite.transaction(db) do
+                            @test synchronous() == level
+                            SQLite.execute(db, "INSERT INTO durable VALUES (1)")
+                            DBInterface.transaction(db) do
+                                @test synchronous() == level
+                                SQLite.execute(db, "INSERT INTO durable VALUES (2)")
+                            end
+                            :committed
+                        end
+                        @test result === :committed
+                        @test synchronous() == level
+                        @test columntable(DBInterface.execute(
+                            db, "SELECT value FROM durable ORDER BY rowid",
+                        )).value == [1, 2]
+                        @test_throws ErrorException DBInterface.transaction(db) do
+                            @test synchronous() == level
+                            SQLite.execute(db, "INSERT INTO durable VALUES (3)")
+                            error("roll back insert")
+                        end
+                        @test synchronous() == level
+                        @test columntable(DBInterface.execute(
+                            db, "SELECT value FROM durable ORDER BY rowid",
+                        )).value == [1, 2]
+                        @test SQLite.load!((value = [3, 4],), db, "durable") == "durable"
+                        @test synchronous() == level
+                        @test columntable(DBInterface.execute(
+                            db, "SELECT value FROM durable ORDER BY rowid",
+                        )).value == [1, 2, 3, 4]
+                    finally
+                        close(db)
+                    end
+                end
+            end
+        end
+
         @testset "Issue #330: transactions preserve temporary tables" begin
             for temp_store in (0, 1, 2)
                 db = SQLite.DB()
