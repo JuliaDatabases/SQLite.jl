@@ -959,6 +959,18 @@ end
     end
 
     @testset "load! / drop!" begin
+        @testset "ANALYZE quotes table and index names" begin
+            db = SQLite.DB()
+            @test SQLite.load!((a = [1, 1, 2],), db, "my table"; analyze = true) == "my table"
+            SQLite.createindex!(db, "my table", "my index", "a"; unique = false)
+            SQLite.removeduplicates!(db, "my table", ["a"])
+            @test columntable(
+                DBInterface.execute(db, "SELECT a FROM \"my table\" ORDER BY a"),
+            ).a == [1, 2]
+            @test "my table" in columntable(DBInterface.execute(db, "SELECT tbl FROM sqlite_stat1")).tbl
+            close(db)
+        end
+
         @testset "Remove Duplicates" begin
             setup_clean_test_db() do db
                 db = SQLite.DB() #In case the order of tests is changed

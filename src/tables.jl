@@ -383,7 +383,7 @@ function load!(
     finally
         _close_stmt!(stmt)
     end
-    analyze && execute(db, "ANALYZE $name")
+    analyze && execute(db, "ANALYZE $(esc_id(name))")
     return name
 end
 

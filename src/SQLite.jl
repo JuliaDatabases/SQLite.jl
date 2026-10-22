@@ -967,7 +967,7 @@ function createindex!(
             "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))",
         )
     end
-    execute(db, "ANALYZE $index")
+    execute(db, "ANALYZE $(esc_id(index))")
     return
 end
 
@@ -995,7 +995,7 @@ function removeduplicates!(
             "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));",
         )
     end
-    execute(db, "ANALYZE $table")
+    execute(db, "ANALYZE $(esc_id(table))")
 end
 
 include("tables.jl")
