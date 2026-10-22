@@ -909,6 +909,53 @@ end
             SQLite.commit(db)
             @test SQLite.intransaction(db) == false
         end
+
+        @testset "Failed transactions leave no open transaction" begin
+            mktempdir() do dir
+                path = joinpath(dir, "busy.sqlite")
+                db = SQLite.DB(path)
+                reader = SQLite.DB(path)
+                try
+                    SQLite.execute(db, "CREATE TABLE t (k INTEGER PRIMARY KEY)")
+                    SQLite.execute(db, "INSERT INTO t VALUES (1)")
+                    # ON CONFLICT ROLLBACK ends the transaction before the helper rolls back
+                    err = try
+                        SQLite.load!((k = [2, 1],), db, "t"; on_conflict = "ROLLBACK")
+                    catch e
+                        e
+                    end
+                    @test err isa SQLiteException && occursin("UNIQUE", err.msg)
+                    err = try
+                        DBInterface.transaction(db) do
+                            SQLite.execute(db, "INSERT OR ROLLBACK INTO t VALUES (1)")
+                        end
+                    catch e
+                        e
+                    end
+                    @test err isa SQLiteException && occursin("UNIQUE", err.msg)
+                    @test !SQLite.intransaction(db)
+                    # An unfinished read on another connection makes the commit fail with SQLITE_BUSY
+                    q = DBInterface.execute(reader, "SELECT k FROM t")
+                    @test first(q).k == 1
+                    @test_throws SQLiteException DBInterface.transaction(db) do
+                        SQLite.execute(db, "INSERT INTO t VALUES (10)")
+                    end
+                    @test !SQLite.intransaction(db)
+                    @test_throws SQLiteException SQLite.load!((k = [11],), db, "t")
+                    @test !SQLite.intransaction(db)
+                    # load! finalized its INSERT statement
+                    @test SQLite.C.sqlite3_next_stmt(db.handle, C_NULL) == C_NULL
+                    DBInterface.close!(q)
+                    SQLite.execute(db, "INSERT INTO t VALUES (20)")
+                    @test columntable(
+                        DBInterface.execute(reader, "SELECT k FROM t ORDER BY k"),
+                    ).k == [1, 20]
+                finally
+                    close(reader)
+                    close(db)
+                end
+            end
+        end
     end
 
     @testset "load! / drop!" begin

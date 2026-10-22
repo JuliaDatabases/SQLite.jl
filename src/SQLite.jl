@@ -873,15 +873,24 @@ DBInterface.transaction(f, db::DB) = transaction(f, db)
 @inline function transaction(f::Function, db::DB)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
+    outermost = !intransaction(db)
     transaction(db, name)
     try
-        f()
-    catch
-        rollback(db, name)
-        rethrow()
-    finally
-        # savepoints are not released on rollback
+        result = f()
         commit(db, name)
+        return result
+    catch
+        # A failed statement can end the whole transaction (`ON CONFLICT ROLLBACK`,
+        # `SQLITE_FULL`), and a failed outermost RELEASE (`SQLITE_BUSY`) leaves it open.
+        if intransaction(db)
+            if outermost
+                rollback(db)
+            else
+                rollback(db, name)
+                commit(db, name) # savepoints are not released on rollback
+            end
+        end
+        rethrow()
     end
 end
 
