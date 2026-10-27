@@ -431,10 +431,12 @@ function bind!(stmt::Stmt, params::DBInterface.NamedStatementParams)
         SQLiteException("values should be provided for all query placeholders"),
     )
     for i in 1:nparams
-        name = unsafe_string(C.sqlite3_bind_parameter_name(handle, i))
-        isempty(name) && throw(
+        # a nameless `?` parameter has a NULL name
+        nameptr = C.sqlite3_bind_parameter_name(handle, i)
+        nameptr == C_NULL && throw(
             SQLiteException("nameless parameters should be passed as a Vector"),
         )
+        name = unsafe_string(nameptr)
         # name is returned with the ':', '@' or '$' at the start
         sym = Symbol(name[2:end])
         haskey(params, sym) || throw(
