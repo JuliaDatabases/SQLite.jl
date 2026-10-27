@@ -594,6 +594,17 @@ end
             SQLite.clear!(stmt)
         end
 
+        @testset "Named values for a nameless placeholder" begin
+            db = SQLite.DB()
+            err = try
+                DBInterface.execute(db, "SELECT ? AS a", Dict(:a => 1))
+            catch e
+                e
+            end
+            @test err isa SQLiteException && occursin("nameless parameters", err.msg)
+            close(db)
+        end
+
         @testset "Issue #180, Query" begin
             param = "Hello!"
             query = DBInterface.execute(
