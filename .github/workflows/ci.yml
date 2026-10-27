@@ -9,6 +9,11 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.version == 'nightly' }}
+    # Per job, not per workflow, so a newer push cancels superseded tests but never a docs deploy.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-test-${{ strategy.job-index }}
+      cancel-in-progress: true
     permissions:
       contents: read
       id-token: write
@@ -59,6 +64,9 @@ jobs:
   native:
     name: Native statement core (Julia 1.13)
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-native
+      cancel-in-progress: true
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
