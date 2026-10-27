@@ -909,9 +909,68 @@ end
             SQLite.commit(db)
             @test SQLite.intransaction(db) == false
         end
+
+        @testset "Failed transactions leave no open transaction" begin
+            mktempdir() do dir
+                path = joinpath(dir, "busy.sqlite")
+                db = SQLite.DB(path)
+                reader = SQLite.DB(path)
+                try
+                    SQLite.execute(db, "CREATE TABLE t (k INTEGER PRIMARY KEY)")
+                    SQLite.execute(db, "INSERT INTO t VALUES (1)")
+                    # ON CONFLICT ROLLBACK ends the transaction before the helper rolls back
+                    err = try
+                        SQLite.load!((k = [2, 1],), db, "t"; on_conflict = "ROLLBACK")
+                    catch e
+                        e
+                    end
+                    @test err isa SQLiteException && occursin("UNIQUE", err.msg)
+                    err = try
+                        DBInterface.transaction(db) do
+                            SQLite.execute(db, "INSERT OR ROLLBACK INTO t VALUES (1)")
+                        end
+                    catch e
+                        e
+                    end
+                    @test err isa SQLiteException && occursin("UNIQUE", err.msg)
+                    @test !SQLite.intransaction(db)
+                    # An unfinished read on another connection makes the commit fail with SQLITE_BUSY
+                    q = DBInterface.execute(reader, "SELECT k FROM t")
+                    @test first(q).k == 1
+                    @test_throws SQLiteException DBInterface.transaction(db) do
+                        SQLite.execute(db, "INSERT INTO t VALUES (10)")
+                    end
+                    @test !SQLite.intransaction(db)
+                    @test_throws SQLiteException SQLite.load!((k = [11],), db, "t")
+                    @test !SQLite.intransaction(db)
+                    # load! finalized its INSERT statement
+                    @test SQLite.C.sqlite3_next_stmt(db.handle, C_NULL) == C_NULL
+                    DBInterface.close!(q)
+                    SQLite.execute(db, "INSERT INTO t VALUES (20)")
+                    @test columntable(
+                        DBInterface.execute(reader, "SELECT k FROM t ORDER BY k"),
+                    ).k == [1, 20]
+                finally
+                    close(reader)
+                    close(db)
+                end
+            end
+        end
     end
 
     @testset "load! / drop!" begin
+        @testset "ANALYZE quotes table and index names" begin
+            db = SQLite.DB()
+            @test SQLite.load!((a = [1, 1, 2],), db, "my table"; analyze = true) == "my table"
+            SQLite.createindex!(db, "my table", "my index", "a"; unique = false)
+            SQLite.removeduplicates!(db, "my table", ["a"])
+            @test columntable(
+                DBInterface.execute(db, "SELECT a FROM \"my table\" ORDER BY a"),
+            ).a == [1, 2]
+            @test "my table" in columntable(DBInterface.execute(db, "SELECT tbl FROM sqlite_stat1")).tbl
+            close(db)
+        end
+
         @testset "Remove Duplicates" begin
             setup_clean_test_db() do db
                 db = SQLite.DB() #In case the order of tests is changed
@@ -1067,6 +1126,21 @@ end
         end
     end
 
+    @testset "Non-strict values follow each value's storage class" begin
+        db = SQLite.DB()
+        DBInterface.execute(db, "CREATE TABLE mixed (x INTEGER)")
+        for v in (1, 1.5, "abc", :sym, UInt8[0x01, 0x02], missing)
+            DBInterface.execute(db, "INSERT INTO mixed VALUES (?)", (v,))
+        end
+        expected = [1, 1.5, "abc", :sym, UInt8[0x01, 0x02], missing]
+        @test isequal([row.x for row in DBInterface.execute(db, "SELECT x FROM mixed")], expected)
+        @test isequal(columntable(DBInterface.execute(db, "SELECT x FROM mixed")).x, expected)
+        # strict rows read through each column's inferred type
+        row = first(DBInterface.execute(DBInterface.prepare(db, "SELECT 1 AS i, 1.5 AS f"), (); strict = true))
+        @test row.i === 1 && row.f === 1.5
+        close(db)
+    end
+
     @testset "strict mode" begin
         @testset "Issue #353: ALTER TABLE on a STRICT table" begin
             for strict in (false, true)
@@ -1079,6 +1153,33 @@ end
                 info = DBInterface.execute(db, "PRAGMA table_info(t)") |> columntable
                 @test info.name == ["a", "b"]
             end
+        end
+
+        @testset "Type inference does not repeat writes" begin
+            db = SQLite.DB()
+            strict(sql) = columntable(
+                DBInterface.execute(DBInterface.prepare(db, sql), (); strict = true),
+            )
+            DBInterface.execute(db, "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, note TEXT, extra)")
+            r = strict("INSERT INTO t (n) VALUES (1), (2) RETURNING id, note, extra")
+            @test r.id == [1, 2]
+            @test eltype(r.note) == Union{Missing,String}
+            @test all(ismissing, r.note) && all(ismissing, r.extra)
+            @test columntable(DBInterface.execute(db, "SELECT id FROM t")).id == [1, 2]
+            r = strict("UPDATE t SET n = n + 1, extra = 2.5 WHERE id = 2 RETURNING n, note, extra")
+            @test r.n == [3] && isequal(r.note, [missing]) && r.extra == [2.5]
+            r = strict("UPDATE t SET n = n + 1, extra = NULL RETURNING extra")
+            @test length(r.extra) == 2 && all(ismissing, r.extra)
+            @test columntable(DBInterface.execute(db, "SELECT n FROM t ORDER BY id")).n == [2, 4]
+        end
+
+        @testset "Strict columns of type Any keep each value's storage class" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE b (x BLOB)")
+            DBInterface.execute(db, "INSERT INTO b VALUES (1), ('txt'), (x'0102'), (NULL)")
+            stmt = DBInterface.prepare(db, "SELECT x FROM b ORDER BY rowid")
+            tbl = columntable(DBInterface.execute(stmt, (); strict = true))
+            @test isequal(tbl.x, [1, "txt", UInt8[0x01, 0x02], missing])
         end
 
         @testset "PR #343: strict (and only strict) tables should error if types don't match" begin
