@@ -609,6 +609,12 @@ end
 # get julia type for given column of the given statement
 function juliatype(handle, col, scanrows::Bool = false)
     stored_typeid = C.sqlite3_column_type(handle, col - 1)
+    # Rewinding after a scan re-runs the statement, which would repeat the writes of
+    # e.g. `INSERT ... RETURNING`; such a column gets its declared type or `Any`.
+    if scanrows && stored_typeid == C.SQLITE_NULL && C.sqlite3_stmt_readonly(handle) == 0
+        decl_typestr = C.sqlite3_column_decltype(handle, col - 1)
+        return decl_typestr == C_NULL ? Any : juliatype(unsafe_string(decl_typestr), Any)
+    end
     did_row_scan = false
     while scanrows && stored_typeid == C.SQLITE_NULL
         # Scan forward through the rows until we find a non-NULL value for this column
@@ -873,15 +879,24 @@ DBInterface.transaction(f, db::DB) = transaction(f, db)
 @inline function transaction(f::Function, db::DB)
     # generate a random name for the savepoint
     name = string("SQLITE", Random.randstring(10))
+    outermost = !intransaction(db)
     transaction(db, name)
     try
-        f()
-    catch
-        rollback(db, name)
-        rethrow()
-    finally
-        # savepoints are not released on rollback
+        result = f()
         commit(db, name)
+        return result
+    catch
+        # A failed statement can end the whole transaction (`ON CONFLICT ROLLBACK`,
+        # `SQLITE_FULL`), and a failed outermost RELEASE (`SQLITE_BUSY`) leaves it open.
+        if intransaction(db)
+            if outermost
+                rollback(db)
+            else
+                rollback(db, name)
+                commit(db, name) # savepoints are not released on rollback
+            end
+        end
+        rethrow()
     end
 end
 
@@ -958,7 +973,7 @@ function createindex!(
             "CREATE $u INDEX $exists $(esc_id(index)) ON $(esc_id(table)) ($(esc_id(cols)))",
         )
     end
-    execute(db, "ANALYZE $index")
+    execute(db, "ANALYZE $(esc_id(index))")
     return
 end
 
@@ -986,7 +1001,7 @@ function removeduplicates!(
             "DELETE FROM $(esc_id(table)) WHERE _ROWID_ NOT IN (SELECT max(_ROWID_) from $(esc_id(table)) GROUP BY $(colsstr));",
         )
     end
-    execute(db, "ANALYZE $table")
+    execute(db, "ANALYZE $(esc_id(table))")
 end
 
 include("tables.jl")
