@@ -358,31 +358,34 @@ function load!(
     )
     handle = _get_stmt_handle(stmt)
     # start a transaction for inserting rows
-    DBInterface.transaction(db) do
-        if row === nothing
-            state = iterate(rows)
-            state === nothing && return
-            row, st = state
-        end
-        while true
-            Tables.eachcolumn(sch, row) do val, col, _
-                bind!(stmt, col, val)
+    try
+        DBInterface.transaction(db) do
+            if row === nothing
+                state = iterate(rows)
+                state === nothing && return
+                row, st = state
             end
-            r = Base.@lock db.lock GC.@preserve row C.sqlite3_step(handle)
-            if r == C.SQLITE_DONE
-                Base.@lock db.lock C.sqlite3_reset(handle)
-            elseif r != C.SQLITE_ROW
-                e = sqliteexception(db, stmt)
-                Base.@lock db.lock C.sqlite3_reset(handle)
-                throw(e)
+            while true
+                Tables.eachcolumn(sch, row) do val, col, _
+                    bind!(stmt, col, val)
+                end
+                r = Base.@lock db.lock GC.@preserve row C.sqlite3_step(handle)
+                if r == C.SQLITE_DONE
+                    Base.@lock db.lock C.sqlite3_reset(handle)
+                elseif r != C.SQLITE_ROW
+                    e = sqliteexception(db, stmt)
+                    Base.@lock db.lock C.sqlite3_reset(handle)
+                    throw(e)
+                end
+                state = iterate(rows, st)
+                state === nothing && break
+                row, st = state
             end
-            state = iterate(rows, st)
-            state === nothing && break
-            row, st = state
         end
+    finally
+        _close_stmt!(stmt)
     end
-    _close_stmt!(stmt)
-    analyze && execute(db, "ANALYZE $name")
+    analyze && execute(db, "ANALYZE $(esc_id(name))")
     return name
 end
 
