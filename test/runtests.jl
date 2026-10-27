@@ -1126,6 +1126,21 @@ end
         end
     end
 
+    @testset "Non-strict values follow each value's storage class" begin
+        db = SQLite.DB()
+        DBInterface.execute(db, "CREATE TABLE mixed (x INTEGER)")
+        for v in (1, 1.5, "abc", :sym, UInt8[0x01, 0x02], missing)
+            DBInterface.execute(db, "INSERT INTO mixed VALUES (?)", (v,))
+        end
+        expected = [1, 1.5, "abc", :sym, UInt8[0x01, 0x02], missing]
+        @test isequal([row.x for row in DBInterface.execute(db, "SELECT x FROM mixed")], expected)
+        @test isequal(columntable(DBInterface.execute(db, "SELECT x FROM mixed")).x, expected)
+        # strict rows read through each column's inferred type
+        row = first(DBInterface.execute(DBInterface.prepare(db, "SELECT 1 AS i, 1.5 AS f"), (); strict = true))
+        @test row.i === 1 && row.f === 1.5
+        close(db)
+    end
+
     @testset "strict mode" begin
         @testset "Issue #353: ALTER TABLE on a STRICT table" begin
             for strict in (false, true)

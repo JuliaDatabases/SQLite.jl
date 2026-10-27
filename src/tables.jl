@@ -103,11 +103,12 @@ function getvalue(
     rownumber == q.current_rownumber[] || wrongrow(rownumber)
     handle = _get_stmt_handle(q.stmt)
     t = C.sqlite3_column_type(handle, col - 1)
-    if t == C.SQLITE_NULL
-        return missing
-    end
-    TT = juliatype(t) # native SQLite Int, Float, and Text types
-    return sqlitevalue(ifelse(TT === Any && !isbitstype(T), T, TT), handle, col)
+    # branch on the storage class so each read is a static call
+    t == C.SQLITE_NULL && return missing
+    t == C.SQLITE_INTEGER && return C.sqlite3_column_int64(handle, col - 1)
+    t == C.SQLITE_FLOAT && return C.sqlite3_column_double(handle, col - 1)
+    t == C.SQLITE_TEXT && return sqlitevalue(String, handle, col)
+    return sqlitevalue(isbitstype(T) ? Any : T, handle, col)
 end
 
 function Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T}
@@ -117,6 +118,8 @@ end
 function Tables.getcolumn(r::Row, i::Int)
     Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
 end
+# non-strict values don't depend on the column type; skip dispatching on it
+Tables.getcolumn(r::Row{false}, i::Int) = getvalue(getquery(r), i, getfield(r, :rownumber), Any)
 function Tables.getcolumn(r::Row, nm::Symbol)
     Tables.getcolumn(r, getquery(r).lookup[nm])
 end
