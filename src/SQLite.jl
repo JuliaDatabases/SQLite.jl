@@ -609,6 +609,12 @@ end
 # get julia type for given column of the given statement
 function juliatype(handle, col, scanrows::Bool = false)
     stored_typeid = C.sqlite3_column_type(handle, col - 1)
+    # Rewinding after a scan re-runs the statement, which would repeat the writes of
+    # e.g. `INSERT ... RETURNING`; such a column gets its declared type or `Any`.
+    if scanrows && stored_typeid == C.SQLITE_NULL && C.sqlite3_stmt_readonly(handle) == 0
+        decl_typestr = C.sqlite3_column_decltype(handle, col - 1)
+        return decl_typestr == C_NULL ? Any : juliatype(unsafe_string(decl_typestr), Any)
+    end
     did_row_scan = false
     while scanrows && stored_typeid == C.SQLITE_NULL
         # Scan forward through the rows until we find a non-NULL value for this column

@@ -89,7 +89,9 @@ function getvalue(
     if t == C.SQLITE_NULL
         return missing
     end
-    sqlitevalue(nonmissingtype(T), handle, col)
+    S = nonmissingtype(T)
+    # An `Any` column holds values of several storage classes; read each by its own.
+    sqlitevalue(S === Any ? juliatype(t) : S, handle, col)
 end
 
 function getvalue(

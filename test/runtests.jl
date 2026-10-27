@@ -1140,6 +1140,33 @@ end
             end
         end
 
+        @testset "Type inference does not repeat writes" begin
+            db = SQLite.DB()
+            strict(sql) = columntable(
+                DBInterface.execute(DBInterface.prepare(db, sql), (); strict = true),
+            )
+            DBInterface.execute(db, "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, note TEXT, extra)")
+            r = strict("INSERT INTO t (n) VALUES (1), (2) RETURNING id, note, extra")
+            @test r.id == [1, 2]
+            @test eltype(r.note) == Union{Missing,String}
+            @test all(ismissing, r.note) && all(ismissing, r.extra)
+            @test columntable(DBInterface.execute(db, "SELECT id FROM t")).id == [1, 2]
+            r = strict("UPDATE t SET n = n + 1, extra = 2.5 WHERE id = 2 RETURNING n, note, extra")
+            @test r.n == [3] && isequal(r.note, [missing]) && r.extra == [2.5]
+            r = strict("UPDATE t SET n = n + 1, extra = NULL RETURNING extra")
+            @test length(r.extra) == 2 && all(ismissing, r.extra)
+            @test columntable(DBInterface.execute(db, "SELECT n FROM t ORDER BY id")).n == [2, 4]
+        end
+
+        @testset "Strict columns of type Any keep each value's storage class" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE b (x BLOB)")
+            DBInterface.execute(db, "INSERT INTO b VALUES (1), ('txt'), (x'0102'), (NULL)")
+            stmt = DBInterface.prepare(db, "SELECT x FROM b ORDER BY rowid")
+            tbl = columntable(DBInterface.execute(stmt, (); strict = true))
+            @test isequal(tbl.x, [1, "txt", UInt8[0x01, 0x02], missing])
+        end
+
         @testset "PR #343: strict (and only strict) tables should error if types don't match" begin
             db = SQLite.DB()
 
