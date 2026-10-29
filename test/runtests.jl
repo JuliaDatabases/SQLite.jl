@@ -446,6 +446,12 @@ end
             end
         end
 
+        @testset "Query is a DBInterface.Cursor" begin
+            setup_clean_test_db() do db
+                @test DBInterface.execute(db, "SELECT * FROM Employee") isa DBInterface.Cursor
+            end
+        end
+
         @testset "isempty(::Query)" begin
             setup_clean_test_db() do db
                 @test !DBInterface.execute(

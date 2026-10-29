@@ -2,7 +2,7 @@ using Tables
 
 sym(ptr) = ccall(:jl_symbol, Ref{Symbol}, (Ptr{UInt8},), ptr)
 
-struct Query{strict}
+struct Query{strict} <: DBInterface.Cursor
     stmt::Stmt
     status::Base.RefValue{Cint}
     names::Vector{Symbol}
