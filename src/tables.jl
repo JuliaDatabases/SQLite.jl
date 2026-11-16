@@ -142,11 +142,15 @@ end
 DBInterface.lastrowid(q::Query) = C.sqlite3_last_insert_rowid(q.stmt.db.handle)
 
 """
-    DBInterface.execute(db::SQLite.DB, sql::String, [params])
-    DBInterface.execute(stmt::SQLite.Stmt, [params])
+    DBInterface.execute(db::SQLite.DB, sql::String, [params]; allowduplicates=false, strict=false)
+    DBInterface.execute(stmt::SQLite.Stmt, [params]; allowduplicates=false, strict=false)
 
 Bind any positional (`params` as `Vector` or `Tuple`) or named (`params` as `NamedTuple` or `Dict`) parameters to an SQL statement, given by `db` and `sql` or
 as an already prepared statement `stmt`, execute the query and return an iterator of result rows.
+Without `params`, keywords other than `allowduplicates` and `strict` are bound as named parameters.
+The callback forms `DBInterface.execute(f, db, sql, ...)` and `DBInterface.execute(f, stmt, ...)` take the same keywords.
+
+By default, a repeated column name gets a suffix (`a`, `a_1`, `a_2`); `allowduplicates=true` keeps the names as SQLite reports them.
 
 Note that the returned result row iterator only supports a single-pass, forward-only iteration of the result rows.
 Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator back to the beginning.
@@ -192,6 +196,45 @@ function DBInterface.execute(
         Ref(0),
     )
 end
+
+# DBInterface's own connection and callback forms take no keywords, and its keyword-only
+# forms bind every keyword as a parameter, so `strict` and `allowduplicates` need these.
+function DBInterface.execute(db::DB, sql::AbstractString, params::DBInterface.StatementParams; kw...)
+    stmt = DBInterface.prepare(db, sql)
+    try
+        return DBInterface.execute(stmt, params; kw...)
+    catch
+        DBInterface.close!(stmt)
+        rethrow()
+    end
+end
+
+function DBInterface.execute(f::Base.Callable, stmt::Stmt, params::DBInterface.StatementParams; kw...)
+    q = DBInterface.execute(stmt, params; kw...)
+    try
+        return f(q)
+    finally
+        DBInterface.close!(q)
+    end
+end
+
+function DBInterface.execute(f::Base.Callable, db::DB, sql::AbstractString, params::DBInterface.StatementParams; kw...)
+    stmt = DBInterface.prepare(db, sql)
+    try
+        return DBInterface.execute(f, stmt, params; kw...)
+    finally
+        DBInterface.close!(stmt)
+    end
+end
+
+DBInterface.execute(stmt::Stmt; allowduplicates::Bool = false, strict::Bool = false, params...) =
+    DBInterface.execute(stmt, values(params); allowduplicates, strict)
+DBInterface.execute(db::DB, sql::AbstractString; allowduplicates::Bool = false, strict::Bool = false, params...) =
+    DBInterface.execute(db, sql, values(params); allowduplicates, strict)
+DBInterface.execute(f::Base.Callable, stmt::Stmt; allowduplicates::Bool = false, strict::Bool = false, params...) =
+    DBInterface.execute(f, stmt, values(params); allowduplicates, strict)
+DBInterface.execute(f::Base.Callable, db::DB, sql::AbstractString; allowduplicates::Bool = false, strict::Bool = false, params...) =
+    DBInterface.execute(f, db, sql, values(params); allowduplicates, strict)
 
 """
     SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true, strict=false)

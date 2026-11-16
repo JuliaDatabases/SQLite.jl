@@ -1175,6 +1175,29 @@ end
     end
 
     @testset "strict mode" begin
+        @testset "Every execute form takes strict and allowduplicates" begin
+            db = SQLite.DB()
+            sql = "SELECT :x AS a, 2 AS a"
+            stmt = DBInterface.prepare(db, sql)
+            seen(q) = (Tables.columnnames(q), Tables.schema(q), Tables.getcolumn(first(q), 1))
+            expected = ([:a, :a], Tables.Schema([:a, :a], [Union{Missing,Int64}, Union{Missing,Int64}]), 1)
+            opts = (strict = true, allowduplicates = true)
+            forms = (
+                () -> seen(DBInterface.execute(db, sql; x = 1, opts...)),
+                () -> seen(DBInterface.execute(db, sql, (x = 1,); opts...)),
+                () -> seen(DBInterface.execute(stmt; x = 1, opts...)),
+                () -> seen(DBInterface.execute(stmt, (x = 1,); opts...)),
+                () -> DBInterface.execute(seen, db, sql; x = 1, opts...),
+                () -> DBInterface.execute(seen, db, sql, (x = 1,); opts...),
+                () -> DBInterface.execute(seen, stmt; x = 1, opts...),
+                () -> DBInterface.execute(seen, stmt, (x = 1,); opts...),
+            )
+            for form in forms
+                @test form() == expected
+            end
+            close(db)
+        end
+
         @testset "Issue #353: ALTER TABLE on a STRICT table" begin
             for strict in (false, true)
                 db = SQLite.DB()
