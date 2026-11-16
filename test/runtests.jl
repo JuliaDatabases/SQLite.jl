@@ -976,6 +976,22 @@ end
     end
 
     @testset "load! / drop!" begin
+        @testset "drop! keeps other rowids and works in a transaction" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE keep (v TEXT)")
+            DBInterface.execute(db, "INSERT INTO keep VALUES ('a'), ('b'), ('c')")
+            DBInterface.execute(db, "DELETE FROM keep WHERE v = 'a'")
+            DBInterface.execute(db, "CREATE TABLE gone (x INT)")
+            SQLite.drop!(db, "gone")
+            @test columntable(DBInterface.execute(db, "SELECT rowid, v FROM keep")) ==
+                  (rowid = [2, 3], v = ["b", "c"])
+
+            DBInterface.execute(db, "CREATE TABLE gone_in_tx (x INT)")
+            DBInterface.transaction(() -> SQLite.drop!(db, "gone_in_tx"), db)
+            @test [t.name for t in SQLite.tables(db)] == ["keep"]
+            close(db)
+        end
+
         @testset "ANALYZE quotes table and index names" begin
             db = SQLite.DB()
             @test SQLite.load!((a = [1, 1, 2],), db, "my table"; analyze = true) == "my table"
