@@ -992,6 +992,16 @@ end
             close(db)
         end
 
+        @testset "load! matches existing column names ignoring case" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE people (id INTEGER, name TEXT)")
+            SQLite.load!((NAME = ["ann"], Id = [1]), db, "people")
+            @test columntable(DBInterface.execute(db, "SELECT id, name FROM people")) ==
+                  (id = [1], name = ["ann"])
+            @test_throws SQLiteException SQLite.load!((nam = ["bob"], id = [2]), db, "people")
+            close(db)
+        end
+
         @testset "ANALYZE quotes table and index names" begin
             db = SQLite.DB()
             @test SQLite.load!((a = [1, 1, 2],), db, "my table"; analyze = true) == "my table"

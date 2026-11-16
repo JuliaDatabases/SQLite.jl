@@ -350,18 +350,15 @@ function checkdupnames(names::Union{AbstractVector,Tuple})
     return true
 end
 
-# check if schema names match column names in DB
+# check if schema names match column names in DB; SQLite compares column names ignoring case
 function checknames(
     ::Tables.Schema{names},
     db_names::AbstractVector{String},
 ) where {names}
-    table_names = Set(string.(names))
-    db_names = Set(db_names)
-
-    if table_names != db_names
+    if Set(lowercase.(string.(names))) != Set(lowercase.(db_names))
         throw(
             SQLiteException(
-                "Error loading, column names from table $(collect(table_names)) do not match database names $(collect(db_names))",
+                "Error loading, column names from table $(collect(string.(names))) do not match database names $(db_names)",
             ),
         )
     end
