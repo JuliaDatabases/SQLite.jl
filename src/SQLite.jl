@@ -930,13 +930,15 @@ end
     SQLite.drop!(db, table; ifexists::Bool=false)
 
 drop the SQLite table `table` from the database `db`; `ifexists=true` will prevent an error being thrown if `table` doesn't exist
+
+The database file keeps its size. Run `VACUUM` outside a transaction to reclaim the
+space; it can renumber the rowids of tables without an `INTEGER PRIMARY KEY`.
 """
 function drop!(db::DB, table::AbstractString; ifexists::Bool = false)
     exists = ifexists ? "IF EXISTS" : ""
     transaction(db) do
         execute(db, "DROP TABLE $exists $(esc_id(table))")
     end
-    execute(db, "VACUUM")
 end
 
 """
