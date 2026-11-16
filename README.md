@@ -18,7 +18,7 @@ The package is registered in the [General registry](https://github.com/JuliaRegi
 
 ## Project Status
 
-The package is tested against Julia `1.0` and `nightly` on Linux, OS X, and Windows.
+The package is tested against Julia 1.10 (LTS), the latest release, and `nightly` on Linux, macOS, and Windows.
 
 ## Contributing and Questions
 
