@@ -309,6 +309,10 @@ Load a Tables.jl input `source` into an SQLite table that will be named `tablena
 By default, rows are appended to an existing table. The source column names must
 match the existing table, but their order may differ. Table constraints and the
 selected conflict resolution algorithm still apply.
+SQLite stores `NaN` as `NULL`, so a `NaN` reads back as `missing` from a nullable column.
+In a `NOT NULL` column, such as the one `load!` creates for a float column whose type excludes
+`Missing`, a `NaN` makes `load!` throw, unless a conflict resolution handles the `NULL`:
+`on_conflict="IGNORE"` skips the row, and `"REPLACE"` stores the column's `DEFAULT` if it has one.
 
   * `temp=true` will create a temporary SQLite table that will be destroyed automatically when the database is closed
   * `ifnotexists` is passed to `createtable!` when creating a table. It does not prevent appending to an existing table.
