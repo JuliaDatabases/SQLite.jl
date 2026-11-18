@@ -388,6 +388,7 @@ Additional methods exist for working individual SQL parameters:
 
 Integer parameters use SQLite's signed 64-bit integer range.
 Values outside the signed 64-bit range throw an `InexactError`.
+SQLite stores a bound `NaN` as `NULL`, so it reads back as `missing` and fails a `NOT NULL` constraint.
 
 From the [SQLite documentation](https://www3.sqlite.org/cintro.html):
 

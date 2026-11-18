@@ -1030,6 +1030,18 @@ end
             close(db)
         end
 
+        @testset "Issue #213: NaN is stored as NULL" begin
+            db = SQLite.DB()
+            @test_throws SQLiteException SQLite.load!((x = [1.0, NaN],), db, "required")
+            @test isempty(columntable(DBInterface.execute(db, "SELECT x FROM required")).x)
+            SQLite.load!((x = [1.0, NaN],), db, "ignored"; on_conflict = "IGNORE")
+            @test columntable(DBInterface.execute(db, "SELECT x FROM ignored")).x == [1.0]
+            SQLite.load!((x = Union{Float64,Missing}[1.0, NaN],), db, "nullable")
+            @test isequal(columntable(DBInterface.execute(db, "SELECT x FROM nullable")).x, [1.0, missing])
+            @test isequal(columntable(DBInterface.execute(db, "SELECT ? AS v", (NaN,))).v, [missing])
+            close(db)
+        end
+
         @testset "ANALYZE quotes table and index names" begin
             db = SQLite.DB()
             @test SQLite.load!((a = [1, 1, 2],), db, "my table"; analyze = true) == "my table"
