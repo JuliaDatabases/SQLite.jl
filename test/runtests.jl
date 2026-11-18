@@ -151,7 +151,7 @@ end
         end
 
         @testset "Julia to SQLite3 type conversion" begin
-            @test SQLite.sqlitetype(Int) == "INT NOT NULL"
+            @test SQLite.sqlitetype(Int) == "INTEGER NOT NULL"
             @test SQLite.sqlitetype(Union{Float64,Missing}) == "REAL"
             @test SQLite.sqlitetype(String) == "TEXT NOT NULL"
             @test SQLite.sqlitetype(Symbol) == "BLOB NOT NULL"
@@ -999,6 +999,34 @@ end
             @test columntable(DBInterface.execute(db, "SELECT id, name FROM people")) ==
                   (id = [1], name = ["ann"])
             @test_throws SQLiteException SQLite.load!((nam = ["bob"], id = [2]), db, "people")
+            close(db)
+        end
+
+        @testset "Issue #286: primarykey keyword" begin
+            db = SQLite.DB()
+            SQLite.load!((id = [10, 20], v = ["a", "b"]), db, "single"; primarykey = :id)
+            @test columntable(DBInterface.execute(db, "SELECT rowid AS r, id FROM single ORDER BY id")) ==
+                  (r = [10, 20], id = [10, 20])
+            @test_throws SQLiteException SQLite.load!((id = [10], v = ["c"]), db, "single"; primarykey = "id")
+
+            sch = Tables.Schema((:a, :b, :c), (Int, String, Union{Bool,Missing}))
+            SQLite.createtable!(db, "pair", sch; primarykey = [:a, "b"])
+            info = SQLite.columns(db, "pair")
+            @test info.type == ["INTEGER", "TEXT", "INTEGER"]
+            @test info.pk == [1, 2, 0]
+            @test Tables.schema(DBInterface.execute(db, "SELECT a FROM pair")).types == (Union{Int64,Missing},)
+
+            @test_throws ArgumentError SQLite.createtable!(db, "bad", sch; primarykey = :d)
+            @test_throws ArgumentError SQLite.load!((a = [1],), db, "bad"; primarykey = [:a, :b])
+            @test "bad" ∉ [t.name for t in SQLite.tables(db)]
+
+            # appending checks the existing key, matching names ignoring case like SQLite
+            SQLite.load!((id = [30], v = ["c"]), db, "single"; primarykey = :ID)
+            @test_throws ArgumentError SQLite.load!((id = [40], v = ["d"]), db, "single"; primarykey = :v)
+            DBInterface.execute(db, "CREATE TABLE nokey (id INTEGER)")
+            @test_throws ArgumentError SQLite.load!((id = [1],), db, "nokey"; primarykey = :id)
+            @test columntable(DBInterface.execute(db, "SELECT id FROM single")).id == [10, 20, 30]
+            @test isempty(columntable(DBInterface.execute(db, "SELECT id FROM nokey")).id)
             close(db)
         end
 
