@@ -237,13 +237,16 @@ DBInterface.execute(f::Base.Callable, db::DB, sql::AbstractString; allowduplicat
     DBInterface.execute(f, db, sql, values(params); allowduplicates, strict)
 
 """
-    SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true, strict=false)
+    SQLite.createtable!(db::SQLite.DB, table_name, schema::Tables.Schema; temp=false, ifnotexists=true, strict=false, primarykey=nothing)
 
 Create a table in `db` with name `table_name`, according to `schema`, which is a set of column names and types, constructed like `Tables.Schema(names, types)`
 where `names` can be a vector or tuple of String/Symbol column names, and `types` is a vector or tuple of sqlite-compatible types (`Int`, `Float64`, `String`, or unions of `Missing`).
 
 If `temp=true`, the table will be created temporarily, which means it will be deleted when the `db` is closed.
 If `ifnotexists=true`, no error will be thrown if the table already exists.
+`primarykey` names the primary key column as a `Symbol` or `String`, or takes a vector of names for a composite key.
+Names match columns ignoring case, as in SQLite, and a name that isn't in `schema` throws an `ArgumentError`.
+Integer columns are declared `INTEGER`, so a single integer primary key column is SQLite's [rowid alias](https://www.sqlite.org/lang_createtable.html#rowid).
 """
 function createtable!(
     db::DB,
@@ -251,8 +254,10 @@ function createtable!(
     ::Tables.Schema{names,types};
     temp::Bool = false,
     ifnotexists::Bool = true,
-    strict::Bool = false
+    strict::Bool = false,
+    primarykey::Union{Nothing,Symbol,AbstractString,AbstractVector} = nothing,
 ) where {names,types}
+    pk = primarykeynames(primarykey, names)
     temp = temp ? "TEMP" : ""
     ifnotexists = ifnotexists ? "IF NOT EXISTS" : ""
     columns = [
@@ -262,8 +267,22 @@ function createtable!(
             sqlitetype(types !== nothing ? fieldtype(types, i) : Any),
         ) for i in eachindex(names)
     ]
+    isempty(pk) || push!(columns, "PRIMARY KEY ($(esc_id(pk)))")
     sql = "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ','))) $(strict ? "STRICT" : "")"
     return execute(db, sql)
+end
+
+# `primarykey` as a vector of column names, each checked against the schema `names`
+function primarykeynames(primarykey, names)
+    primarykey === nothing && return String[]
+    pk = primarykey isa Union{Symbol,AbstractString} ? [string(primarykey)] : string.(primarykey)
+    lcnames = lowercase.(string.(names))
+    for col in pk
+        lowercase(col) in lcnames || throw(
+            ArgumentError("primary key column $col is not in the table columns $(collect(string.(names)))"),
+        )
+    end
+    return pk
 end
 
 # table info for load!():
@@ -283,8 +302,8 @@ function tableinfo(db::DB, name::AbstractString)
 end
 
 """
-    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
-    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false)
+    source |> SQLite.load!(db::SQLite.DB, tablename::String; temp::Bool=false, ifnotexists::Bool=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false, primarykey=nothing)
+    SQLite.load!(source, db, tablename; temp=false, ifnotexists=false, replace::Bool=false, on_conflict::Union{String, Nothing} = nothing, analyze::Bool=false, primarykey=nothing)
 
 Load a Tables.jl input `source` into an SQLite table that will be named `tablename` (will be auto-generated if not specified).
 By default, rows are appended to an existing table. The source column names must
@@ -296,6 +315,7 @@ selected conflict resolution algorithm still apply.
   * `on_conflict=nothing` allows to specify an alternative [constraint conflict resolution algorithm](https://sqlite.org/lang_conflict.html): "ABORT", "FAIL", "IGNORE", "REPLACE", or "ROLLBACK".
   * `replace=false` controls whether an `INSERT INTO ...` statement is generated or a `REPLACE INTO ...`. This keyword argument exists for backward compatibility, and is overridden if an algorithm is selected using the `on_conflict` keyword.
   * `analyze=true` will execute `ANALYZE` at the end of the insert
+  * `primarykey` is passed to `createtable!` when creating a table. If the table exists, it must name the table's primary key columns, in any order, or `load!` throws an `ArgumentError` before inserting any rows.
 
 ```jldoctest
 julia> db = SQLite.DB();
@@ -365,6 +385,15 @@ function checknames(
     return true
 end
 
+# check that `pk` names the existing table's primary key columns, ignoring order and case
+function checkprimarykey(pk::Vector{String}, db_tableinfo::NamedTuple)
+    existing = [col for (col, k) in zip(db_tableinfo.name, db_tableinfo.pk) if k > 0]
+    Set(lowercase.(pk)) == Set(lowercase.(existing)) || throw(
+        ArgumentError("primarykey $pk doesn't match the existing table's primary key $existing"),
+    )
+    return true
+end
+
 function load!(
     sch::Tables.Schema,
     rows,
@@ -379,14 +408,17 @@ function load!(
     on_conflict::Union{String,Nothing} = nothing,
     replace::Bool = false,
     analyze::Bool = false,
+    primarykey::Union{Nothing,Symbol,AbstractString,AbstractVector} = nothing,
 )
     # check for case-insensitive duplicate column names (sqlite doesn't allow)
     checkdupnames(sch.names)
+    pk = primarykeynames(primarykey, sch.names)
     # check if `rows` column names match the existing table, or create the new one
     if db_tableinfo !== nothing
         checknames(sch, db_tableinfo.name)
+        isempty(pk) || checkprimarykey(pk, db_tableinfo)
     else
-        createtable!(db, name, sch; temp = temp, ifnotexists = ifnotexists, strict = strict)
+        createtable!(db, name, sch; temp = temp, ifnotexists = ifnotexists, strict = strict, primarykey = pk)
     end
     # build insert statement
     columns = join(esc_id.(string.(sch.names)), ",")
