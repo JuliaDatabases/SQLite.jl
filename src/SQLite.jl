@@ -727,10 +727,10 @@ function sqlitevalue(::Type{T}, handle, col) where {T}
 end
 
 # conversion from Julia to SQLite3 types
-sqlitetype_(::Type{<:Integer}) = "INT"
+# `INTEGER`, not `INT`, so that a single integer primary key is SQLite's rowid alias
+sqlitetype_(::Type{<:Integer}) = "INTEGER"
 sqlitetype_(::Type{<:AbstractFloat}) = "REAL"
 sqlitetype_(::Type{<:AbstractString}) = "TEXT"
-sqlitetype_(::Type{Bool}) = "INT"
 sqlitetype_(::Type) = "BLOB" # fallback
 
 sqlitetype(::Type{Missing}) = "NULL"
