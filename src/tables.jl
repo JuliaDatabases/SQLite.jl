@@ -160,7 +160,17 @@ function Tables.getcolumn(r::Row, ::Type{T}, i::Int, nm::Symbol) where {T}
 end
 
 function Tables.getcolumn(r::Row, i::Int)
-    Tables.getcolumn(r, getquery(r).types[i], i, getquery(r).names[i])
+    q = getquery(r)
+    T = q.types[i]
+    n = getfield(r, :rownumber)
+    # A call that dispatches on a runtime `Union` type searches the method cache for every value,
+    # so the column types that declared types and raw BLOBs give get static calls.
+    T === Union{Missing,Int64} && return getvalue(q, i, n, Union{Missing,Int64})
+    T === Union{Missing,Float64} && return getvalue(q, i, n, Union{Missing,Float64})
+    T === Union{Missing,String} && return getvalue(q, i, n, Union{Missing,String})
+    T === Union{Missing,Vector{UInt8}} && return getvalue(q, i, n, Union{Missing,Vector{UInt8}})
+    T === Any && return getvalue(q, i, n, Any)
+    return getvalue(q, i, n, T)
 end
 # non-strict values don't depend on the column type; skip dispatching on it
 Tables.getcolumn(r::Row{false}, i::Int) = getvalue(getquery(r), i, getfield(r, :rownumber), Any)
