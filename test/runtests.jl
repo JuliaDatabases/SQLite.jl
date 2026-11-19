@@ -74,6 +74,22 @@ function Base.iterate(::UnknownSchemaTable, st = 1)
     st == 4 ? nothing : ((a = 1, b = 2 + st, c = 3 + st), st + 1)
 end
 
+# An AbstractString stored as UTF-16 code units, so its sizeof is not its UTF-8 byte count.
+struct UTF16Str <: AbstractString
+    units::Vector{UInt16}
+end
+UTF16Str(s::String) = UTF16Str(transcode(UInt16, s))
+Base.ncodeunits(s::UTF16Str) = length(s.units)
+Base.codeunit(::UTF16Str) = UInt16
+Base.codeunit(s::UTF16Str, i::Integer) = s.units[i]
+Base.isvalid(s::UTF16Str, i::Int) = checkbounds(Bool, s.units, i) && !(0xdc00 <= s.units[i] <= 0xdfff)
+function Base.iterate(s::UTF16Str, i::Int = 1)
+    i > length(s.units) && return nothing
+    c = s.units[i]
+    0xd800 <= c <= 0xdbff || return (Char(c), i + 1)
+    return (Char(0x10000 + ((UInt32(c) - 0xd800) << 10) + (s.units[i+1] - 0xdc00)), i + 2)
+end
+
 @testset "SQLite" begin
     @testset "type conversion" begin
         @testset "Integer parameters (issue #313)" begin
@@ -148,6 +164,16 @@ end
             for result in saved_values
                 @test isequal(result, values)
             end
+        end
+
+        @testset "TEXT from a string whose code units are not UTF-8 bytes" begin
+            db = SQLite.DB()
+            v = UTF16Str("héllo🚀")
+            SQLite.register(db, () -> v; nargs = 0, name = "utf16")
+            r = only(Tables.rowtable(DBInterface.execute(db, "SELECT ?1 AS bound, utf16() AS returned", (v,))))
+            @test r.bound == "héllo🚀"
+            @test r.returned == "héllo🚀"
+            close(db)
         end
 
         @testset "Julia to SQLite3 type conversion" begin
