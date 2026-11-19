@@ -683,7 +683,7 @@ function juliatype(decl_typestr::AbstractString, default::Type = Any)
         return Float64
     elseif typeuc == "TEXT"
         return String
-    elseif typeuc == "BLOB"
+    elseif typeuc == "BLOB" || typeuc == "ANY" # ANY: a STRICT table column of any storage class
         return Any
     elseif typeuc == "DATETIME"
         return default # FIXME

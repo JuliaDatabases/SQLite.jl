@@ -247,6 +247,7 @@ If `ifnotexists=true`, no error will be thrown if the table already exists.
 `primarykey` names the primary key column as a `Symbol` or `String`, or takes a vector of names for a composite key.
 Names match columns ignoring case, as in SQLite, and a name that isn't in `schema` throws an `ArgumentError`.
 Integer columns are declared `INTEGER`, so a single integer primary key column is SQLite's [rowid alias](https://www.sqlite.org/lang_createtable.html#rowid).
+`strict=true` creates a [STRICT table](https://www.sqlite.org/stricttables.html); there, columns that would be declared `BLOB`, or that hold only `missing`, are declared `ANY`, so they keep each value's type.
 """
 function createtable!(
     db::DB,
@@ -264,13 +265,17 @@ function createtable!(
         string(
             esc_id(String(names[i])),
             ' ',
-            sqlitetype(types !== nothing ? fieldtype(types, i) : Any),
+            columntype(types !== nothing ? fieldtype(types, i) : Any, strict),
         ) for i in eachindex(names)
     ]
     isempty(pk) || push!(columns, "PRIMARY KEY ($(esc_id(pk)))")
     sql = "CREATE $temp TABLE $ifnotexists $(esc_id(string(name))) ($(join(columns, ','))) $(strict ? "STRICT" : "")"
     return execute(db, sql)
 end
+
+# STRICT tables have no NULL type, and a STRICT BLOB column rejects the numbers and text that
+# `Missing`, `Any`, and `Union` columns hold; ANY stores each value as given, as BLOB affinity does.
+columntype(T, strict::Bool) = strict ? replace(sqlitetype(T), r"^(BLOB|NULL)" => "ANY") : sqlitetype(T)
 
 # `primarykey` as a vector of column names, each checked against the schema `names`
 function primarykeynames(primarykey, names)
