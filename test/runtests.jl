@@ -1621,6 +1621,16 @@ end
         @testset "NULL value" begin
             @test roundtrip(missing) === missing
         end
+
+        @testset "Results store natively when every value of their type fits" begin
+            for (v, storage, plus1) in ((Int8(-3), "integer", -2), (typemax(UInt32), "integer", 4294967296),
+                                        (1.5f0, "real", 2.5), (Float16(0.5), "real", 1.5), (nothing, "null", missing))
+                SQLite.register(db, () -> v; nargs = 0, name = "constant")
+                r = only(Tables.rowtable(DBInterface.execute(db, "SELECT typeof(constant()) AS t, constant() + 1 AS p")))
+                @test r.t == storage
+                @test isequal(r.p, plus1)
+            end
+        end
     end
 
     @testset "serialization" begin
