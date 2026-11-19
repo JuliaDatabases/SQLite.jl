@@ -280,12 +280,14 @@ mutable struct Stmt <: DBInterface.Statement
     stmt_wrapper::StmtWrapper
     # used for holding references to bound statement values via bind!
     params::Dict{Int,Any}
+    # current row number of the newest query on this statement; -1 once its run has ended
+    cursor::Base.RefValue{Int}
 
     function Stmt(db::DB, stmt_wrapper::StmtWrapper; register::Bool = true)
         if register
             Base.@lock db.lock db.stmt_wrappers[stmt_wrapper] = nothing
         end
-        stmt = new(db, stmt_wrapper, Dict{Int,Any}())
+        stmt = new(db, stmt_wrapper, Dict{Int,Any}(), Ref(-1))
         finalizer(_finalize!, stmt)
         return stmt
     end
@@ -304,6 +306,7 @@ isready(stmt::Stmt) = _get_stmt_handle(stmt) != C_NULL
 
 function _close_stmt!(stmt::Stmt)
     Base.@lock stmt.db.lock begin
+        stmt.cursor[] = -1
         handle = _get_stmt_handle(stmt)
         _set_stmt_handle(stmt, C_NULL)
         delete!(stmt.db.stmt_wrappers, stmt.stmt_wrapper)
@@ -757,6 +760,7 @@ function execute end
 
 function execute(db::DB, stmt::Stmt, params::DBInterface.StatementParams = ())
     Base.@lock db.lock begin
+        stmt.cursor[] = -1 # a new run ends the previous query's rows
         handle = _get_stmt_handle(stmt)
         C.sqlite3_reset(handle)
         bind!(stmt, params)
