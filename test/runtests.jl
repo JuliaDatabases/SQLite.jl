@@ -739,6 +739,39 @@ end
             row2, st = iterate(q, st)
             @test_throws ArgumentError row.a
         end
+
+        @testset "Issue #251: rows of a finished, closed, or re-run query are invalid" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE t (id INTEGER, x INTEGER)")
+            DBInterface.executemany(db, "INSERT INTO t VALUES (?, ?)", ([1, 1, 2], [10, 11, 20]))
+            @test_throws ArgumentError only(DBInterface.execute(db, "SELECT 123 AS x")).x
+            @test_throws ArgumentError last(collect(DBInterface.execute(db, "SELECT x FROM t"))).x
+            @test_throws ArgumentError DBInterface.execute(first, db, "SELECT x FROM t").x
+            q = DBInterface.execute(db, "SELECT x FROM t")
+            row = first(q)
+            DBInterface.close!(q)
+            @test_throws ArgumentError row.x
+
+            stmt = DBInterface.prepare(db, "SELECT x FROM t WHERE id = ? ORDER BY x")
+            q1 = DBInterface.execute(stmt, (1,))
+            row = first(q1)
+            q2 = DBInterface.execute(stmt, (2,))
+            @test_throws ArgumentError row.x
+            @test_throws ArgumentError columntable(q1)
+            DBInterface.close!(q1)
+            @test columntable(q2).x == [20]
+            SQLite.reset!(q1)
+            @test columntable(q1).x == [10, 11]
+
+            q = DBInterface.execute(stmt, (1,))
+            row = first(q)
+            DBInterface.close!(stmt)
+            @test_throws ArgumentError row.x
+            q = DBInterface.execute(db, "SELECT x FROM t")
+            row = first(q)
+            close(db)
+            @test_throws ArgumentError row.x
+        end
     end
 
     @testset "transactions" begin
