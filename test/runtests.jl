@@ -1307,6 +1307,8 @@ end
             r = columntable(DBInterface.execute(db, "SELECT * FROM t"))
             @test isequal(r.m, tbl.m) && r.a == tbl.a && r.u == tbl.u && r.d == tbl.d
             @test only(columntable(DBInterface.execute(db, "SELECT strict FROM pragma_table_list('t')")).strict) == 1
+            r = columntable(DBInterface.execute(DBInterface.prepare(db, "SELECT a, u FROM t"), (); strict = true))
+            @test r.a == tbl.a && r.u == tbl.u
             close(db)
         end
 
