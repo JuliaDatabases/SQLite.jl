@@ -1253,7 +1253,7 @@ end
         @test isequal(columntable(DBInterface.execute(db, "SELECT x FROM mixed")).x, expected)
         # strict rows read through each column's inferred type
         row = first(DBInterface.execute(DBInterface.prepare(db, "SELECT 1 AS i, 1.5 AS f"), (); strict = true))
-        @test row.i === 1 && row.f === 1.5
+        @test row.i === Int64(1) && row.f === 1.5
         close(db)
     end
 
@@ -1613,10 +1613,9 @@ end
         # registered `identity` UDF forces every argument through sqlvalue on
         # the way in and sqlreturn on the way out, so `roundtrip(x)` exercises
         # both marshalling directions for a single value and lets us assert
-        # exact round-trip equality. The Int64-boundary cases in particular
-        # cover the `Sys.WORD_SIZE == 64` branch of sqlvalue: on a 64-bit build
-        # the value must be read with sqlite3_value_int64; sqlite3_value_int
-        # would silently truncate anything outside the Int32 range.
+        # exact round-trip equality. The Int64-boundary cases fail if sqlvalue
+        # reads integers with sqlite3_value_int, which truncates anything outside
+        # the Int32 range, on any platform.
         db = SQLite.DB()
         SQLite.register(db, identity; nargs = 1, name = "roundtrip")
 
