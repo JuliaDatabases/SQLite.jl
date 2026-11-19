@@ -8,7 +8,8 @@ struct Query{strict} <: DBInterface.Cursor
     names::Vector{Symbol}
     types::Vector{Type}
     lookup::Dict{Symbol,Int}
-    current_rownumber::Base.RefValue{Int}
+    current_rownumber::Base.RefValue{Int} # -1 once the run ended or another query reran `stmt`
+    params::DBInterface.StatementParams
 end
 
 # check if the query has no (more) rows
@@ -51,18 +52,24 @@ Base.IteratorSize(::Type{<:Query}) = Base.SizeUnknown()
 Base.eltype(q::Query) = Row
 
 function reset!(q::Query)
-    Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
-    q.status[] = execute(q.stmt)
+    q.status[] = execute(q.stmt, q.params)
+    q.current_rownumber[] = 0
+    q.stmt.cursor = q.current_rownumber
+    return q.status[]
 end
 
 function DBInterface.close!(q::Query)
+    # Once the run has ended, the statement may belong to a newer query.
+    q.current_rownumber[] < 0 && return
+    q.current_rownumber[] = -1
     Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
+    return
 end
 
 function done(q::Query)
     st = q.status[]
     if st == C.SQLITE_DONE
-        Base.@lock q.stmt.db.lock C.sqlite3_reset(_get_stmt_handle(q.stmt))
+        DBInterface.close!(q)
         return true
     end
     st == C.SQLITE_ROW || sqliteerror(q.stmt.db)
@@ -77,14 +84,29 @@ end
     )
 end
 
+@noinline function wrongquery()
+    throw(
+        ArgumentError(
+            "query results are no longer valid; the query was closed or its statement was closed or executed again; re-execute the query",
+        ),
+    )
+end
+
+# The statement handle, if row `rownumber` is still the current row of `q`.
+@inline function rowhandle(q::Query, rownumber::Int)
+    handle = _get_stmt_handle(q.stmt)
+    # Closing the database finalizes the handle without visiting its queries.
+    (rownumber == q.current_rownumber[] && handle != C_NULL) || wrongrow(rownumber)
+    return handle
+end
+
 function getvalue(
     q::Query{true},
     col::Int,
     rownumber::Int,
     ::Type{T},
 )::Union{Missing,nonmissingtype(T)} where {T}
-    rownumber == q.current_rownumber[] || wrongrow(rownumber)
-    handle = _get_stmt_handle(q.stmt)
+    handle = rowhandle(q, rownumber)
     t = C.sqlite3_column_type(handle, col - 1)
     if t == C.SQLITE_NULL
         return missing
@@ -100,8 +122,7 @@ function getvalue(
     rownumber::Int,
     ::Type{T},
 ) where {T}
-    rownumber == q.current_rownumber[] || wrongrow(rownumber)
-    handle = _get_stmt_handle(q.stmt)
+    handle = rowhandle(q, rownumber)
     t = C.sqlite3_column_type(handle, col - 1)
     # branch on the storage class so each read is a static call
     t == C.SQLITE_NULL && return missing
@@ -127,11 +148,13 @@ Tables.columnnames(r::Row) = Tables.columnnames(getquery(r))
 
 function Base.iterate(q::Query)
     done(q) && return nothing
+    q.current_rownumber[] < 0 && wrongquery()
     q.current_rownumber[] = 1
     return Row(q, 1), 2
 end
 
 @inline function Base.iterate(q::Query, rownumber)
+    q.current_rownumber[] < 0 && wrongquery()
     q.status[] = Base.@lock q.stmt.db.lock C.sqlite3_step(_get_stmt_handle(q.stmt))
     done(q) && return nothing
     q.current_rownumber[] = rownumber
@@ -153,7 +176,9 @@ The callback forms `DBInterface.execute(f, db, sql, ...)` and `DBInterface.execu
 By default, a repeated column name gets a suffix (`a`, `a_1`, `a_2`); `allowduplicates=true` keeps the names as SQLite reports them.
 
 Note that the returned result row iterator only supports a single-pass, forward-only iteration of the result rows.
-Calling `SQLite.reset!(result)` will re-execute the query and reset the iterator back to the beginning.
+A row is readable only while it is the current row: reading a row after the iterator moves past it, after the results
+are closed, or after `stmt` is executed again or closed throws an `ArgumentError`.
+Calling `SQLite.reset!(result)` will re-execute the query with its parameters and reset the iterator back to the beginning.
 
 The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tables.jl) interface, so results can be collected in any Tables.jl-compatible sink,
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
@@ -187,13 +212,15 @@ function DBInterface.execute(
         type = Base.@lock stmt.db.lock juliatype(handle, i, strict && status == C.SQLITE_ROW)
         types[i] = Union{type,Missing}
     end
+    stmt.cursor = Ref(0)
     return Query{strict}(
         stmt,
         Ref(status),
         header,
         types,
         Dict(x => i for (i, x) in enumerate(header)),
-        Ref(0),
+        stmt.cursor,
+        params,
     )
 end
 
