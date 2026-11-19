@@ -502,37 +502,44 @@ function load!(
         "$kind INTO $(esc_id(string(name))) ($columns) VALUES ($params)";
         register = false,
     )
-    handle = _get_stmt_handle(stmt)
     # start a transaction for inserting rows
     try
         DBInterface.transaction(db) do
-            if row === nothing
-                state = iterate(rows)
-                state === nothing && return
-                row, st = state
-            end
-            while true
-                Tables.eachcolumn(sch, row) do val, col, _
-                    bind!(stmt, col, val)
-                end
-                r = Base.@lock db.lock GC.@preserve row C.sqlite3_step(handle)
-                if r == C.SQLITE_DONE
-                    Base.@lock db.lock C.sqlite3_reset(handle)
-                elseif r != C.SQLITE_ROW
-                    e = sqliteexception(db, stmt)
-                    Base.@lock db.lock C.sqlite3_reset(handle)
-                    throw(e)
-                end
-                state = iterate(rows, st)
-                state === nothing && break
-                row, st = state
-            end
+            insertrows!(stmt, sch, rows, row, st)
         end
     finally
         _close_stmt!(stmt)
     end
     analyze && execute(db, "ANALYZE $(esc_id(name))")
     return name
+end
+
+# Insert each row of `rows` with `stmt`, starting at `row` and iteration state `st` if given.
+# The loop sits outside the transaction closure, because a closure that reassigns `row` and `st` boxes them.
+function insertrows!(stmt::Stmt, sch::Tables.Schema, rows, row, st)
+    if row === nothing
+        state = iterate(rows)
+        state === nothing && return
+        row, st = state
+    end
+    db = stmt.db
+    handle = _get_stmt_handle(stmt)
+    while true
+        Tables.eachcolumn(sch, row) do val, col, _
+            bind!(stmt, col, val)
+        end
+        r = Base.@lock db.lock GC.@preserve row C.sqlite3_step(handle)
+        if r == C.SQLITE_DONE
+            Base.@lock db.lock C.sqlite3_reset(handle)
+        elseif r != C.SQLITE_ROW
+            e = sqliteexception(db, stmt)
+            Base.@lock db.lock C.sqlite3_reset(handle)
+            throw(e)
+        end
+        state = iterate(rows, st)
+        state === nothing && return
+        row, st = state
+    end
 end
 
 # unknown schema case
