@@ -1355,6 +1355,10 @@ end
             rows = [(Tables.getcolumn(r, 1), r.f, r.s, r.b, r.n, r.a) for r in DBInterface.execute(stmt, (); strict = true)]
             @test isequal(rows, [(1, 1.5, "x", UInt8[1], 2.0, 7), (missing, missing, missing, missing, 3.0, "any")])
             @test rows[1][1] isa Int64 && rows[1][5] isa Float64
+            # a serialized Julia type takes the dynamically dispatched read
+            SQLite.load!((d = [Date(2020, 1, 2), missing],), db, "dates")
+            dq = DBInterface.execute(DBInterface.prepare(db, "SELECT d FROM dates ORDER BY rowid"), (); strict = true)
+            @test isequal([r.d for r in dq], [Date(2020, 1, 2), missing])
             DBInterface.execute(db, "INSERT INTO t (i, f, s) VALUES (2.5, 'y', x'02')")
             for col in ("i", "f", "s")
                 q = DBInterface.execute(DBInterface.prepare(db, "SELECT $col FROM t ORDER BY rowid"), (); strict = true)
