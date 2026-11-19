@@ -1347,6 +1347,26 @@ end
             @test isequal(tbl.x, [1, "txt", UInt8[0x01, 0x02], missing])
         end
 
+        @testset "Strict rows read each column type by index and by name" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE t (i INTEGER, f REAL, s TEXT, b BLOB, n NUMERIC, a BLOB)")
+            DBInterface.execute(db, "INSERT INTO t VALUES (1, 1.5, 'x', x'01', 2, 7), (NULL, NULL, NULL, NULL, 3, 'any')")
+            stmt = DBInterface.prepare(db, "SELECT * FROM t ORDER BY rowid")
+            rows = [(Tables.getcolumn(r, 1), r.f, r.s, r.b, r.n, r.a) for r in DBInterface.execute(stmt, (); strict = true)]
+            @test isequal(rows, [(1, 1.5, "x", UInt8[1], 2.0, 7), (missing, missing, missing, missing, 3.0, "any")])
+            @test rows[1][1] isa Int64 && rows[1][5] isa Float64
+            # a serialized Julia type takes the dynamically dispatched read
+            SQLite.load!((d = [Date(2020, 1, 2), missing],), db, "dates")
+            dq = DBInterface.execute(DBInterface.prepare(db, "SELECT d FROM dates ORDER BY rowid"), (); strict = true)
+            @test isequal([r.d for r in dq], [Date(2020, 1, 2), missing])
+            DBInterface.execute(db, "INSERT INTO t (i, f, s) VALUES (2.5, 'y', x'02')")
+            for col in ("i", "f", "s")
+                q = DBInterface.execute(DBInterface.prepare(db, "SELECT $col FROM t ORDER BY rowid"), (); strict = true)
+                @test_throws ArgumentError [Tables.getcolumn(r, 1) for r in q]
+            end
+            close(db)
+        end
+
         @testset "Strict values of another storage class convert only when exact" begin
             db = SQLite.DB()
             strict(sql) = columntable(DBInterface.execute(DBInterface.prepare(db, sql), (); strict = true))
