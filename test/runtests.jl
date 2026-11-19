@@ -1321,6 +1321,25 @@ end
             @test isequal(tbl.x, [1, "txt", UInt8[0x01, 0x02], missing])
         end
 
+        @testset "Strict values of another storage class convert only when exact" begin
+            db = SQLite.DB()
+            strict(sql) = columntable(DBInterface.execute(DBInterface.prepare(db, sql), (); strict = true))
+            DBInterface.execute(db, "CREATE TABLE t (n NUMERIC, x)")
+            DBInterface.execute(db, "INSERT INTO t VALUES (1.5, 1), (3, 2.0)")
+            tbl = strict("SELECT n, x FROM t ORDER BY rowid")
+            @test tbl.n == [1.5, 3.0] && eltype(tbl.n) == Union{Missing,Float64}
+            @test tbl.x == [1, 2] && eltype(tbl.x) == Union{Missing,Int64}
+            # non-STRICT tables store any value in any column; none may change silently
+            DBInterface.execute(db, "CREATE TABLE bad (i INTEGER, n NUMERIC, s TEXT)")
+            for (col, v) in (("i", 2.5), ("i", "abc"), ("i", ""), ("n", 2^53 + 1), ("s", UInt8[1]))
+                DBInterface.execute(db, "DELETE FROM bad")
+                DBInterface.execute(db, "INSERT INTO bad ($col) VALUES (?), (?)", (col == "s" ? "a" : 1, v))
+                @test_throws ArgumentError strict("SELECT $col FROM bad ORDER BY rowid")
+                @test isequal(columntable(DBInterface.execute(db, "SELECT $col FROM bad ORDER BY rowid"))[1][2], v)
+            end
+            close(db)
+        end
+
         @testset "PR #343: strict (and only strict) tables should error if types don't match" begin
             db = SQLite.DB()
 

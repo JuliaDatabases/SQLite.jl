@@ -113,7 +113,30 @@ function getvalue(
     end
     S = nonmissingtype(T)
     # An `Any` column holds values of several storage classes; read each by its own.
-    sqlitevalue(S === Any ? juliatype(t) : S, handle, col)
+    S === Any && return sqlitevalue(juliatype(t), handle, col)
+    t == storageclass(S) && return sqlitevalue(S, handle, col)
+    return convertexact(S, sqlitevalue(juliatype(t), handle, col), q, col, rownumber)
+end
+
+# The storage class of the values `sqlitevalue(T, ...)` reads without conversion
+storageclass(::Type{Int64}) = C.SQLITE_INTEGER
+storageclass(::Type{Float64}) = C.SQLITE_FLOAT
+storageclass(::Type{String}) = C.SQLITE_TEXT
+storageclass(::Type) = C.SQLITE_BLOB
+
+# Outside STRICT tables any column can hold any storage class. A strict result converts
+# such a value to the column type only when nothing changes, e.g. integer 3 in a NUMERIC column.
+@noinline function convertexact(::Type{S}, v, q::Query, col::Int, rownumber::Int) where {S}
+    v isa S && return v
+    x = try
+        convert(S, v)
+    catch
+        nothing
+    end
+    x !== nothing && x == v && return x
+    throw(ArgumentError(
+        "strict query column $(q.names[col]) has type $S, but row $rownumber holds a $(typeof(v)); use strict=false to read each value with its own type",
+    ))
 end
 
 function getvalue(
@@ -184,6 +207,8 @@ The resultset iterator supports the [Tables.jl](https://github.com/JuliaData/Tab
 like `DataFrame(results)`, `CSV.write("results.csv", results)`, etc.
 
 Passing `strict=true` to `DBInterface.execute` will cause the resultset iterator to return values of the exact type specified by SQLite.
+Outside STRICT tables a column can hold values of any type; such a value converts to the column type only when
+the conversion is exact, like integer `3` in a `NUMERIC` column read as `3.0`, and otherwise reading it throws an `ArgumentError`.
 While more type-stable, determining the exact types of the results can be more expensive as it will iterate through each column to find the first non-NULL value to determine the type.
 """
 function DBInterface.execute(
