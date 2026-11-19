@@ -278,7 +278,7 @@ With `register=false`, the caller remains responsible for closing the statement.
 mutable struct Stmt <: DBInterface.Statement
     db::DB
     stmt_wrapper::StmtWrapper
-    # used for holding references to bound statement values via bind!
+    # bound text and BLOB values, kept alive while SQLite reads them in place
     params::Dict{Int,Any}
     # current row number of the newest query on this statement; -1 once its run has ended
     cursor::Base.RefValue{Int}
@@ -475,7 +475,6 @@ end
 
 # binding method for internal _Stmt class
 function bind!(stmt::Stmt, i::Integer, val::AbstractFloat)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_double(
         _get_stmt_handle(stmt),
         i,
@@ -483,20 +482,16 @@ function bind!(stmt::Stmt, i::Integer, val::AbstractFloat)
     )
 end
 function bind!(stmt::Stmt, i::Integer, val::Int32)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, val)
 end
 function bind!(stmt::Stmt, i::Integer, val::Int64)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int64(_get_stmt_handle(stmt), i, val)
 end
 bind!(stmt::Stmt, i::Integer, val::Integer) = bind!(stmt, i, Int64(val))
 function bind!(stmt::Stmt, i::Integer, val::Missing)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
 end
 function bind!(stmt::Stmt, i::Integer, val::Nothing)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
 end
 # `val` converted for a `Ptr{Cchar}` argument, and the length of its UTF-8 text in bytes.
@@ -539,7 +534,6 @@ function bind!(stmt::Stmt, i::Integer, val::WeakRefString{UInt16})
     )
 end
 function bind!(stmt::Stmt, i::Integer, val::Bool)
-    stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_int(_get_stmt_handle(stmt), i, Int32(val))
 end
 function bind!(stmt::Stmt, i::Integer, val::Vector{UInt8})
