@@ -1636,6 +1636,23 @@ end
             @test first(r.b) == []
         end
 
+        @testset "Values serialized by another Julia version" begin
+            db = SQLite.DB()
+            DBInterface.execute(db, "CREATE TABLE s (v BLOB)")
+            # Date(2020, 1, 2) as load! stored it on Julia 1.10 (Serialization format 24)
+            jl110 = hex2bytes("374a4c18040000003410010a53657269616c697a65641f0bd994f24ac26b22a7f45f72b0cd19a80a010653514c6974654434100104446174651f0b6ae0329409dcfb984559913870cae2ad0105446174657344341001095554496e7374616e741f0b6ae0329409dcfb984559913870cae2ad0105446174657344010000001001034461791f0b6ae0329409dcfb984559913870cae2ad0105446174657344342c05003192400b00")
+            # a format newer than any Julia reads
+            future = SQLite.sqlserialize(:x)
+            future[4] = 0xff
+            for v in (jl110, future)
+                DBInterface.execute(db, "INSERT INTO s VALUES (?)", (v,))
+            end
+            stmt = DBInterface.prepare(db, "SELECT v FROM s WHERE rowid = ?")
+            @test only(columntable(DBInterface.execute(stmt, (1,))).v) === Date(2020, 1, 2)
+            @test_throws SQLite.SerializeError columntable(DBInterface.execute(stmt, (2,)))
+            close(db)
+        end
+
         @testset "ReinterpretArray" begin
             binddb = SQLite.DB()
             DBInterface.execute(binddb, "CREATE TABLE temp (b BLOB)")
