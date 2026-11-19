@@ -496,14 +496,22 @@ function bind!(stmt::Stmt, i::Integer, val::Nothing)
     stmt.params[i] = val
     @CHECK stmt.db C.sqlite3_bind_null(_get_stmt_handle(stmt), i)
 end
-function bind!(stmt::Stmt, i::Integer, val::AbstractString)
+# `val` converted for a `Ptr{Cchar}` argument, and the length of its UTF-8 text in bytes.
+# `sizeof(val)` counts code units, which are UTF-8 bytes only for UTF-8 string types;
+# others convert to a `String`.
+function cstring(val::AbstractString)
     cval = Base.cconvert(Ptr{Cchar}, val)
+    return cval, cval isa String ? sizeof(cval) : sizeof(val)
+end
+
+function bind!(stmt::Stmt, i::Integer, val::AbstractString)
+    cval, nbytes = cstring(val)
     stmt.params[i] = cval
     @CHECK stmt.db C.sqlite3_bind_text(
         _get_stmt_handle(stmt),
         i,
         cval,
-        sizeof(val),
+        nbytes,
         C_NULL,
     )
 end
