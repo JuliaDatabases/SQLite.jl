@@ -578,19 +578,15 @@ end
 # these bytes depend on the julia version and other things, so they are determined using an actual serialization
 const SERIALIZATION = sqlserialize(0)[1:18]
 
+# Bytes 4 and 5 of the header hold the Serialization format version and the word size. A value
+# written by another Julia version still matches, then deserializes or throws a SerializeError.
+function isserialized(r)
+    n = length(SERIALIZATION)
+    return length(r) >= n && @views r[1:3] == SERIALIZATION[1:3] && r[6:n] == SERIALIZATION[6:n]
+end
+
 function sqldeserialize(r)
-    if sizeof(r) < sizeof(SERIALIZATION)
-        return r
-    end
-    ret = ccall(
-        :memcmp,
-        Int32,
-        (Ptr{UInt8}, Ptr{UInt8}, UInt),
-        SERIALIZATION,
-        r,
-        min(sizeof(SERIALIZATION), sizeof(r)),
-    )
-    if ret == 0
+    if isserialized(r)
         try
             v = Base.invokelatest(Serialization.deserialize, IOBuffer(r))
             return v.object
