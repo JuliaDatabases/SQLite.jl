@@ -254,14 +254,15 @@ which then calls a previously defined method for `sqlreturn`.
 Methods which map to native SQLite types are
 
 ```julia
-sqlreturn(context, ::NullType)
-sqlreturn(context, val::Int32)
-sqlreturn(context, val::Int64)
-sqlreturn(context, val::Float64)
-sqlreturn(context, val::UTF16String)
-sqlreturn(context, val::String)
-sqlreturn(context, val::Any)
+sqlreturn(context, ::Missing)
+sqlreturn(context, ::Nothing)
+sqlreturn(context, val::Union{Int8,Int16,Int32,Int64,UInt8,UInt16,UInt32,Bool})
+sqlreturn(context, val::Union{Float16,Float32,Float64})
+sqlreturn(context, val::AbstractString)
+sqlreturn(context, val::Vector{UInt8})
 ```
+
+Other values, including `UInt64`, `Int128`, `BigInt`, and `BigFloat`, are serialized.
 
 As an example,
 say you would like `BigInt`s to be stored as `TEXT` rather than a `BLOB`.
