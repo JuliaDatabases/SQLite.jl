@@ -1352,6 +1352,18 @@ end
             @test_throws SQLiteException SQLite.load!(tbl2, db, "data_strict")
         end
 
+        @testset "strict load! of Missing, Any, and Union columns" begin
+            db = SQLite.DB()
+            tbl = (m = [missing, missing], a = Any[1, "x"], u = Union{Int,Float64}[1, 2.5], d = [Date(2020), Date(2021)])
+            SQLite.load!(tbl, db, "t"; strict = true)
+            r = columntable(DBInterface.execute(db, "SELECT * FROM t"))
+            @test isequal(r.m, tbl.m) && r.a == tbl.a && r.u == tbl.u && r.d == tbl.d
+            @test only(columntable(DBInterface.execute(db, "SELECT strict FROM pragma_table_list('t')")).strict) == 1
+            r = columntable(DBInterface.execute(DBInterface.prepare(db, "SELECT a, u FROM t"), (); strict = true))
+            @test r.a == tbl.a && r.u == tbl.u
+            close(db)
+        end
+
         @testset "Symbol in TEXT column under strict mode" begin
             db = SQLite.DB()
             DBInterface.execute(db, "create table tmp ( x TEXT )")
