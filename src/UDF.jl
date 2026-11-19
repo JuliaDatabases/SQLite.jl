@@ -44,6 +44,10 @@ function sqlreturn(context, val::Vector{UInt8})
 end
 
 sqlreturn(context, val::Bool) = sqlreturn(context, Int(val))
+sqlreturn(context, ::Nothing) = C.sqlite3_result_null(context)
+# Every value of these types fits a native type exactly; wider types such as `BigInt` are serialized.
+sqlreturn(context, val::Union{Int8,Int16,UInt8,UInt16,UInt32}) = sqlreturn(context, Int64(val))
+sqlreturn(context, val::Union{Float16,Float32}) = sqlreturn(context, Float64(val))
 sqlreturn(context, val) = sqlreturn(context, sqlserialize(val))
 
 mutable struct ScalarUDFData
