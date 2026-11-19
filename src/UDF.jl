@@ -3,11 +3,7 @@ function sqlvalue(values, i)
     valuetype = C.sqlite3_value_type(temp_val_ptr)
 
     if valuetype == C.SQLITE_INTEGER
-        if Sys.WORD_SIZE == 64
-            return C.sqlite3_value_int64(temp_val_ptr)
-        else
-            return C.sqlite3_value_int(temp_val_ptr)
-        end
+        return C.sqlite3_value_int64(temp_val_ptr)
     elseif valuetype == C.SQLITE_FLOAT
         return C.sqlite3_value_double(temp_val_ptr)
     elseif valuetype == C.SQLITE_TEXT
